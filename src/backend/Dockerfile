@@ -16,5 +16,5 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /roomies-backend /roomies-backend
 
 USER roomies
-EXPOSE 8080
+EXPOSE 8080 8081
 ENTRYPOINT ["/roomies-backend"]

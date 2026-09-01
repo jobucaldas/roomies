@@ -33,8 +33,9 @@ func TestSQLiteForeignKeysAndMigrations(t *testing.T) {
 	if err := db.Get(&migrationCount, "SELECT COUNT(*) FROM schema_migrations"); err != nil {
 		t.Fatal(err)
 	}
-	if migrationCount != len(migrations()) {
-		t.Fatalf("expected %d recorded migrations, got %d", len(migrations()), migrationCount)
+	expectedMigrations := len(migrations(db.DriverName()))
+	if migrationCount != expectedMigrations {
+		t.Fatalf("expected %d recorded migrations, got %d", expectedMigrations, migrationCount)
 	}
 }
 
@@ -93,8 +94,9 @@ func TestSQLiteMigrationsUpgradeLegacySchema(t *testing.T) {
 	if err := db.Get(&migrationCount, "SELECT COUNT(*) FROM schema_migrations"); err != nil {
 		t.Fatal(err)
 	}
-	if migrationCount != len(migrations()) {
-		t.Fatalf("expected %d recorded migrations, got %d", len(migrations()), migrationCount)
+	expectedMigrations := len(migrations(db.DriverName()))
+	if migrationCount != expectedMigrations {
+		t.Fatalf("expected %d recorded migrations, got %d", expectedMigrations, migrationCount)
 	}
 
 	var names []struct {
@@ -103,7 +105,7 @@ func TestSQLiteMigrationsUpgradeLegacySchema(t *testing.T) {
 	if err := db.Select(&names, "SELECT name FROM schema_migrations ORDER BY version"); err != nil {
 		t.Fatal(err)
 	}
-	if len(names) != 2 || names[0].Name != "" || names[1].Name != "monetary_cents_columns" {
+	if len(names) != 3 || names[0].Name != "" || names[1].Name != "monetary_cents_columns" || names[2].Name != "reliability_platform" {
 		t.Fatalf("unexpected migration ledger names: %#v", names)
 	}
 
@@ -123,5 +125,27 @@ func TestSQLiteMigrationsUpgradeLegacySchema(t *testing.T) {
 	}
 	if len(splitCents) != 2 || splitCents[0].ShareAmountCents != 617 || splitCents[1].ShareAmountCents != 617 {
 		t.Fatalf("expected split cents backfill, got %#v", splitCents)
+	}
+}
+
+func TestSQLiteReliabilityTablesAreCreated(t *testing.T) {
+	db, err := Connect("sqlite://:memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+
+	tables := []string{"house_invitations", "idempotency_keys", "outbox_messages", "durable_jobs", "audit_events", "house_events"}
+	for _, table := range tables {
+		var count int
+		if err := db.Get(&count, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $1`, table); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("expected table %s to exist", table)
+		}
 	}
 }

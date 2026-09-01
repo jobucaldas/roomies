@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: roomies-backend
+  name: roomies-backend-worker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/component: backend
+      app.kubernetes.io/component: backend-worker
   template:
     metadata:
       labels:
-        app.kubernetes.io/component: backend
+        app.kubernetes.io/component: backend-worker
     spec:
       containers:
-        - name: backend
+        - name: backend-worker
           image: roomies-backend:latest
           imagePullPolicy: IfNotPresent
-          args: ["serve"]
+          args: ["worker"]
           ports:
-            - name: http
-              containerPort: 8080
+            - name: health
+              containerPort: 8081
           envFrom:
             - secretRef:
                 name: roomies-secrets
@@ -28,8 +28,8 @@ spec:
           readinessProbe:
             httpGet:
               path: /readyz
-              port: http
+              port: health
           livenessProbe:
             httpGet:
               path: /healthz
-              port: http
+              port: health

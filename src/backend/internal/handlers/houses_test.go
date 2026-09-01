@@ -5,99 +5,18 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
-	chimiddleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/roomies/backend/internal/database"
-	"github.com/roomies/backend/internal/handlers"
-	"github.com/roomies/backend/internal/middleware"
 	"github.com/roomies/backend/internal/models"
 	"github.com/roomies/backend/internal/repository"
 )
 
-func setupTest(t *testing.T) (*chi.Mux, *repository.UserRepository, string, func()) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		databaseURL = "sqlite://:memory:"
-	}
-	db, err := database.Connect(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := database.RunMigrations(db); err != nil {
-		t.Fatal(err)
-	}
-
-	userRepo := repository.NewUserRepository(db)
-	houseRepo := repository.NewHouseRepository(db)
-	expenseRepo := repository.NewExpenseRepository(db)
-	noteRepo := repository.NewNoteRepository(db)
-
-	jwtSecret := "test-secret"
-	authHandler := handlers.NewAuthHandler(userRepo, jwtSecret)
-	houseHandler := handlers.NewHouseHandler(houseRepo, userRepo)
-	expenseHandler := handlers.NewExpenseHandler(expenseRepo, houseRepo)
-	noteHandler := handlers.NewNoteHandler(noteRepo, houseRepo)
-	balanceHandler := handlers.NewBalanceHandler(expenseRepo, houseRepo)
-
-	r := chi.NewRouter()
-	r.Use(chimiddleware.Logger)
-
-	r.Route("/api/auth", func(r chi.Router) {
-		r.Post("/register", authHandler.Register)
-		r.Post("/login", authHandler.Login)
-	})
-
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.JWTAuth(jwtSecret))
-		r.Get("/api/auth/me", authHandler.Me)
-		r.Route("/api/houses", func(r chi.Router) {
-			r.Get("/", houseHandler.List)
-			r.Post("/", houseHandler.Create)
-			r.Route("/{id}", func(r chi.Router) {
-				r.Get("/", houseHandler.Get)
-				r.Put("/", houseHandler.Update)
-				r.Route("/members", func(r chi.Router) {
-					r.Get("/", houseHandler.ListMembers)
-					r.Post("/", houseHandler.AddMember)
-					r.Put("/{userId}", houseHandler.UpdateMemberRole)
-					r.Delete("/{userId}", houseHandler.RemoveMember)
-				})
-				r.Route("/expenses", func(r chi.Router) {
-					r.Get("/", expenseHandler.List)
-					r.Post("/", expenseHandler.Create)
-					r.Route("/{eid}", func(r chi.Router) {
-						r.Get("/", expenseHandler.Get)
-						r.Put("/", expenseHandler.Update)
-						r.Delete("/", expenseHandler.Delete)
-						r.Post("/visibility", expenseHandler.SetVisibility)
-					})
-				})
-				r.Get("/balances", balanceHandler.GetBalances)
-				r.Route("/notes", func(r chi.Router) {
-					r.Get("/", noteHandler.List)
-					r.Post("/", noteHandler.Create)
-					r.Route("/{nid}", func(r chi.Router) {
-						r.Get("/", noteHandler.Get)
-						r.Put("/", noteHandler.Update)
-						r.Delete("/", noteHandler.Delete)
-					})
-				})
-			})
-		})
-	})
-
-	cleanup := func() {
-		db.Close()
-	}
-
-	return r, userRepo, jwtSecret, cleanup
+func setupTest(t *testing.T) (http.Handler, *repository.UserRepository, string, func()) {
+	env := newTestEnv(t)
+	return env.Router, env.UserRepo, env.JWTSecret, env.Cleanup
 }
 
-func registerUser(t *testing.T, router *chi.Mux, name, email, password string) string {
+func registerUser(t *testing.T, router http.Handler, name, email, password string) string {
 	body := map[string]string{"name": name, "email": email, "password": password}
 	data, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/api/auth/register", bytes.NewReader(data))
@@ -112,7 +31,7 @@ func registerUser(t *testing.T, router *chi.Mux, name, email, password string) s
 	return resp.Token
 }
 
-func getUserID(t *testing.T, router *chi.Mux, token string) string {
+func getUserID(t *testing.T, router http.Handler, token string) string {
 	req := httptest.NewRequest("GET", "/api/auth/me", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -125,7 +44,7 @@ func getUserID(t *testing.T, router *chi.Mux, token string) string {
 	return user.ID
 }
 
-func createHouse(t *testing.T, router *chi.Mux, token, name string) string {
+func createHouse(t *testing.T, router http.Handler, token, name string) string {
 	body := map[string]string{"name": name}
 	data, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/api/houses", bytes.NewReader(data))

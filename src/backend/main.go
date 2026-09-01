@@ -1,127 +1,174 @@
 package main
 
 import (
-	"log"
+	"context"
+	"fmt"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	chimiddleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
+	roomiesclock "github.com/roomies/backend/internal/clock"
 	"github.com/roomies/backend/internal/config"
 	"github.com/roomies/backend/internal/database"
-	"github.com/roomies/backend/internal/handlers"
-	"github.com/roomies/backend/internal/middleware"
+	"github.com/roomies/backend/internal/providers"
 	"github.com/roomies/backend/internal/repository"
+	"github.com/roomies/backend/internal/server"
+	"github.com/roomies/backend/internal/worker"
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	if err := run(logger, os.Args[1:]); err != nil {
+		logger.Error("roomies_backend_exit", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+}
+
+func run(logger *slog.Logger, args []string) error {
 	cfg := config.Load()
 	if err := cfg.Validate(); err != nil {
-		log.Fatalf("Invalid configuration: %v", err)
+		return fmt.Errorf("invalid configuration: %w", err)
 	}
+	command := "serve"
+	if len(args) > 0 {
+		command = args[0]
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	db, err := database.Connect(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		return fmt.Errorf("connect to database: %w", err)
 	}
 	defer db.Close()
-
 	if err := database.RunMigrations(db); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		return fmt.Errorf("run migrations: %w", err)
 	}
 
+	clk := roomiesclock.RealClock{}
 	userRepo := repository.NewUserRepository(db)
 	houseRepo := repository.NewHouseRepository(db)
 	expenseRepo := repository.NewExpenseRepository(db)
 	noteRepo := repository.NewNoteRepository(db)
+	reliabilityRepo := repository.NewReliabilityRepository(db, clk)
 
-	authHandler := handlers.NewAuthHandler(userRepo, cfg.JWTSecret)
-	houseHandler := handlers.NewHouseHandler(houseRepo, userRepo)
-	expenseHandler := handlers.NewExpenseHandler(expenseRepo, houseRepo)
-	noteHandler := handlers.NewNoteHandler(noteRepo, houseRepo)
-	balanceHandler := handlers.NewBalanceHandler(expenseRepo, houseRepo)
+	switch command {
+	case "serve":
+		return runServer(ctx, logger, cfg, clk, userRepo, houseRepo, expenseRepo, noteRepo, reliabilityRepo)
+	case "worker":
+		return runWorker(ctx, logger, cfg, reliabilityRepo)
+	default:
+		return fmt.Errorf("unknown subcommand %q", command)
+	}
+}
 
-	r := chi.NewRouter()
+func runServer(ctx context.Context, logger *slog.Logger, cfg *config.Config, clk roomiesclock.Clock,
+	userRepo *repository.UserRepository, houseRepo *repository.HouseRepository,
+	expenseRepo *repository.ExpenseRepository, noteRepo *repository.NoteRepository,
+	reliabilityRepo *repository.ReliabilityRepository,
+) error {
+	handler := server.NewHandler(server.Dependencies{
+		Config:          cfg,
+		Logger:          logger,
+		Clock:           clk,
+		UserRepo:        userRepo,
+		HouseRepo:       houseRepo,
+		ExpenseRepo:     expenseRepo,
+		NoteRepo:        noteRepo,
+		ReliabilityRepo: reliabilityRepo,
+	})
+	httpServer := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      0,
+		IdleTimeout:       60 * time.Second,
+	}
+	errCh := make(chan error, 1)
+	go func() {
+		logger.Info("serve_starting", slog.String("addr", httpServer.Addr))
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errCh <- err
+		}
+		close(errCh)
+	}()
+	select {
+	case <-ctx.Done():
+	case err := <-errCh:
+		if err != nil {
+			return err
+		}
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	logger.Info("serve_stopping")
+	return httpServer.Shutdown(shutdownCtx)
+}
 
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: cfg.CORSAllowedOrigins,
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{"Authorization", "Content-Type"},
-		MaxAge:         300,
-	}))
-	r.Use(chimiddleware.RequestID)
-	r.Use(chimiddleware.Logger)
-	r.Use(chimiddleware.Recoverer)
+func runWorker(ctx context.Context, logger *slog.Logger, cfg *config.Config, reliabilityRepo *repository.ReliabilityRepository) error {
+	provider := &providers.FakeInvitationProvider{}
+	owner, err := os.Hostname()
+	if err != nil {
+		owner = "roomies-worker"
+	}
+	owner = fmt.Sprintf("%s-%d", owner, os.Getpid())
+	processor := worker.New(
+		logger,
+		reliabilityRepo,
+		provider,
+		owner,
+		time.Duration(cfg.JobPollInterval)*time.Second,
+		time.Duration(cfg.JobLeaseSeconds)*time.Second,
+	)
+	healthServer := &http.Server{
+		Addr:              ":" + cfg.WorkerHealthPort,
+		Handler:           workerHealthHandler(processor),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	errCh := make(chan error, 2)
+	go func() {
+		logger.Info("worker_health_starting", slog.String("addr", healthServer.Addr))
+		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errCh <- err
+		}
+	}()
+	go func() {
+		logger.Info("worker_starting", slog.String("owner", owner))
+		errCh <- processor.Run(ctx)
+	}()
+	select {
+	case <-ctx.Done():
+	case err := <-errCh:
+		if err != nil {
+			return err
+		}
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	logger.Info("worker_stopping", slog.String("owner", owner))
+	return healthServer.Shutdown(shutdownCtx)
+}
 
-	// Health is intentionally unauthenticated so container orchestrators can probe it.
-	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+func workerHealthHandler(processor interface{ Ready() bool }) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
-
-	r.Route("/api/auth", func(r chi.Router) {
-		r.Post("/register", authHandler.Register)
-		r.Post("/login", authHandler.Login)
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if !processor.Ready() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"status":"starting"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
 	})
-
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.JWTAuth(cfg.JWTSecret))
-
-		r.Get("/api/auth/me", authHandler.Me)
-
-		r.Route("/api/houses", func(r chi.Router) {
-			r.Get("/", houseHandler.List)
-			r.Post("/", houseHandler.Create)
-
-			r.Route("/{id}", func(r chi.Router) {
-				r.Get("/", houseHandler.Get)
-				r.Put("/", houseHandler.Update)
-
-				r.Route("/members", func(r chi.Router) {
-					r.Get("/", houseHandler.ListMembers)
-					r.Post("/", houseHandler.AddMember)
-					r.Put("/{userId}", houseHandler.UpdateMemberRole)
-					r.Delete("/{userId}", houseHandler.RemoveMember)
-				})
-
-				r.Route("/expenses", func(r chi.Router) {
-					r.Get("/", expenseHandler.List)
-					r.Post("/", expenseHandler.Create)
-					r.Route("/{eid}", func(r chi.Router) {
-						r.Get("/", expenseHandler.Get)
-						r.Put("/", expenseHandler.Update)
-						r.Delete("/", expenseHandler.Delete)
-						r.Post("/visibility", expenseHandler.SetVisibility)
-					})
-				})
-
-				r.Get("/balances", balanceHandler.GetBalances)
-
-				r.Route("/notes", func(r chi.Router) {
-					r.Get("/", noteHandler.List)
-					r.Post("/", noteHandler.Create)
-					r.Route("/{nid}", func(r chi.Router) {
-						r.Get("/", noteHandler.Get)
-						r.Put("/", noteHandler.Update)
-						r.Delete("/", noteHandler.Delete)
-					})
-				})
-			})
-		})
-	})
-
-	server := &http.Server{
-		Addr:              ":" + cfg.Port,
-		Handler:           r,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-	log.Printf("Roomies backend starting on %s", server.Addr)
-	if err := server.ListenAndServe(); err != nil {
-		log.Fatal(err)
-	}
+	return mux
 }

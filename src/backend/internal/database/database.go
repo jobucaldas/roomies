@@ -122,7 +122,7 @@ func applyMigrations(ctx context.Context, exec migrationRunner, driver string) e
 		return err
 	}
 
-	for _, migration := range migrations() {
+	for _, migration := range migrations(driver) {
 		var applied int
 		if err := exec.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations WHERE version = $1", migration.version).Scan(&applied); err != nil {
 			return fmt.Errorf("check migration %d: %w", migration.version, err)

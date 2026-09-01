@@ -13,12 +13,13 @@ import (
 )
 
 type HouseHandler struct {
-	houseRepo *repository.HouseRepository
-	userRepo  *repository.UserRepository
+	houseRepo       *repository.HouseRepository
+	userRepo        *repository.UserRepository
+	reliabilityRepo *repository.ReliabilityRepository
 }
 
-func NewHouseHandler(houseRepo *repository.HouseRepository, userRepo *repository.UserRepository) *HouseHandler {
-	return &HouseHandler{houseRepo: houseRepo, userRepo: userRepo}
+func NewHouseHandler(houseRepo *repository.HouseRepository, userRepo *repository.UserRepository, reliabilityRepo *repository.ReliabilityRepository) *HouseHandler {
+	return &HouseHandler{houseRepo: houseRepo, userRepo: userRepo, reliabilityRepo: reliabilityRepo}
 }
 
 func (h *HouseHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -124,6 +125,9 @@ func (h *HouseHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to update house"})
 		return
 	}
+	if h.reliabilityRepo != nil {
+		_ = h.reliabilityRepo.AppendHouseEvent(r.Context(), houseID, "house.updated", &userID, "house", houseID, map[string]any{"name": house.Name})
+	}
 
 	writeJSON(w, http.StatusOK, house)
 }
@@ -194,6 +198,9 @@ func (h *HouseHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, models.ErrorResponse{Error: "user is already a member"})
 		return
 	}
+	if h.reliabilityRepo != nil {
+		_ = h.reliabilityRepo.AppendHouseEvent(r.Context(), houseID, "house.member.added", &userID, "house_member", targetUser.ID, map[string]any{"role": req.Role})
+	}
 
 	writeJSON(w, http.StatusCreated, newMember)
 }
@@ -232,6 +239,9 @@ func (h *HouseHandler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "member not found"})
 		return
 	}
+	if h.reliabilityRepo != nil {
+		_ = h.reliabilityRepo.AppendHouseEvent(r.Context(), houseID, "house.member.role_updated", &userID, "house_member", targetUserID, map[string]any{"role": req.Role})
+	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "role updated"})
 }
@@ -258,6 +268,9 @@ func (h *HouseHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "member not found"})
 		return
+	}
+	if h.reliabilityRepo != nil {
+		_ = h.reliabilityRepo.AppendHouseEvent(r.Context(), houseID, "house.member.removed", &userID, "house_member", targetUserID, nil)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "member removed"})

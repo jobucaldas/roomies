@@ -18,7 +18,7 @@ type schemaMigration struct {
 	up      func(context.Context, migrationRunner) error
 }
 
-func migrations() []schemaMigration {
+func migrations(driver string) []schemaMigration {
 	return []schemaMigration{
 		{
 			version: 1,
@@ -29,6 +29,11 @@ func migrations() []schemaMigration {
 			version: 2,
 			name:    "monetary_cents_columns",
 			up:      execStatements(migrationStatementsV2...),
+		},
+		{
+			version: 3,
+			name:    "reliability_platform",
+			up:      execStatements(reliabilityStatements(driver)...),
 		},
 	}
 }
@@ -95,6 +100,103 @@ func migrationLedgerHasColumn(ctx context.Context, exec migrationRunner, driver,
 			return false, fmt.Errorf("inspect migration ledger: %w", err)
 		}
 		return exists, nil
+	}
+}
+
+func reliabilityStatements(driver string) []string {
+	houseEventCursor := `INTEGER PRIMARY KEY AUTOINCREMENT`
+	if driver == "postgres" {
+		houseEventCursor = `BIGSERIAL PRIMARY KEY`
+	}
+	return []string{
+		`CREATE TABLE IF NOT EXISTS house_invitations (
+			id TEXT PRIMARY KEY,
+			house_id TEXT NOT NULL REFERENCES houses(id) ON DELETE CASCADE,
+			email_normalized TEXT NOT NULL,
+			role TEXT NOT NULL CHECK(role IN ('admin','member','monitor')),
+			token_hash TEXT NOT NULL UNIQUE,
+			status TEXT NOT NULL CHECK(status IN ('pending','accepted','revoked','expired')) DEFAULT 'pending',
+			created_by TEXT NOT NULL REFERENCES users(id),
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			expires_at TIMESTAMP NOT NULL,
+			accepted_by TEXT REFERENCES users(id),
+			accepted_at TIMESTAMP,
+			revoked_by TEXT REFERENCES users(id),
+			revoked_at TIMESTAMP
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_house_invitations_pending_email
+			ON house_invitations(house_id, email_normalized) WHERE status = 'pending'`,
+		`CREATE INDEX IF NOT EXISTS idx_house_invitations_house ON house_invitations(house_id, created_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS idempotency_keys (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			idempotency_key TEXT NOT NULL,
+			method TEXT NOT NULL,
+			path TEXT NOT NULL,
+			body_hash TEXT NOT NULL,
+			state TEXT NOT NULL CHECK(state IN ('processing','completed')),
+			status_code INTEGER,
+			response_body TEXT,
+			response_content_type TEXT,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			completed_at TIMESTAMP,
+			UNIQUE(user_id, idempotency_key)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_idempotency_keys_lookup ON idempotency_keys(user_id, idempotency_key)`,
+		`CREATE TABLE IF NOT EXISTS outbox_messages (
+			id TEXT PRIMARY KEY,
+			topic TEXT NOT NULL,
+			dedupe_key TEXT NOT NULL UNIQUE,
+			payload TEXT NOT NULL,
+			status TEXT NOT NULL CHECK(status IN ('pending','dispatched','dead_lettered')) DEFAULT 'pending',
+			available_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			dispatched_at TIMESTAMP,
+			last_error TEXT,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_outbox_messages_status ON outbox_messages(status, available_at)`,
+		`CREATE TABLE IF NOT EXISTS durable_jobs (
+			id TEXT PRIMARY KEY,
+			kind TEXT NOT NULL,
+			dedupe_key TEXT NOT NULL UNIQUE,
+			payload TEXT NOT NULL,
+			available_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			lease_owner TEXT,
+			lease_expires_at TIMESTAMP,
+			attempts INTEGER NOT NULL DEFAULT 0,
+			max_attempts INTEGER NOT NULL DEFAULT 5,
+			last_error TEXT,
+			dead_lettered_at TIMESTAMP,
+			completed_at TIMESTAMP,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_durable_jobs_dispatch ON durable_jobs(completed_at, dead_lettered_at, available_at)`,
+		`CREATE TABLE IF NOT EXISTS audit_events (
+			id TEXT PRIMARY KEY,
+			actor_id TEXT REFERENCES users(id),
+			house_id TEXT REFERENCES houses(id) ON DELETE CASCADE,
+			action TEXT NOT NULL,
+			target_type TEXT NOT NULL,
+			target_id TEXT NOT NULL,
+			metadata TEXT NOT NULL DEFAULT '{}',
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_events_house ON audit_events(house_id, created_at DESC)`,
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS house_events (
+			cursor %s,
+			id TEXT NOT NULL UNIQUE,
+			house_id TEXT NOT NULL REFERENCES houses(id) ON DELETE CASCADE,
+			event_type TEXT NOT NULL,
+			actor_id TEXT REFERENCES users(id),
+			resource_type TEXT NOT NULL,
+			resource_id TEXT NOT NULL,
+			payload TEXT NOT NULL DEFAULT '{}',
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`, houseEventCursor),
+		`CREATE INDEX IF NOT EXISTS idx_house_events_house_cursor ON house_events(house_id, cursor)`,
 	}
 }
 

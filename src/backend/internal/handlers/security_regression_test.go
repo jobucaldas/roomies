@@ -8,11 +8,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/roomies/backend/internal/models"
 )
 
-func authenticatedRequest(t *testing.T, router *chi.Mux, method, path, token string, body interface{}) *httptest.ResponseRecorder {
+func authenticatedRequest(t *testing.T, router http.Handler, method, path, token string, body interface{}) *httptest.ResponseRecorder {
 	t.Helper()
 	var data []byte
 	if body != nil {
@@ -32,7 +31,7 @@ func authenticatedRequest(t *testing.T, router *chi.Mux, method, path, token str
 	return response
 }
 
-func createExpense(t *testing.T, router *chi.Mux, token, houseID string, body models.CreateExpenseRequest) models.Expense {
+func createExpense(t *testing.T, router http.Handler, token, houseID string, body models.CreateExpenseRequest) models.Expense {
 	t.Helper()
 	response := authenticatedRequest(t, router, http.MethodPost, "/api/houses/"+houseID+"/expenses", token, body)
 	if response.Code != http.StatusCreated {
@@ -45,7 +44,7 @@ func createExpense(t *testing.T, router *chi.Mux, token, houseID string, body mo
 	return expense
 }
 
-func createNote(t *testing.T, router *chi.Mux, token, houseID string, body models.CreateNoteRequest) models.Note {
+func createNote(t *testing.T, router http.Handler, token, houseID string, body models.CreateNoteRequest) models.Note {
 	t.Helper()
 	response := authenticatedRequest(t, router, http.MethodPost, "/api/houses/"+houseID+"/notes", token, body)
 	if response.Code != http.StatusCreated {
@@ -58,7 +57,7 @@ func createNote(t *testing.T, router *chi.Mux, token, houseID string, body model
 	return note
 }
 
-func addMember(t *testing.T, router *chi.Mux, adminToken, houseID, userID, role string) {
+func addMember(t *testing.T, router http.Handler, adminToken, houseID, userID, role string) {
 	t.Helper()
 	response := authenticatedRequest(t, router, http.MethodPost, "/api/houses/"+houseID+"/members", adminToken,
 		models.AddMemberRequest{UserID: userID, Role: role})
