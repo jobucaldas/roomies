@@ -40,6 +40,7 @@ type Expense struct {
 	HouseID     string    `db:"house_id" json:"house_id"`
 	PayerID     string    `db:"payer_id" json:"payer_id"`
 	Amount      float64   `db:"amount" json:"amount"`
+	AmountCents int64     `db:"amount_cents" json:"-"`
 	Description string    `db:"description" json:"description"`
 	Category    string    `db:"category" json:"category"`
 	Date        string    `db:"date" json:"date"`
@@ -54,11 +55,12 @@ type ExpenseVisibility struct {
 }
 
 type ExpenseSplit struct {
-	ID          string  `db:"id" json:"id"`
-	ExpenseID   string  `db:"expense_id" json:"expense_id"`
-	UserID      string  `db:"user_id" json:"user_id"`
-	ShareAmount float64 `db:"share_amount" json:"share_amount"`
-	UserName    string  `db:"user_name" json:"user_name,omitempty"`
+	ID               string  `db:"id" json:"id"`
+	ExpenseID        string  `db:"expense_id" json:"expense_id"`
+	UserID           string  `db:"user_id" json:"user_id"`
+	ShareAmount      float64 `db:"share_amount" json:"share_amount"`
+	ShareAmountCents int64   `db:"share_amount_cents" json:"-"`
+	UserName         string  `db:"user_name" json:"user_name,omitempty"`
 }
 
 type Note struct {

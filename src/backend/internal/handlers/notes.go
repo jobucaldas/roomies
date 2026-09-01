@@ -23,7 +23,7 @@ func NewNoteHandler(noteRepo *repository.NoteRepository, houseRepo *repository.H
 func (h *NoteHandler) List(w http.ResponseWriter, r *http.Request) {
 	houseID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
-	if _, err := h.houseRepo.GetMember(r.Context(), houseID, userID); err != nil {
+	if _, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID); err != nil {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
 	}
@@ -41,12 +41,12 @@ func (h *NoteHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *NoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	houseID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
-	member, err := h.houseRepo.GetMember(r.Context(), houseID, userID)
+	member, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID)
 	if err != nil {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
 	}
-	if member.Role == "monitor" {
+	if !canCreateHouseContent(member) {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "monitors cannot create notes"})
 		return
 	}
@@ -80,7 +80,7 @@ func (h *NoteHandler) Get(w http.ResponseWriter, r *http.Request) {
 	houseID := chi.URLParam(r, "id")
 	noteID := chi.URLParam(r, "nid")
 	userID := middleware.GetUserID(r.Context())
-	if _, err := h.houseRepo.GetMember(r.Context(), houseID, userID); err != nil {
+	if _, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID); err != nil {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
 	}
@@ -96,7 +96,7 @@ func (h *NoteHandler) Update(w http.ResponseWriter, r *http.Request) {
 	houseID := chi.URLParam(r, "id")
 	noteID := chi.URLParam(r, "nid")
 	userID := middleware.GetUserID(r.Context())
-	member, err := h.houseRepo.GetMember(r.Context(), houseID, userID)
+	member, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID)
 	if err != nil {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
@@ -106,7 +106,7 @@ func (h *NoteHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "note not found"})
 		return
 	}
-	if member.Role == "monitor" || (note.AuthorID != userID && member.Role != "admin") {
+	if !canMutateOwnedResource(member, note.AuthorID, userID) {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "only the author or an admin can update this note"})
 		return
 	}
@@ -142,7 +142,7 @@ func (h *NoteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	houseID := chi.URLParam(r, "id")
 	noteID := chi.URLParam(r, "nid")
 	userID := middleware.GetUserID(r.Context())
-	member, err := h.houseRepo.GetMember(r.Context(), houseID, userID)
+	member, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID)
 	if err != nil {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
@@ -152,7 +152,7 @@ func (h *NoteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "note not found"})
 		return
 	}
-	if member.Role == "monitor" || (note.AuthorID != userID && member.Role != "admin") {
+	if !canMutateOwnedResource(member, note.AuthorID, userID) {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "only the author or an admin can delete this note"})
 		return
 	}

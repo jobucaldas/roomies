@@ -22,7 +22,7 @@ func NewBalanceHandler(expenseRepo *repository.ExpenseRepository, houseRepo *rep
 func (h *BalanceHandler) GetBalances(w http.ResponseWriter, r *http.Request) {
 	houseID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
-	if _, err := h.houseRepo.GetMember(r.Context(), houseID, userID); err != nil {
+	if _, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID); err != nil {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
 	}
@@ -55,11 +55,7 @@ func (h *BalanceHandler) GetBalances(w http.ResponseWriter, r *http.Request) {
 		participantNames[member.UserID] = member.UserName
 	}
 	for _, expense := range expenses {
-		amountCents, err := moneyToCents(expense.Amount)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "invalid stored expense amount"})
-			return
-		}
+		amountCents := expense.AmountCents
 		participantNames[expense.PayerID] = expense.PayerName
 		paid[expense.PayerID] += amountCents
 
@@ -74,11 +70,7 @@ func (h *BalanceHandler) GetBalances(w http.ResponseWriter, r *http.Request) {
 		}
 		var splitTotal int64
 		for _, split := range splits {
-			shareCents, err := moneyToNonNegativeCents(split.ShareAmount)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "invalid stored expense split"})
-				return
-			}
+			shareCents := split.ShareAmountCents
 			participantNames[split.UserID] = split.UserName
 			owed[split.UserID] += shareCents
 			splitTotal += shareCents
@@ -158,11 +150,4 @@ func calculateSettlements(balances []balanceInCents) []models.BalanceSettlement 
 		}
 	}
 	return settlements
-}
-
-func moneyToNonNegativeCents(amount float64) (int64, error) {
-	if amount == 0 {
-		return 0, nil
-	}
-	return moneyToCents(amount)
 }

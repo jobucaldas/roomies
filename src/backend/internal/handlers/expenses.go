@@ -28,7 +28,7 @@ func (h *ExpenseHandler) List(w http.ResponseWriter, r *http.Request) {
 	houseID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
 
-	if _, err := h.houseRepo.GetMember(r.Context(), houseID, userID); err != nil {
+	if _, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID); err != nil {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
 	}
@@ -48,12 +48,12 @@ func (h *ExpenseHandler) Create(w http.ResponseWriter, r *http.Request) {
 	houseID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
 
-	member, err := h.houseRepo.GetMember(r.Context(), houseID, userID)
+	member, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID)
 	if err != nil {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
 	}
-	if member.Role == "monitor" {
+	if !canCreateHouseContent(member) {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "monitors cannot create expenses"})
 		return
 	}
@@ -100,6 +100,7 @@ func (h *ExpenseHandler) Create(w http.ResponseWriter, r *http.Request) {
 		HouseID:     houseID,
 		PayerID:     userID,
 		Amount:      centsToMoney(amountCents),
+		AmountCents: amountCents,
 		Description: req.Description,
 		Category:    strings.TrimSpace(req.Category),
 		Date:        req.Date,
@@ -130,7 +131,7 @@ func (h *ExpenseHandler) Get(w http.ResponseWriter, r *http.Request) {
 	expenseID := chi.URLParam(r, "eid")
 	userID := middleware.GetUserID(r.Context())
 
-	if _, err := h.houseRepo.GetMember(r.Context(), houseID, userID); err != nil {
+	if _, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID); err != nil {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
 	}
@@ -179,7 +180,7 @@ func (h *ExpenseHandler) Update(w http.ResponseWriter, r *http.Request) {
 	expenseID := chi.URLParam(r, "eid")
 	userID := middleware.GetUserID(r.Context())
 
-	member, err := h.houseRepo.GetMember(r.Context(), houseID, userID)
+	member, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID)
 	if err != nil {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
@@ -189,7 +190,7 @@ func (h *ExpenseHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "expense not found"})
 		return
 	}
-	if member.Role == "monitor" || (expense.PayerID != userID && member.Role != "admin") {
+	if !canMutateOwnedResource(member, expense.PayerID, userID) {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "only the payer or an admin can update this expense"})
 		return
 	}
@@ -200,7 +201,7 @@ func (h *ExpenseHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oldAmountCents, _ := moneyToCents(expense.Amount)
+	oldAmountCents := expense.AmountCents
 	newAmountCents := oldAmountCents
 	if req.Amount != nil {
 		newAmountCents, err = moneyToCents(*req.Amount)
@@ -212,6 +213,7 @@ func (h *ExpenseHandler) Update(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "replacement split is required when amount changes"})
 			return
 		}
+		expense.AmountCents = newAmountCents
 		expense.Amount = centsToMoney(newAmountCents)
 	}
 	if req.Description != nil {
@@ -269,7 +271,7 @@ func (h *ExpenseHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	expenseID := chi.URLParam(r, "eid")
 	userID := middleware.GetUserID(r.Context())
 
-	member, err := h.houseRepo.GetMember(r.Context(), houseID, userID)
+	member, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID)
 	if err != nil {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
@@ -279,7 +281,7 @@ func (h *ExpenseHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "expense not found"})
 		return
 	}
-	if member.Role == "monitor" || (expense.PayerID != userID && member.Role != "admin") {
+	if !canMutateOwnedResource(member, expense.PayerID, userID) {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "only the payer or an admin can delete this expense"})
 		return
 	}
@@ -300,7 +302,7 @@ func (h *ExpenseHandler) SetVisibility(w http.ResponseWriter, r *http.Request) {
 	expenseID := chi.URLParam(r, "eid")
 	userID := middleware.GetUserID(r.Context())
 
-	member, err := h.houseRepo.GetMember(r.Context(), houseID, userID)
+	member, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID)
 	if err != nil {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
@@ -310,7 +312,7 @@ func (h *ExpenseHandler) SetVisibility(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "expense not found"})
 		return
 	}
-	if member.Role == "monitor" || expense.PayerID != userID {
+	if !canChangeOwnedResourceVisibility(member, expense.PayerID, userID) {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "only the payer can change visibility"})
 		return
 	}
@@ -436,10 +438,11 @@ func buildSplits(expenseID string, amountCents int64, requested []models.SplitEn
 			share++
 		}
 		splits = append(splits, models.ExpenseSplit{
-			ID:          models.NewID(),
-			ExpenseID:   expenseID,
-			UserID:      member.UserID,
-			ShareAmount: centsToMoney(share),
+			ID:               models.NewID(),
+			ExpenseID:        expenseID,
+			UserID:           member.UserID,
+			ShareAmount:      centsToMoney(share),
+			ShareAmountCents: share,
 		})
 	}
 	return splits, nil
@@ -472,10 +475,11 @@ func buildCustomSplits(expenseID string, amountCents int64, requested []models.S
 		total += shareCents
 		seen[entry.UserID] = struct{}{}
 		splits = append(splits, models.ExpenseSplit{
-			ID:          models.NewID(),
-			ExpenseID:   expenseID,
-			UserID:      entry.UserID,
-			ShareAmount: centsToMoney(shareCents),
+			ID:               models.NewID(),
+			ExpenseID:        expenseID,
+			UserID:           entry.UserID,
+			ShareAmount:      centsToMoney(shareCents),
+			ShareAmountCents: shareCents,
 		})
 	}
 	if total != amountCents {

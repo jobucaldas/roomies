@@ -14,7 +14,7 @@ var (
 	ErrInvalidExpenseParticipant = errors.New("expense participant is not an eligible house member")
 )
 
-const expenseSelect = `SELECT e.id, e.house_id, e.payer_id, e.amount, e.description,
+const expenseSelect = `SELECT e.id, e.house_id, e.payer_id, e.amount, e.amount_cents, e.description,
 	e.category, CAST(e.date AS TEXT) AS date, e.visibility, e.created_at,
 	u.name AS payer_name
 	FROM expenses e
@@ -42,9 +42,12 @@ func (r *ExpenseRepository) CreateAggregate(ctx context.Context, expense *models
 	if err := validateParticipants(ctx, tx, expense.HouseID, visibleTo, splits); err != nil {
 		return err
 	}
+	if err := validateMoneyAmounts(expense, splits); err != nil {
+		return err
+	}
 
-	query := `INSERT INTO expenses (id, house_id, payer_id, amount, description, category, date, visibility, created_at)
-		VALUES (:id, :house_id, :payer_id, :amount, :description, :category, :date, :visibility, :created_at)`
+	query := `INSERT INTO expenses (id, house_id, payer_id, amount, amount_cents, description, category, date, visibility, created_at)
+		VALUES (:id, :house_id, :payer_id, :amount, :amount_cents, :description, :category, :date, :visibility, :created_at)`
 	if _, err := tx.NamedExecContext(ctx, query, expense); err != nil {
 		return err
 	}
@@ -96,9 +99,12 @@ func (r *ExpenseRepository) UpdateAggregate(ctx context.Context, expense *models
 		if err := validateParticipants(ctx, tx, expense.HouseID, nil, *splits); err != nil {
 			return err
 		}
+		if err := validateMoneyAmounts(expense, *splits); err != nil {
+			return err
+		}
 	}
 
-	query := `UPDATE expenses SET amount = :amount, description = :description,
+	query := `UPDATE expenses SET amount = :amount, amount_cents = :amount_cents, description = :description,
 		category = :category, date = :date WHERE house_id = :house_id AND id = :id`
 	result, err := tx.NamedExecContext(ctx, query, expense)
 	if err != nil {
@@ -182,7 +188,7 @@ func (r *ExpenseRepository) GetVisibleUsers(ctx context.Context, expenseID strin
 
 func (r *ExpenseRepository) GetSplits(ctx context.Context, expenseID string) ([]models.ExpenseSplit, error) {
 	var splits []models.ExpenseSplit
-	query := `SELECT es.id, es.expense_id, es.user_id, es.share_amount, u.name AS user_name
+	query := `SELECT es.id, es.expense_id, es.user_id, es.share_amount, es.share_amount_cents, u.name AS user_name
 		FROM expense_splits es
 		JOIN users u ON u.id = es.user_id
 		WHERE es.expense_id = $1
@@ -233,6 +239,26 @@ func validateParticipants(ctx context.Context, tx *sqlx.Tx, houseID string, visi
 	return nil
 }
 
+func validateMoneyAmounts(expense *models.Expense, splits []models.ExpenseSplit) error {
+	if expense.AmountCents <= 0 {
+		return fmt.Errorf("expense amount must be positive")
+	}
+	if len(splits) == 0 {
+		return fmt.Errorf("expense requires at least one split")
+	}
+	var splitTotal int64
+	for _, split := range splits {
+		if split.ShareAmountCents < 0 {
+			return fmt.Errorf("expense split amount must not be negative")
+		}
+		splitTotal += split.ShareAmountCents
+	}
+	if len(splits) != 0 && splitTotal != expense.AmountCents {
+		return fmt.Errorf("expense split amounts must equal the expense amount")
+	}
+	return nil
+}
+
 func insertVisibility(ctx context.Context, tx *sqlx.Tx, expenseID string, visibleTo []string) error {
 	for _, userID := range visibleTo {
 		if _, err := tx.ExecContext(ctx,
@@ -246,8 +272,8 @@ func insertVisibility(ctx context.Context, tx *sqlx.Tx, expenseID string, visibl
 
 func insertSplits(ctx context.Context, tx *sqlx.Tx, splits []models.ExpenseSplit) error {
 	for i := range splits {
-		query := `INSERT INTO expense_splits (id, expense_id, user_id, share_amount)
-			VALUES (:id, :expense_id, :user_id, :share_amount)`
+		query := `INSERT INTO expense_splits (id, expense_id, user_id, share_amount, share_amount_cents)
+			VALUES (:id, :expense_id, :user_id, :share_amount, :share_amount_cents)`
 		if _, err := tx.NamedExecContext(ctx, query, &splits[i]); err != nil {
 			return err
 		}

@@ -1,6 +1,8 @@
 package database
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"net/url"
@@ -11,6 +13,8 @@ import (
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 )
+
+const migrationAdvisoryLockKey int64 = 5479457351723385152
 
 func Connect(databaseURL string) (*sqlx.DB, error) {
 	driver, dsn := parseURL(databaseURL)
@@ -44,39 +48,104 @@ func Connect(databaseURL string) (*sqlx.DB, error) {
 }
 
 func RunMigrations(db *sqlx.DB) error {
-	tx, err := db.Beginx()
+	ctx := context.Background()
+	switch db.DriverName() {
+	case "sqlite3":
+		return runSQLiteMigrations(ctx, db)
+	case "postgres":
+		return runPostgresMigrations(ctx, db)
+	default:
+		return runPostgresMigrations(ctx, db)
+	}
+}
+
+func runSQLiteMigrations(ctx context.Context, db *sqlx.DB) (err error) {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire sqlite migration connection: %w", err)
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return fmt.Errorf("begin sqlite migration lock: %w", err)
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		if rollbackErr := rollbackMigrationContext(ctx, conn); rollbackErr != nil && err == nil {
+			err = rollbackErr
+		}
+	}()
+
+	if err := applyMigrations(ctx, conn, db.DriverName()); err != nil {
+		return err
+	}
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return fmt.Errorf("commit sqlite migrations: %w", err)
+	}
+	committed = true
+	log.Println("Migrations complete")
+	return nil
+}
+
+func runPostgresMigrations(ctx context.Context, db *sqlx.DB) error {
+	tx, err := db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin migrations: %w", err)
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
-		version INTEGER PRIMARY KEY,
-		applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-	)`); err != nil {
-		return fmt.Errorf("create migration ledger: %w", err)
+	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", migrationAdvisoryLockKey); err != nil {
+		return fmt.Errorf("acquire migration lock: %w", err)
 	}
-
-	for i, migration := range migrations() {
-		version := i + 1
-		var applied int
-		if err := tx.Get(&applied, "SELECT COUNT(*) FROM schema_migrations WHERE version = $1", version); err != nil {
-			return fmt.Errorf("check migration %d: %w", version, err)
-		}
-		if applied != 0 {
-			continue
-		}
-		if _, err := tx.Exec(migration); err != nil {
-			return fmt.Errorf("migration %d: %w", version, err)
-		}
-		if _, err := tx.Exec("INSERT INTO schema_migrations (version) VALUES ($1)", version); err != nil {
-			return fmt.Errorf("record migration %d: %w", version, err)
-		}
+	if err := applyMigrations(ctx, tx, db.DriverName()); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migrations: %w", err)
 	}
 	log.Println("Migrations complete")
+	return nil
+}
+
+func applyMigrations(ctx context.Context, exec migrationRunner, driver string) error {
+	if _, err := exec.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+		version INTEGER PRIMARY KEY,
+		name TEXT NOT NULL,
+		applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		return fmt.Errorf("create migration ledger: %w", err)
+	}
+	if err := ensureMigrationLedgerCompatibility(ctx, exec, driver); err != nil {
+		return err
+	}
+
+	for _, migration := range migrations() {
+		var applied int
+		if err := exec.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations WHERE version = $1", migration.version).Scan(&applied); err != nil {
+			return fmt.Errorf("check migration %d: %w", migration.version, err)
+		}
+		if applied != 0 {
+			continue
+		}
+		if err := migration.up(ctx, exec); err != nil {
+			return fmt.Errorf("migration %d (%s): %w", migration.version, migration.name, err)
+		}
+		if _, err := exec.ExecContext(ctx, "INSERT INTO schema_migrations (version, name) VALUES ($1, $2)", migration.version, migration.name); err != nil {
+			return fmt.Errorf("record migration %d: %w", migration.version, err)
+		}
+	}
+	return nil
+}
+
+func rollbackMigrationContext(ctx context.Context, conn interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}) error {
+	if _, err := conn.ExecContext(ctx, "ROLLBACK"); err != nil {
+		return fmt.Errorf("rollback sqlite migrations: %w", err)
+	}
 	return nil
 }
 

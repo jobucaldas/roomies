@@ -240,6 +240,33 @@ func TestExpenseAmountUpdateRequiresValidReplacementSplits(t *testing.T) {
 	}
 }
 
+func TestExpenseVisibilityRemainsPayerOnly(t *testing.T) {
+	router, _, _, cleanup := setupTest(t)
+	defer cleanup()
+	payerToken := registerUser(t, router, "Payer", "visibility-payer@test.com", "password123")
+	adminToken := registerUser(t, router, "Admin", "visibility-admin@test.com", "password123")
+	adminID := getUserID(t, router, adminToken)
+	houseID := createHouse(t, router, payerToken, "Visibility House")
+	addMember(t, router, payerToken, houseID, adminID, "admin")
+	expense := createExpense(t, router, payerToken, houseID, models.CreateExpenseRequest{
+		Amount: 10, Description: "visibility", Date: "2025-02-01", Visibility: "shared",
+	})
+
+	response := authenticatedRequest(t, router, http.MethodPost,
+		fmt.Sprintf("/api/houses/%s/expenses/%s/visibility", houseID, expense.ID), adminToken,
+		models.SetVisibilityRequest{Visibility: "private"})
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("non-payer admin changed visibility: expected 403, got %d: %s", response.Code, response.Body.String())
+	}
+
+	response = authenticatedRequest(t, router, http.MethodPost,
+		fmt.Sprintf("/api/houses/%s/expenses/%s/visibility", houseID, expense.ID), payerToken,
+		models.SetVisibilityRequest{Visibility: "private"})
+	if response.Code != http.StatusOK {
+		t.Fatalf("payer could not change visibility: %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestLastAdminCannotBeDemotedOrRemoved(t *testing.T) {
 	router, _, _, cleanup := setupTest(t)
 	defer cleanup()
