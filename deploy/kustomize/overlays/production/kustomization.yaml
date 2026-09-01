@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: roomies
+
+resources:
+  - ../../base
+
+images:
+  - name: roomies-backend
+    newName: ghcr.io/roomies/roomies-backend
+    newTag: latest
+  - name: roomies-frontend
+    newName: ghcr.io/roomies/roomies-frontend
+    newTag: latest
+
+configMapGenerator:
+  - name: roomies-backend-config
+    literals:
+      - APP_ENV=production
+      - PORT=8080
+      - CORS_ALLOWED_ORIGINS=https://roomies.example.com
+      - ROOMIES_PUBLIC_BASE_URL=https://roomies.example.com
+      - TIMEZONE=UTC
+
+generatorOptions:
+  disableNameSuffixHash: true

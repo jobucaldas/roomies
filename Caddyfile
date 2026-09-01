@@ -1,0 +1,14 @@
+localhost:80
+
+root * /usr/share/caddy/html
+file_server
+
+handle /api/* {
+    reverse_proxy backend:8080
+}
+
+# Fallback for Dioxus client-side routing
+handle {
+    rewrite * /index.html
+    file_server
+}

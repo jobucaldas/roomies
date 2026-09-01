@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: roomies-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: frontend
+    spec:
+      volumes:
+        - name: site
+          emptyDir: {}
+        - name: caddyfile
+          configMap:
+            name: roomies-frontend-caddyfile
+      initContainers:
+        - name: bundle
+          image: roomies-frontend:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - cp -a /app/dist/. /site/
+          volumeMounts:
+            - name: site
+              mountPath: /site
+      containers:
+        - name: caddy
+          image: docker.io/caddy:2.8-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          volumeMounts:
+            - name: site
+              mountPath: /usr/share/caddy/html
+            - name: caddyfile
+              mountPath: /etc/caddy/Caddyfile
+              subPath: Caddyfile
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http

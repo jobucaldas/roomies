@@ -1,0 +1,13 @@
+[application]
+name = "roomies"
+
+[web.app]
+title = "Roomies"
+
+[bundle]
+identifier = "app.roomies"
+publisher = "Roomies"
+
+# Android builds default to the emulator host API at http://10.0.2.2:8080/api.
+# Override ROOMIES_API_URL with your LAN host (for example http://192.168.1.10:8080/api)
+# when running on a physical device; use HTTPS in production.

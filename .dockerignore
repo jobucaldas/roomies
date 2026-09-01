@@ -1,0 +1,13 @@
+.git
+**/.git
+.gitignore
+**/target
+**/dist
+**/bin
+**/env
+**/node_modules
+*.db
+*.db-journal
+.env
+.env.*
+!.env.example
