@@ -28,7 +28,11 @@ pub fn Register() -> Element {
                 Ok(response) => {
                     current_user.set(Some(response.user));
                     api.set(client);
-                    router.push("/dashboard");
+                    if crate::storage::pending_invitation().is_some() {
+                        router.replace(Route::AcceptInvitation {});
+                    } else {
+                        router.push("/dashboard");
+                    }
                 }
                 Err(e) => {
                     error.set(e.to_string());

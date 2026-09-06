@@ -16,3 +16,9 @@
 - Verify the Nix desktop shell on a clean machine.
 - Wire real production secret delivery into the user's Kubernetes workflow.
 - Expand app-specific release automation once the baseline is stable.
+
+## Invitation onboarding UI
+- Added Dioxus invitation create/list/revoke controls for house admins, with explicit loading, expiry, error, and success states while retaining raw user-ID membership adding.
+- Added an `/accept-invitation` route that captures the one-time URL into browser session storage, scrubs the address bar, survives login/register, clears it after acceptance/rejection, and refreshes by navigating to the returned house.
+- Added API/model contract tests and a synthetic Playwright/Mailpit harness under `e2e/` for desktop and narrow layouts.
+- Direct web test execution is currently blocked by the pinned Nix Rust 1.86 toolchain versus cached ICU packages requiring Rust 1.88; browser flow was not substituted with a fake pass.

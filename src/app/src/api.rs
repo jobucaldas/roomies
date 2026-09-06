@@ -257,6 +257,50 @@ impl ApiClient {
         self.empty(self.request(Method::DELETE, &format!("/houses/{id}/members/{user_id}")))
             .await
     }
+    pub async fn create_invitation(
+        &self,
+        house_id: &str,
+        email: &str,
+        role: &str,
+    ) -> Result<HouseInvitation, ApiError> {
+        self.json(
+            Method::POST,
+            &format!("/houses/{house_id}/invites"),
+            &CreateInvitationRequest {
+                email: email.into(),
+                role: role.into(),
+            },
+        )
+        .await
+    }
+    pub async fn list_invitations(&self, house_id: &str) -> Result<Vec<HouseInvitation>, ApiError> {
+        self.send(self.request(Method::GET, &format!("/houses/{house_id}/invites")))
+            .await
+    }
+    pub async fn revoke_invitation(
+        &self,
+        house_id: &str,
+        invitation_id: &str,
+    ) -> Result<HouseInvitation, ApiError> {
+        self.send(self.request(
+            Method::DELETE,
+            &format!("/houses/{house_id}/invites/{invitation_id}"),
+        ))
+        .await
+    }
+    pub async fn accept_invitation(
+        &self,
+        token: &str,
+    ) -> Result<InvitationAcceptanceResponse, ApiError> {
+        self.json(
+            Method::POST,
+            "/invitations/accept",
+            &AcceptInvitationRequest {
+                token: token.into(),
+            },
+        )
+        .await
+    }
     pub async fn get_expenses(&self, id: &str) -> Result<Vec<Expense>, ApiError> {
         self.send(self.request(Method::GET, &format!("/houses/{id}/expenses")))
             .await
@@ -375,6 +419,27 @@ mod tests {
         let response: MessageResponse =
             serde_json::from_str(r#"{"message":"role updated"}"#).unwrap();
         assert_eq!(response.message, "role updated");
+    }
+
+    #[test]
+    fn invitation_contract_decodes_create_list_and_accept_fields() {
+        let invite: HouseInvitation = serde_json::from_str(
+            r#"{
+            "id":"invite-1","house_id":"house-1","email":"user@example.test",
+            "role":"member","status":"pending","created_by":"admin-1",
+            "created_at":"2025-01-01T00:00:00Z","expires_at":"2025-01-08T00:00:00Z"
+        }"#,
+        )
+        .unwrap();
+        assert_eq!(invite.email, "user@example.test");
+        assert_eq!(invite.status, "pending");
+        assert!(invite.manual_acceptance_url.is_none());
+        let accepted: InvitationAcceptanceResponse = serde_json::from_str(&format!(
+            "{{\"invitation\":{}}}",
+            serde_json::to_string(&invite).unwrap()
+        ))
+        .unwrap();
+        assert_eq!(accepted.invitation.id, "invite-1");
     }
 
     #[test]

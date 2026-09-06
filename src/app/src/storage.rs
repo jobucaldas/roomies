@@ -6,6 +6,8 @@
 
 #[cfg(target_arch = "wasm32")]
 const TOKEN_KEY: &str = "roomies.session.token";
+#[cfg(target_arch = "wasm32")]
+const PENDING_INVITATION_KEY: &str = "roomies.pending.invitation";
 
 pub trait SessionStorage {
     fn load_token(&self) -> Option<String>;
@@ -93,6 +95,45 @@ pub fn clear_token() {
         if let Some(path) = token_path() {
             let _ = std::fs::remove_file(path);
         }
+    }
+}
+
+/// Stores an invitation bearer token only for the current browser session while
+/// the recipient signs in or registers. It is never rendered or persisted with
+/// the normal session token.
+pub fn save_pending_invitation(token: &str) {
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = token;
+    #[cfg(target_arch = "wasm32")]
+    if !token.is_empty() {
+        if let Some(storage) =
+            web_sys::window().and_then(|window| window.session_storage().ok().flatten())
+        {
+            let _ = storage.set_item(PENDING_INVITATION_KEY, token);
+        }
+    }
+}
+
+pub fn pending_invitation() -> Option<String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        return web_sys::window()
+            .and_then(|window| window.session_storage().ok().flatten())
+            .and_then(|storage| storage.get_item(PENDING_INVITATION_KEY).ok().flatten())
+            .filter(|token| !token.is_empty());
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        None
+    }
+}
+
+pub fn clear_pending_invitation() {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(storage) =
+        web_sys::window().and_then(|window| window.session_storage().ok().flatten())
+    {
+        let _ = storage.remove_item(PENDING_INVITATION_KEY);
     }
 }
 

@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -90,6 +91,40 @@ pub struct AuthResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MessageResponse {
     pub message: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HouseInvitation {
+    pub id: String,
+    pub house_id: String,
+    pub email: String,
+    pub role: String,
+    pub status: String,
+    pub created_by: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    #[serde(default)]
+    pub accepted_by: Option<String>,
+    #[serde(default)]
+    pub accepted_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub revoked_by: Option<String>,
+    #[serde(default)]
+    pub revoked_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing)]
+    pub manual_acceptance_url: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct InvitationAcceptanceResponse {
+    pub invitation: HouseInvitation,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CreateInvitationRequest {
+    pub email: String,
+    pub role: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AcceptInvitationRequest {
+    pub token: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorResponse {

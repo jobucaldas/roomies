@@ -1,4 +1,5 @@
 use super::expenses::ExpensesSection;
+use super::invitations::InvitationPanel;
 use super::notes::NotesSection;
 use crate::api::ApiClient;
 use crate::core::{can_manage, Role};
@@ -243,6 +244,27 @@ fn MembersTab(
     let mut user_id = use_signal(String::new);
     let mut role = use_signal(|| "member".to_string());
     let mut status = use_signal(String::new);
+    let mut invitations = use_signal(Vec::<crate::models::HouseInvitation>::new);
+    let mut invitations_loading = use_signal(|| admin);
+    let mut invitations_error = use_signal(String::new);
+    {
+        let api = api.read().cloned();
+        let house_id = house_id.clone();
+        use_effect(move || {
+            if !admin {
+                return;
+            }
+            let api = api.clone();
+            let house_id = house_id.clone();
+            spawn(async move {
+                match api.list_invitations(&house_id).await {
+                    Ok(value) => invitations.set(value),
+                    Err(error) => invitations_error.set(error.to_string()),
+                }
+                invitations_loading.set(false);
+            });
+        });
+    }
     let add_house_id = house_id.clone();
     let add = move |_| {
         if user_id.read().trim().is_empty() {
@@ -263,11 +285,29 @@ fn MembersTab(
             }
         });
     };
+    let invitation_refresh_house_id = house_id.clone();
     rsx! {
         section {
             h2 { "Members" }
             if admin {
+                InvitationPanel {
+                    house_id: house_id.clone(),
+                    invitations: invitations.read().clone(),
+                    loading: *invitations_loading.read(),
+                    error: invitations_error.read().clone(),
+                    on_refresh: move |_| {
+                        let api = api.read().cloned();
+                        let house_id = invitation_refresh_house_id.clone();
+                        spawn(async move {
+                            match api.list_invitations(&house_id).await {
+                                Ok(value) => invitations.set(value),
+                                Err(error) => invitations_error.set(error.to_string()),
+                            }
+                        });
+                    },
+                }
                 div { class: "card",
+                    h3 { "Add existing member" }
                     label { "User ID", input { value: "{user_id}", oninput: move |e| user_id.set(e.value()) } }
                     select { value: "{role}", oninput: move |e| role.set(e.value()), option { value: "admin", "Admin" }, option { value: "member", "Member" }, option { value: "monitor", "Monitor" } }
                     button { onclick: add, "Add member" }

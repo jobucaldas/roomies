@@ -13,6 +13,7 @@ env/
 src/backend/vendor/
 node_modules/
 **/node_modules/
+e2e/artifacts/
 
 # IDE
 .idea/
