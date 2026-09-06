@@ -40,6 +40,11 @@ func migrations(driver string) []schemaMigration {
 			name:    "durable_job_lease_generation",
 			up:      execStatements(`ALTER TABLE durable_jobs ADD COLUMN lease_generation BIGINT NOT NULL DEFAULT 0`),
 		},
+		{
+			version: 5,
+			name:    "redact_invitation_idempotency_tokens",
+			up:      execStatements(redactInvitationIdempotencyTokensStatement(driver)),
+		},
 	}
 }
 
@@ -106,6 +111,25 @@ func migrationLedgerHasColumn(ctx context.Context, exec migrationRunner, driver,
 		}
 		return exists, nil
 	}
+}
+
+// redactInvitationIdempotencyTokensStatement removes legacy one-time invitation URLs
+// from completed response snapshots. The path constraint leaves unrelated idempotency
+// responses untouched; new responses are redacted before they reach this table.
+func redactInvitationIdempotencyTokensStatement(driver string) string {
+	if driver == "postgres" {
+		return `UPDATE idempotency_keys
+			SET response_body = (response_body::jsonb - 'manual_acceptance_url')::text
+			WHERE method = 'POST' AND path LIKE '/api/houses/%/invites'
+				AND response_body IS NOT NULL
+				AND response_body::jsonb ? 'manual_acceptance_url'`
+	}
+	return `UPDATE idempotency_keys
+		SET response_body = json_remove(response_body, '$.manual_acceptance_url')
+		WHERE method = 'POST' AND path LIKE '/api/houses/%/invites'
+			AND response_body IS NOT NULL
+			AND json_valid(response_body)
+			AND json_type(response_body, '$.manual_acceptance_url') IS NOT NULL`
 }
 
 func reliabilityStatements(driver string) []string {

@@ -1,6 +1,8 @@
 package database
 
 import (
+	"context"
+	"strings"
 	"testing"
 )
 
@@ -105,7 +107,7 @@ func TestSQLiteMigrationsUpgradeLegacySchema(t *testing.T) {
 	if err := db.Select(&names, "SELECT name FROM schema_migrations ORDER BY version"); err != nil {
 		t.Fatal(err)
 	}
-	if len(names) != 4 || names[0].Name != "" || names[1].Name != "monetary_cents_columns" || names[2].Name != "reliability_platform" || names[3].Name != "durable_job_lease_generation" {
+	if len(names) != 5 || names[0].Name != "" || names[1].Name != "monetary_cents_columns" || names[2].Name != "reliability_platform" || names[3].Name != "durable_job_lease_generation" || names[4].Name != "redact_invitation_idempotency_tokens" {
 		t.Fatalf("unexpected migration ledger names: %#v", names)
 	}
 
@@ -125,6 +127,46 @@ func TestSQLiteMigrationsUpgradeLegacySchema(t *testing.T) {
 	}
 	if len(splitCents) != 2 || splitCents[0].ShareAmountCents != 617 || splitCents[1].ShareAmountCents != 617 {
 		t.Fatalf("expected split cents backfill, got %#v", splitCents)
+	}
+}
+
+func TestSQLiteMigrationRedactsLegacyInvitationIdempotencyToken(t *testing.T) {
+	db, err := Connect("sqlite://:memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	for _, migration := range migrations(db.DriverName())[:4] {
+		if err := migration.up(ctx, db); err != nil {
+			t.Fatalf("apply pre-redaction migration %d: %v", migration.version, err)
+		}
+	}
+	if _, err := db.Exec(`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, migration := range migrations(db.DriverName())[:4] {
+		if _, err := db.Exec(`INSERT INTO schema_migrations (version, name) VALUES ($1, $2)`, migration.version, migration.name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO users (id, name, email, password_hash) VALUES ('user-1', 'User', 'user@example.test', 'hash')`); err != nil {
+		t.Fatal(err)
+	}
+	legacyResponse := `{"id":"invite-1","status":"pending","manual_acceptance_url":"https://roomies.test/accept-invitation?token=legacy-bearer-token"}`
+	if _, err := db.Exec(`INSERT INTO idempotency_keys (id, user_id, idempotency_key, method, path, body_hash, state, status_code, response_body, response_content_type)
+		VALUES ('key-1', 'user-1', 'key-1', 'POST', '/api/houses/house-1/invites', 'hash', 'completed', 201, $1, 'application/json')`, legacyResponse); err != nil {
+		t.Fatal(err)
+	}
+	if err := RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	var stored string
+	if err := db.Get(&stored, `SELECT response_body FROM idempotency_keys WHERE id = 'key-1'`); err != nil {
+		t.Fatal(err)
+	}
+	if stored == legacyResponse || strings.Contains(stored, "legacy-bearer-token") {
+		t.Fatalf("legacy idempotency token was not redacted: %s", stored)
 	}
 }
 

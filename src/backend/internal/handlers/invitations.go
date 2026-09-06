@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/mail"
@@ -86,6 +87,9 @@ func (h *InvitationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	invite.ManualAcceptanceURL = fmt.Sprintf("%s/accept-invitation?token=%s", h.publicBaseURL, url.QueryEscape(token))
+	// The URL contains a bearer token. It is returned only in this initial response;
+	// idempotent replays retain the invitation result but deliberately omit the URL.
+	w.Header().Set("X-Invitation-Token-Response", "one-time")
 	writeJSON(w, http.StatusCreated, invite)
 }
 
@@ -181,10 +185,6 @@ func NewHouseEventsHandler(houseRepo *repository.HouseRepository, reliabilityRep
 func (h *HouseEventsHandler) List(w http.ResponseWriter, r *http.Request) {
 	houseID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
-	if _, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID); err != nil {
-		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
-		return
-	}
 	cursor, err := parseEventCursor(r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: err.Error()})
@@ -192,6 +192,10 @@ func (h *HouseEventsHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	if acceptsEventStream(r) {
 		h.stream(w, r, houseID, userID, cursor)
+		return
+	}
+	if _, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID); err != nil {
+		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
 	}
 	events, nextCursor, err := h.reliabilityRepo.ListHouseEvents(r.Context(), houseID, cursor, h.maxEventsPerPage)
@@ -208,31 +212,52 @@ func (h *HouseEventsHandler) stream(w http.ResponseWriter, r *http.Request, hous
 		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "streaming unsupported"})
 		return
 	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.WriteHeader(http.StatusOK)
 	currentCursor := cursor
-	send := func(events []models.HouseEvent) bool {
+	started := false
+	send := func(events []models.HouseEvent) error {
 		for _, event := range events {
 			payload, err := json.Marshal(event)
 			if err != nil {
-				return false
+				return err
 			}
 			if _, err := fmt.Fprintf(w, "id: %s\nevent: %s\ndata: %s\n\n", event.Cursor, event.EventType, payload); err != nil {
-				return false
+				return err
 			}
 			currentCursor64, _ := parseCursorValue(event.Cursor)
 			currentCursor = currentCursor64
 		}
 		flusher.Flush()
-		return true
+		return nil
 	}
-	if _, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID); err != nil {
-		return
+	snapshotAndSend := func(initial bool) (int, error) {
+		eventCount := 0
+		err := h.reliabilityRepo.WithAuthorizedHouseEvents(r.Context(), houseID, userID, currentCursor, h.maxEventsPerPage, func(events []models.HouseEvent) error {
+			eventCount = len(events)
+			if err := setSSEWriteDeadline(w); err != nil {
+				return err
+			}
+			if initial && !started {
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.Header().Set("Cache-Control", "no-cache")
+				w.Header().Set("Connection", "keep-alive")
+				w.WriteHeader(http.StatusOK)
+				started = true
+			}
+			if len(events) == 0 {
+				if initial {
+					flusher.Flush()
+				}
+				return nil
+			}
+			return send(events)
+		})
+		return eventCount, err
 	}
-	events, _, err := h.reliabilityRepo.ListHouseEvents(r.Context(), houseID, currentCursor, h.maxEventsPerPage)
-	if err != nil || !send(events) {
+
+	if _, err := snapshotAndSend(true); err != nil {
+		if errors.Is(err, repository.ErrHouseMembershipUnavailable) {
+			writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
+		}
 		return
 	}
 	ticker := time.NewTicker(h.pollInterval)
@@ -242,25 +267,31 @@ func (h *HouseEventsHandler) stream(w http.ResponseWriter, r *http.Request, hous
 		case <-r.Context().Done():
 			return
 		case <-ticker.C:
-			if _, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID); err != nil {
-				return
-			}
-			events, _, err := h.reliabilityRepo.ListHouseEvents(r.Context(), houseID, currentCursor, h.maxEventsPerPage)
+			eventCount, err := snapshotAndSend(false)
 			if err != nil {
 				return
 			}
-			if len(events) == 0 {
+			if eventCount == 0 {
+				if err := setSSEWriteDeadline(w); err != nil {
+					return
+				}
 				if _, err := w.Write([]byte(": keep-alive\n\n")); err != nil {
 					return
 				}
 				flusher.Flush()
-				continue
-			}
-			if !send(events) {
-				return
 			}
 		}
 	}
+}
+
+// setSSEWriteDeadline bounds the time a house revocation barrier can be held by a
+// network write. Standard net/http writers support it; test-only wrappers may not.
+func setSSEWriteDeadline(w http.ResponseWriter) error {
+	err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if errors.Is(err, http.ErrNotSupported) {
+		return nil
+	}
+	return err
 }
 
 func acceptsEventStream(r *http.Request) bool {

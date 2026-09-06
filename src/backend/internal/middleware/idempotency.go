@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -11,7 +12,11 @@ import (
 	"github.com/roomies/backend/internal/repository"
 )
 
-const maxIdempotencyBodyBytes = 1 << 20
+const (
+	maxIdempotencyBodyBytes        = 1 << 20
+	invitationTokenResponseHeader  = "X-Invitation-Token-Response"
+	invitationTokenResponseOneTime = "one-time"
+)
 
 func Idempotency(repo *repository.ReliabilityRepository) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -80,9 +85,13 @@ func Idempotency(repo *repository.ReliabilityRepository) func(http.Handler) http
 			if contentType == "" {
 				contentType = "application/octet-stream"
 			}
+			bodyToStore := capture.body.String()
+			if capture.Header().Get(invitationTokenResponseHeader) == invitationTokenResponseOneTime {
+				bodyToStore = redactInvitationTokenResponse(bodyToStore)
+			}
 			_ = repo.CompleteIdempotentRequest(r.Context(), userID, key, repository.StoredHTTPResponse{
 				StatusCode:  status,
-				Body:        capture.body.String(),
+				Body:        bodyToStore,
 				ContentType: contentType,
 			})
 		})
@@ -96,6 +105,23 @@ func supportsIdempotency(method string) bool {
 	default:
 		return false
 	}
+}
+
+// redactInvitationTokenResponse preserves the invitation result for an idempotent
+// replay while ensuring its one-time bearer URL is never written to durable storage.
+// A malformed marked response is stored as an empty JSON object rather than risking
+// persistence of a secret.
+func redactInvitationTokenResponse(body string) string {
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(body), &response); err != nil {
+		return "{}"
+	}
+	delete(response, "manual_acceptance_url")
+	redacted, err := json.Marshal(response)
+	if err != nil {
+		return "{}"
+	}
+	return string(redacted)
 }
 
 func bodySHA256(body []byte) string {

@@ -17,7 +17,7 @@ import (
 	"github.com/roomies/backend/internal/models"
 )
 
-func TestInvitationCreateReplaysIdempotentResponse(t *testing.T) {
+func TestInvitationCreateIdempotentReplayRedactsOneTimeToken(t *testing.T) {
 	env := newTestEnv(t)
 	defer env.Cleanup()
 	adminToken := registerUser(t, env.Router, "Admin", "admin-invite@test.com", "password123")
@@ -37,8 +37,25 @@ func TestInvitationCreateReplaysIdempotentResponse(t *testing.T) {
 	if err := json.NewDecoder(secondRes.Body).Decode(&replayed); err != nil {
 		t.Fatal(err)
 	}
-	if replayed.ID != first.ID || replayed.ManualAcceptanceURL != first.ManualAcceptanceURL {
-		t.Fatalf("expected same replayed invitation, got first=%+v replayed=%+v", first, replayed)
+	if replayed.ID != first.ID || replayed.Status != first.Status || replayed.ManualAcceptanceURL != "" {
+		t.Fatalf("expected token-redacted invitation replay, got first=%+v replayed=%+v", first, replayed)
+	}
+	rawToken := manualInvitationToken(t, first.ManualAcceptanceURL)
+	var idempotencyBody string
+	if err := env.DB.Get(&idempotencyBody, `SELECT response_body FROM idempotency_keys WHERE idempotency_key = $1`, "invite-create-1"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(idempotencyBody, rawToken) || strings.Contains(idempotencyBody, "manual_acceptance_url") {
+		t.Fatalf("idempotency storage retained invitation bearer token: %s", idempotencyBody)
+	}
+	for _, table := range []string{"audit_events", "house_events", "outbox_messages"} {
+		var count int
+		if err := env.DB.Get(&count, `SELECT COUNT(*) FROM `+table+` WHERE CAST(`+tokenSearchColumn(table)+` AS TEXT) LIKE $1`, "%"+rawToken+"%"); err != nil {
+			t.Fatal(err)
+		}
+		if count != 0 {
+			t.Fatalf("%s retained invitation bearer token", table)
+		}
 	}
 
 	var inviteCount, jobCount, outboxCount int
@@ -53,6 +70,17 @@ func TestInvitationCreateReplaysIdempotentResponse(t *testing.T) {
 	}
 	if inviteCount != 1 || jobCount != 1 || outboxCount != 1 {
 		t.Fatalf("expected one persisted invite/job/outbox, got invites=%d jobs=%d outbox=%d", inviteCount, jobCount, outboxCount)
+	}
+}
+
+func tokenSearchColumn(table string) string {
+	switch table {
+	case "audit_events":
+		return "metadata"
+	case "house_events", "outbox_messages":
+		return "payload"
+	default:
+		panic("unexpected token search table")
 	}
 }
 

@@ -80,6 +80,33 @@ func TestPostgresConcurrentInvitationAcceptAndRevoke(t *testing.T) {
 	}
 }
 
+func TestPostgresHouseEventDeliveryBarrierSerializesRemovalAndSend(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is required for PostgreSQL event delivery lock regression test")
+	}
+	db, err := database.Connect(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if db.DriverName() != "postgres" {
+		t.Skip("DATABASE_URL is not PostgreSQL")
+	}
+	if err := database.RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewReliabilityRepository(db, roomiesclock.RealClock{})
+	houseID, adminID, memberID := seedPostgresInvitationFixture(t, repo)
+	if _, err := db.Exec(`INSERT INTO house_members (id, house_id, user_id, role, joined_at) VALUES ($1, $2, $3, 'member', CURRENT_TIMESTAMP)`, models.NewID(), houseID, memberID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.AppendHouseEvent(context.Background(), houseID, "test.event", &adminID, "test", "event-1", nil); err != nil {
+		t.Fatal(err)
+	}
+	runHouseEventDeliveryBarrierTest(t, repo, houseID, adminID, memberID)
+}
+
 func seedPostgresInvitationFixture(t *testing.T, repo *ReliabilityRepository) (houseID, adminID, inviteeID string) {
 	t.Helper()
 	houseID = models.NewID()

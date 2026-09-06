@@ -51,18 +51,27 @@ func TestSMTPInvitationProviderSendsToFakeServer(t *testing.T) {
 	}
 }
 
-func TestInvitationProviderUsesFakeWhenSMTPIsAbsentOrDevelopment(t *testing.T) {
-	for name, cfg := range map[string]*config.Config{
-		"production without SMTP": {Environment: "production"},
-		"development with SMTP":   {Environment: "development", SMTPHost: "smtp.example.test", SMTPPort: 25, SMTPFrom: "sender@example.test"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			provider, err := NewInvitationProvider(cfg)
+func TestInvitationProviderUsesFakeOnlyWhenSMTPIsAbsent(t *testing.T) {
+	provider, err := NewInvitationProvider(&config.Config{Environment: "production"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := provider.(*FakeInvitationProvider); !ok {
+		t.Fatalf("expected fake provider without SMTP_HOST, got %T", provider)
+	}
+}
+
+func TestInvitationProviderUsesConfiguredSMTPInEveryEnvironment(t *testing.T) {
+	for _, environment := range []string{"development", "test", "production"} {
+		t.Run(environment, func(t *testing.T) {
+			provider, err := NewInvitationProvider(&config.Config{
+				Environment: environment, SMTPHost: "smtp.example.test", SMTPPort: 25, SMTPFrom: "sender@example.test",
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, ok := provider.(*FakeInvitationProvider); !ok {
-				t.Fatalf("expected fake-only provider, got %T", provider)
+			if _, ok := provider.(*SMTPInvitationProvider); !ok {
+				t.Fatalf("expected configured SMTP provider, got %T", provider)
 			}
 		})
 	}

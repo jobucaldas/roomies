@@ -40,14 +40,14 @@ func NewSMTPInvitationProvider(cfg *config.Config) (*SMTPInvitationProvider, err
 	}, nil
 }
 
-// NewInvitationProvider selects fake delivery only for development/test or when
-// SMTP is intentionally absent. The fake provider records work for inspection;
-// it never represents a claim that an email reached its recipient.
+// NewInvitationProvider selects SMTP whenever SMTP_HOST is configured, including
+// development and test where Mailpit is the expected sink. The fake provider is used
+// only when SMTP is explicitly absent and never represents real delivery.
 func NewInvitationProvider(cfg *config.Config) (InvitationProvider, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("configuration is required")
 	}
-	if cfg.Environment == "development" || cfg.Environment == "test" || strings.TrimSpace(cfg.SMTPHost) == "" {
+	if strings.TrimSpace(cfg.SMTPHost) == "" {
 		return &FakeInvitationProvider{}, nil
 	}
 	return NewSMTPInvitationProvider(cfg)

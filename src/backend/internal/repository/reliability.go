@@ -19,9 +19,10 @@ import (
 )
 
 var (
-	ErrInvitationPendingExists = errors.New("pending invitation already exists")
-	ErrInvitationUnavailable   = errors.New("invitation unavailable")
-	ErrInvitationStateConflict = errors.New("invitation state change rejected")
+	ErrInvitationPendingExists    = errors.New("pending invitation already exists")
+	ErrInvitationUnavailable      = errors.New("invitation unavailable")
+	ErrInvitationStateConflict    = errors.New("invitation state change rejected")
+	ErrHouseMembershipUnavailable = errors.New("active house membership is required")
 )
 
 type ReliabilityRepository struct {
@@ -390,21 +391,83 @@ func (r *ReliabilityRepository) AppendHouseEvent(ctx context.Context, houseID, e
 }
 
 func (r *ReliabilityRepository) ListHouseEvents(ctx context.Context, houseID string, afterCursor int64, limit int) ([]models.HouseEvent, string, error) {
+	return listHouseEvents(ctx, r.db, houseID, afterCursor, limit)
+}
+
+// WithAuthorizedHouseEvents serializes the membership authorization, event snapshot,
+// and callback against member removal by locking the house row. The callback must make
+// only bounded work (SSE writes use a deadline); it runs before the lock is released.
+// Its successful return is the authorization linearization point: a snapshot begun
+// after a removal commit cannot be authorized, while bytes already sent cannot be
+// recalled.
+func (r *ReliabilityRepository) WithAuthorizedHouseEvents(ctx context.Context, houseID, userID string, afterCursor int64, limit int, send func([]models.HouseEvent) error) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := r.lockHouseForEventDelivery(ctx, tx, houseID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrHouseMembershipUnavailable
+		}
+		return err
+	}
+	var memberCount int
+	if err := tx.GetContext(ctx, &memberCount, `SELECT COUNT(*) FROM house_members WHERE house_id = $1 AND user_id = $2`, houseID, userID); err != nil {
+		return err
+	}
+	if memberCount == 0 {
+		return ErrHouseMembershipUnavailable
+	}
+	events, _, err := listHouseEvents(ctx, tx, houseID, afterCursor, limit)
+	if err != nil {
+		return err
+	}
+	if send != nil {
+		if err := send(events); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *ReliabilityRepository) lockHouseForEventDelivery(ctx context.Context, tx *sqlx.Tx, houseID string) error {
+	if r.db.DriverName() == "sqlite3" {
+		// SQLite has no row-level SELECT FOR UPDATE. This no-op update takes its
+		// writer lock before authorization so removal cannot commit during send.
+		result, err := tx.ExecContext(ctx, `UPDATE houses SET name = name WHERE id = $1`, houseID)
+		if err != nil {
+			return err
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if affected == 0 {
+			return sql.ErrNoRows
+		}
+		return nil
+	}
+	return r.lockHouse(ctx, tx, houseID)
+}
+
+type houseEventRow struct {
+	Cursor       int64     `db:"cursor"`
+	EventType    string    `db:"event_type"`
+	ActorID      *string   `db:"actor_id"`
+	ResourceType string    `db:"resource_type"`
+	ResourceID   string    `db:"resource_id"`
+	Payload      string    `db:"payload"`
+	CreatedAt    time.Time `db:"created_at"`
+}
+
+func listHouseEvents(ctx context.Context, queryer sqlx.QueryerContext, houseID string, afterCursor int64, limit int) ([]models.HouseEvent, string, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	var rows []struct {
-		Cursor       int64     `db:"cursor"`
-		EventType    string    `db:"event_type"`
-		ActorID      *string   `db:"actor_id"`
-		ResourceType string    `db:"resource_type"`
-		ResourceID   string    `db:"resource_id"`
-		Payload      string    `db:"payload"`
-		CreatedAt    time.Time `db:"created_at"`
-	}
-	err := r.db.SelectContext(ctx, &rows, `SELECT cursor, event_type, actor_id, resource_type, resource_id, payload, created_at
-		FROM house_events WHERE house_id = $1 AND cursor > $2 ORDER BY cursor ASC LIMIT $3`, houseID, afterCursor, limit)
-	if err != nil {
+	var rows []houseEventRow
+	if err := sqlx.SelectContext(ctx, queryer, &rows, `SELECT cursor, event_type, actor_id, resource_type, resource_id, payload, created_at
+		FROM house_events WHERE house_id = $1 AND cursor > $2 ORDER BY cursor ASC LIMIT $3`, houseID, afterCursor, limit); err != nil {
 		return nil, "", err
 	}
 	result := make([]models.HouseEvent, 0, len(rows))

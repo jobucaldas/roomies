@@ -21,5 +21,7 @@ Provide the values from `docs/credentials.example.env` via a Kubernetes Secret o
 
 ## Notes
 - The backend runs migrations on startup.
+- `SMTP_HOST` selects SMTP in every environment (use Mailpit for local development); leaving it empty selects the fake non-delivery provider.
+- Invitation creation returns `manual_acceptance_url` only in the initial successful response. Idempotent replays retain the invitation result but omit its one-time bearer URL.
 - The frontend image is a static bundle source; the Kubernetes overlay serves it with Caddy.
 - No Apple target or Apple packaging work is included in this baseline.

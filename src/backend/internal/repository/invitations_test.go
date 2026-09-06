@@ -3,9 +3,12 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/roomies/backend/internal/models"
 )
 
 func TestConcurrentAcceptAndRevokeLeaveConsistentInvitationState(t *testing.T) {
@@ -71,6 +74,70 @@ func TestConcurrentAcceptAndRevokeLeaveConsistentInvitationState(t *testing.T) {
 		}
 	default:
 		t.Fatalf("unexpected final invitation status %q", status)
+	}
+}
+
+func TestHouseEventDeliveryBarrierSerializesRemovalAndSendSQLite(t *testing.T) {
+	repo, _, cleanup := setupReliabilityRepoTest(t)
+	defer cleanup()
+	houseID, adminID := seedHouseFixture(t, repo)
+	memberID := "user-stream-member"
+	if _, err := repo.db.Exec(`INSERT INTO users (id, name, email, password_hash, created_at) VALUES ($1, 'Stream Member', 'stream-member@example.com', 'hash', CURRENT_TIMESTAMP)`, memberID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.db.Exec(`INSERT INTO house_members (id, house_id, user_id, role, joined_at) VALUES ('member-stream', $1, $2, 'member', CURRENT_TIMESTAMP)`, houseID, memberID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.AppendHouseEvent(context.Background(), houseID, "test.event", &adminID, "test", "event-1", nil); err != nil {
+		t.Fatal(err)
+	}
+	runHouseEventDeliveryBarrierTest(t, repo, houseID, adminID, memberID)
+}
+
+// runHouseEventDeliveryBarrierTest establishes the interleaving explicitly: the
+// callback has fetched and is about to send an event while removal is attempted.
+// Removal must not commit until the bounded send callback releases the house barrier.
+func runHouseEventDeliveryBarrierTest(t *testing.T, repo *ReliabilityRepository, houseID, adminID, memberID string) {
+	t.Helper()
+	sendStarted := make(chan struct{})
+	allowSend := make(chan struct{})
+	snapshotDone := make(chan error, 1)
+	go func() {
+		snapshotDone <- repo.WithAuthorizedHouseEvents(context.Background(), houseID, memberID, 0, 100, func(events []models.HouseEvent) error {
+			if len(events) != 1 || events[0].ResourceID != "event-1" {
+				return fmt.Errorf("unexpected event snapshot: %#v", events)
+			}
+			close(sendStarted)
+			<-allowSend
+			return nil
+		})
+	}()
+	<-sendStarted
+
+	removeDone := make(chan error, 1)
+	go func() {
+		removeDone <- NewHouseRepository(repo.db).RemoveMember(context.Background(), houseID, memberID)
+	}()
+	select {
+	case err := <-removeDone:
+		t.Fatalf("removal committed while an authorized send held the barrier: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(allowSend)
+	if err := <-snapshotDone; err != nil {
+		t.Fatalf("authorized send failed: %v", err)
+	}
+	if err := <-removeDone; err != nil {
+		t.Fatalf("remove member failed: %v", err)
+	}
+
+	called := false
+	err := repo.WithAuthorizedHouseEvents(context.Background(), houseID, memberID, 0, 100, func([]models.HouseEvent) error {
+		called = true
+		return nil
+	})
+	if !errors.Is(err, ErrHouseMembershipUnavailable) || called {
+		t.Fatalf("event snapshot after removal was authorized: err=%v callback=%t", err, called)
 	}
 }
 
