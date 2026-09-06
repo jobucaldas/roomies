@@ -261,6 +261,18 @@ func (r *ReliabilityRepository) AcceptInvitation(ctx context.Context, token, act
 	}
 	defer tx.Rollback()
 
+	houseID, err := r.getInvitationHouseIDByTokenTx(ctx, tx, hashToken(token))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrInvitationUnavailable
+		}
+		return nil, err
+	}
+	if err := r.lockHouse(ctx, tx, houseID); err != nil {
+		return nil, err
+	}
+	// Re-read after locking the house so accept and revoke always lock in the
+	// same order and all invitation state is revalidated under both locks.
 	invite, err := r.getInvitationForUpdateTx(ctx, tx, "token_hash = $1", hashToken(token))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -442,6 +454,12 @@ func (r *ReliabilityRepository) markInvitationExpiredTx(ctx context.Context, tx 
 	_, err := tx.ExecContext(ctx, `UPDATE house_invitations SET status = 'expired'
 		WHERE id = $1 AND status = 'pending'`, inviteID)
 	return err
+}
+
+func (r *ReliabilityRepository) getInvitationHouseIDByTokenTx(ctx context.Context, tx *sqlx.Tx, tokenHash string) (string, error) {
+	var houseID string
+	err := tx.GetContext(ctx, &houseID, `SELECT house_id FROM house_invitations WHERE token_hash = $1`, tokenHash)
+	return houseID, err
 }
 
 func (r *ReliabilityRepository) getInvitationForUpdateTx(ctx context.Context, tx *sqlx.Tx, where string, args ...any) (*models.HouseInvitation, error) {

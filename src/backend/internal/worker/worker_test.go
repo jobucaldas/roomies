@@ -3,6 +3,7 @@ package worker_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -15,7 +16,7 @@ import (
 	"github.com/roomies/backend/internal/worker"
 )
 
-func TestConcurrentWorkersDispatchJobOnce(t *testing.T) {
+func TestConcurrentWorkersOnlyOneWorkerClaimsJob(t *testing.T) {
 	repo, db, clk, cleanup := setupWorkerTest(t)
 	defer cleanup()
 	houseID, adminID := seedHouseFixture(t, db)
@@ -50,6 +51,46 @@ func TestConcurrentWorkersDispatchJobOnce(t *testing.T) {
 	job := loadOnlyJob(t, repo, db)
 	if !job.CompletedAt.Valid {
 		t.Fatalf("expected job to be completed: %+v", job)
+	}
+}
+
+func TestLeaseReclaimProvidesAtLeastOnceDispatch(t *testing.T) {
+	repo, db, clk, cleanup := setupWorkerTest(t)
+	defer cleanup()
+	houseID, adminID := seedHouseFixture(t, db)
+	if _, _, err := repo.CreateInvitation(context.Background(), repository.CreateInvitationParams{
+		HouseID: houseID, ActorID: adminID, Email: "at-least-once@example.com", Role: "member", ExpiresAt: clk.Now().Add(24 * time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	job := loadOnlyJob(t, repo, db)
+	stale, err := repo.AcquireNextJob(context.Background(), "worker-a", time.Second)
+	if err != nil || stale == nil {
+		t.Fatalf("acquire first lease: job=%+v err=%v", stale, err)
+	}
+	outboxID := decodeOnlyOutboxID(t, job)
+	message, err := repo.GetOutboxMessage(context.Background(), outboxID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := &providers.FakeInvitationProvider{}
+	var notification providers.InvitationNotification
+	if err := json.Unmarshal([]byte(message.Payload), &notification); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate provider success followed by a worker crash before completion.
+	if err := provider.DispatchInvitation(context.Background(), notification); err != nil {
+		t.Fatal(err)
+	}
+	clk.Advance(2 * time.Second)
+	if err := worker.New(nil, repo, provider, "worker-b", time.Millisecond, time.Second).RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(provider.Snapshot()); got != 2 {
+		t.Fatalf("expected retry dispatch after an unacknowledged provider success, got %d", got)
+	}
+	if err := repo.CompleteOutboxJob(context.Background(), stale, outboxID); !errors.Is(err, repository.ErrJobLeaseLost) {
+		t.Fatalf("stale worker completion error = %v, want ErrJobLeaseLost", err)
 	}
 }
 

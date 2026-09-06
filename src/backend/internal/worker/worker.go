@@ -77,7 +77,7 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		return w.repo.FailOutboxJob(ctx, job, outboxMessageID, err)
 	}
 	if message.Status == "dispatched" || message.Status == "dead_lettered" {
-		return w.repo.CompleteOutboxJob(ctx, job.ID, message.ID)
+		return w.repo.CompleteOutboxJob(ctx, job, "")
 	}
 	var notification providers.InvitationNotification
 	if err := json.Unmarshal([]byte(message.Payload), &notification); err != nil {
@@ -100,5 +100,5 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		slog.String("outbox_message_id", message.ID),
 		slog.String("topic", message.Topic),
 	)
-	return w.repo.CompleteOutboxJob(ctx, job.ID, message.ID)
+	return w.repo.CompleteOutboxJob(ctx, job, message.ID)
 }

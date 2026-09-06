@@ -35,6 +35,11 @@ func migrations(driver string) []schemaMigration {
 			name:    "reliability_platform",
 			up:      execStatements(reliabilityStatements(driver)...),
 		},
+		{
+			version: 4,
+			name:    "durable_job_lease_generation",
+			up:      execStatements(`ALTER TABLE durable_jobs ADD COLUMN lease_generation BIGINT NOT NULL DEFAULT 0`),
+		},
 	}
 }
 

@@ -18,6 +18,11 @@ type InvitationNotification struct {
 	Metadata     map[string]string `json:"metadata,omitempty"`
 }
 
+// InvitationProvider dispatches notifications with at-least-once semantics.
+// A lease can expire after a provider accepts a request but before the worker
+// records completion, so providers should deduplicate by Topic and InvitationID
+// when they support an idempotency key. The worker never promises exactly-once
+// external delivery.
 type InvitationProvider interface {
 	DispatchInvitation(context.Context, InvitationNotification) error
 }
