@@ -8,14 +8,16 @@ import (
 )
 
 type InvitationNotification struct {
-	Topic        string            `json:"topic"`
-	InvitationID string            `json:"invitation_id"`
-	HouseID      string            `json:"house_id"`
-	Email        string            `json:"email"`
-	Role         string            `json:"role"`
-	Status       string            `json:"status"`
-	OccurredAt   time.Time         `json:"occurred_at"`
-	Metadata     map[string]string `json:"metadata,omitempty"`
+	Topic         string                     `json:"topic"`
+	InvitationID  string                     `json:"invitation_id"`
+	HouseID       string                     `json:"house_id"`
+	Email         string                     `json:"email"`
+	Role          string                     `json:"role"`
+	Status        string                     `json:"status"`
+	OccurredAt    time.Time                  `json:"occurred_at"`
+	Metadata      map[string]string          `json:"metadata,omitempty"`
+	Delivery      *InvitationDeliveryPayload `json:"delivery,omitempty"`
+	AcceptanceURL string                     `json:"-"`
 }
 
 // InvitationProvider dispatches notifications with at-least-once semantics.

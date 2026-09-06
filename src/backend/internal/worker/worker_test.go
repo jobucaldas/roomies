@@ -2,19 +2,131 @@ package worker_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 	roomiesclock "github.com/roomies/backend/internal/clock"
+	"github.com/roomies/backend/internal/config"
 	"github.com/roomies/backend/internal/database"
 	"github.com/roomies/backend/internal/providers"
 	"github.com/roomies/backend/internal/repository"
 	"github.com/roomies/backend/internal/worker"
 )
+
+func TestEncryptedInvitationDeliveryRedactsDatabaseAndProvidesAcceptableSMTPLink(t *testing.T) {
+	repo, db, clk, cleanup := setupWorkerTest(t)
+	defer cleanup()
+	cipher, err := providers.NewInvitationDeliveryCipher(&config.Config{
+		InvitationDeliveryKeyID: "fixture-1",
+		InvitationDeliveryKey:   base64.StdEncoding.EncodeToString(make([]byte, 32)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo = repository.NewReliabilityRepository(db, clk, cipher)
+	houseID, adminID := seedHouseFixture(t, db)
+	invite, token, err := repo.CreateInvitation(context.Background(), repository.CreateInvitationParams{
+		HouseID: houseID, ActorID: adminID, Email: "invitee@example.com", Role: "member", ExpiresAt: clk.Now().Add(24 * time.Hour), PublicBaseURL: "https://roomies.example",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := loadOnlyJob(t, repo, db)
+	outboxID := decodeOnlyOutboxID(t, job)
+	message, err := repo.GetOutboxMessage(context.Background(), outboxID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(message.Payload, token) || !strings.Contains(message.Payload, "ciphertext") {
+		t.Fatalf("outbox payload leaked token or lacked ciphertext: %s", message.Payload)
+	}
+	provider := &providers.FakeInvitationProvider{}
+	if err := worker.New(nil, repo, provider, "worker-a", time.Millisecond, time.Second, cipher).RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	notifications := provider.Snapshot()
+	if len(notifications) != 1 {
+		t.Fatalf("dispatch count = %d", len(notifications))
+	}
+	link, err := url.Parse(notifications[0].AcceptanceURL)
+	if err != nil || link.Query().Get("token") != token {
+		t.Fatalf("captured SMTP link = %q, %v", notifications[0].AcceptanceURL, err)
+	}
+	if _, err := db.Exec(`INSERT INTO users (id, name, email, password_hash, created_at) VALUES ('user-invitee', 'Invitee', 'invitee@example.com', 'hash', CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AcceptInvitation(context.Background(), token, "user-invitee", "invitee@example.com"); err != nil {
+		t.Fatalf("accept captured link token for %s: %v", invite.ID, err)
+	}
+	message, err = repo.GetOutboxMessage(context.Background(), outboxID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(message.Payload, "ciphertext") || strings.Contains(message.Payload, token) {
+		t.Fatalf("terminal outbox retained delivery secret: %s", message.Payload)
+	}
+}
+
+func TestEncryptedInvitationDeliveryDoesNotSendAfterRevokeOrExpiry(t *testing.T) {
+	for _, terminal := range []string{"revoke", "expiry"} {
+		t.Run(terminal, func(t *testing.T) {
+			repo, db, clk, cleanup := setupWorkerTest(t)
+			defer cleanup()
+			cipher, err := providers.NewInvitationDeliveryCipher(&config.Config{
+				InvitationDeliveryKeyID: "fixture-1",
+				InvitationDeliveryKey:   base64.StdEncoding.EncodeToString(make([]byte, 32)),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			repo = repository.NewReliabilityRepository(db, clk, cipher)
+			houseID, adminID := seedHouseFixture(t, db)
+			invite, _, err := repo.CreateInvitation(context.Background(), repository.CreateInvitationParams{
+				HouseID: houseID, ActorID: adminID, Email: terminal + "@example.com", Role: "member", ExpiresAt: clk.Now().Add(time.Hour), PublicBaseURL: "https://roomies.example",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if terminal == "revoke" {
+				if _, err := repo.RevokeInvitation(context.Background(), houseID, invite.ID, adminID); err != nil {
+					t.Fatal(err)
+				}
+				var payload string
+				if err := db.Get(&payload, `SELECT payload FROM outbox_messages WHERE dedupe_key = $1`, "outbox:invitation:"+invite.ID); err != nil {
+					t.Fatal(err)
+				}
+				if strings.Contains(payload, "ciphertext") {
+					t.Fatalf("revoked invitation retained ciphertext: %s", payload)
+				}
+				return
+			}
+			clk.Advance(2 * time.Hour)
+			provider := &providers.FakeInvitationProvider{}
+			if err := worker.New(nil, repo, provider, "worker-a", time.Millisecond, time.Second, cipher).RunOnce(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if got := len(provider.Snapshot()); got != 0 {
+				t.Fatalf("terminal invitation dispatched %d creation emails", got)
+			}
+			job := loadOnlyJob(t, repo, db)
+			outboxID := decodeOnlyOutboxID(t, job)
+			message, err := repo.GetOutboxMessage(context.Background(), outboxID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(message.Payload, "ciphertext") || !job.CompletedAt.Valid {
+				t.Fatalf("terminal job was not redacted and completed: job=%+v payload=%s", job, message.Payload)
+			}
+		})
+	}
+}
 
 func TestConcurrentWorkersOnlyOneWorkerClaimsJob(t *testing.T) {
 	repo, db, clk, cleanup := setupWorkerTest(t)

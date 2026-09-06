@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -26,16 +27,18 @@ var (
 )
 
 type ReliabilityRepository struct {
-	db    *sqlx.DB
-	clock roomiesclock.Clock
+	db             *sqlx.DB
+	clock          roomiesclock.Clock
+	deliveryCipher *providers.InvitationDeliveryCipher
 }
 
 type CreateInvitationParams struct {
-	HouseID   string
-	ActorID   string
-	Email     string
-	Role      string
-	ExpiresAt time.Time
+	HouseID       string
+	ActorID       string
+	Email         string
+	Role          string
+	ExpiresAt     time.Time
+	PublicBaseURL string
 }
 
 type jobPayload struct {
@@ -55,11 +58,15 @@ type OutboxMessage struct {
 	UpdatedAt    time.Time      `db:"updated_at"`
 }
 
-func NewReliabilityRepository(db *sqlx.DB, clk roomiesclock.Clock) *ReliabilityRepository {
+func NewReliabilityRepository(db *sqlx.DB, clk roomiesclock.Clock, deliveryCipher ...*providers.InvitationDeliveryCipher) *ReliabilityRepository {
 	if clk == nil {
 		clk = roomiesclock.RealClock{}
 	}
-	return &ReliabilityRepository{db: db, clock: clk}
+	var cipher *providers.InvitationDeliveryCipher
+	if len(deliveryCipher) > 0 {
+		cipher = deliveryCipher[0]
+	}
+	return &ReliabilityRepository{db: db, clock: clk, deliveryCipher: cipher}
 }
 
 func (r *ReliabilityRepository) CreateInvitation(ctx context.Context, params CreateInvitationParams) (*models.HouseInvitation, string, error) {
@@ -120,7 +127,18 @@ func (r *ReliabilityRepository) CreateInvitation(ctx context.Context, params Cre
 		Status:       invite.Status,
 		OccurredAt:   now,
 	}
-	if err := r.enqueueInvitationNotificationTx(ctx, tx, invite.ID, notification); err != nil {
+	messageID, jobID := models.NewID(), models.NewID()
+	if r.deliveryCipher != nil {
+		acceptanceURL, err := BuildInvitationAcceptanceURL(params.PublicBaseURL, token)
+		if err != nil {
+			return nil, "", err
+		}
+		notification.Delivery, err = r.deliveryCipher.Encrypt(invite.ID, invite.HouseID, jobID, acceptanceURL)
+		if err != nil {
+			return nil, "", fmt.Errorf("encrypt invitation delivery payload: %w", err)
+		}
+	}
+	if err := r.enqueueInvitationNotificationTx(ctx, tx, invite.ID, notification, messageID, jobID); err != nil {
 		return nil, "", err
 	}
 	if err := r.insertAuditEventTx(ctx, tx, now, auditEventParams{
@@ -206,6 +224,9 @@ func (r *ReliabilityRepository) RevokeInvitation(ctx context.Context, houseID, i
 		WHERE id = $3 AND house_id = $4 AND status = 'pending'`, actorID, now, invite.ID, houseID); err != nil {
 		return nil, err
 	}
+	if err := r.clearInvitationDeliveryPayloadTx(ctx, tx, invite.ID); err != nil {
+		return nil, err
+	}
 	invite.Status = "revoked"
 	invite.RevokedBy = &actorID
 	invite.RevokedAt = timePointer(now)
@@ -219,7 +240,7 @@ func (r *ReliabilityRepository) RevokeInvitation(ctx context.Context, houseID, i
 		Status:       invite.Status,
 		OccurredAt:   now,
 	}
-	if err := r.enqueueInvitationNotificationTx(ctx, tx, invite.ID+":revoke", notification); err != nil {
+	if err := r.enqueueInvitationNotificationTx(ctx, tx, invite.ID+":revoke", notification, "", ""); err != nil {
 		return nil, err
 	}
 	if err := r.insertAuditEventTx(ctx, tx, now, auditEventParams{
@@ -315,6 +336,9 @@ func (r *ReliabilityRepository) AcceptInvitation(ctx context.Context, token, act
 		WHERE id = $3 AND status = 'pending'`, actorID, now, invite.ID); err != nil {
 		return nil, err
 	}
+	if err := r.clearInvitationDeliveryPayloadTx(ctx, tx, invite.ID); err != nil {
+		return nil, err
+	}
 	invite.Status = "accepted"
 	invite.AcceptedBy = &actorID
 	invite.AcceptedAt = timePointer(now)
@@ -331,7 +355,7 @@ func (r *ReliabilityRepository) AcceptInvitation(ctx context.Context, token, act
 			"accepted_by": actorID,
 		},
 	}
-	if err := r.enqueueInvitationNotificationTx(ctx, tx, invite.ID+":accepted", notification); err != nil {
+	if err := r.enqueueInvitationNotificationTx(ctx, tx, invite.ID+":accepted", notification, "", ""); err != nil {
 		return nil, err
 	}
 	if err := r.insertAuditEventTx(ctx, tx, now, auditEventParams{
@@ -377,6 +401,45 @@ func (r *ReliabilityRepository) AcceptInvitation(ctx context.Context, token, act
 		return nil, err
 	}
 	return invite, nil
+}
+
+// InvitationDeliveryAvailable revalidates the invitation immediately before a
+// worker decrypts and sends its bearer URL. Revocation and expiry win over a
+// later worker attempt; a concurrent SMTP transaction can still have sent under
+// the documented at-least-once delivery model.
+func (r *ReliabilityRepository) InvitationDeliveryAvailable(ctx context.Context, invitationID string) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var houseID string
+	if err := tx.GetContext(ctx, &houseID, `SELECT house_id FROM house_invitations WHERE id = $1`, invitationID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrInvitationUnavailable
+		}
+		return err
+	}
+	if err := r.lockHouse(ctx, tx, houseID); err != nil {
+		return err
+	}
+	invite, err := r.getInvitationForUpdateTx(ctx, tx, "id = $1", invitationID)
+	if err != nil {
+		return err
+	}
+	if invite.Status != "pending" {
+		return ErrInvitationUnavailable
+	}
+	if invite.ExpiresAt.Before(r.clock.Now()) {
+		if err := r.markInvitationExpiredTx(ctx, tx, invitationID); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		return ErrInvitationUnavailable
+	}
+	return tx.Commit()
 }
 
 func (r *ReliabilityRepository) AppendHouseEvent(ctx context.Context, houseID, eventType string, actorID *string, resourceType, resourceID string, payload map[string]any) error {
@@ -502,21 +565,45 @@ func (r *ReliabilityRepository) ListAuditEvents(ctx context.Context, houseID str
 }
 
 func (r *ReliabilityRepository) expirePendingInvitations(ctx context.Context, houseID string) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE house_invitations SET status = 'expired'
-		WHERE house_id = $1 AND status = 'pending' AND expires_at < $2`, houseID, r.clock.Now())
-	return err
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := r.expirePendingInvitationsTx(ctx, tx, houseID, r.clock.Now()); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *ReliabilityRepository) expirePendingInvitationsTx(ctx context.Context, tx *sqlx.Tx, houseID string, now time.Time) error {
-	_, err := tx.ExecContext(ctx, `UPDATE house_invitations SET status = 'expired'
-		WHERE house_id = $1 AND status = 'pending' AND expires_at < $2`, houseID, now)
-	return err
+	var inviteIDs []string
+	if err := tx.SelectContext(ctx, &inviteIDs, `SELECT id FROM house_invitations
+		WHERE house_id = $1 AND status = 'pending' AND expires_at < $2`, houseID, now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE house_invitations SET status = 'expired'
+		WHERE house_id = $1 AND status = 'pending' AND expires_at < $2`, houseID, now); err != nil {
+		return err
+	}
+	for _, inviteID := range inviteIDs {
+		if err := r.clearInvitationDeliveryPayloadTx(ctx, tx, inviteID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *ReliabilityRepository) markInvitationExpiredTx(ctx context.Context, tx *sqlx.Tx, inviteID string) error {
-	_, err := tx.ExecContext(ctx, `UPDATE house_invitations SET status = 'expired'
+	result, err := tx.ExecContext(ctx, `UPDATE house_invitations SET status = 'expired'
 		WHERE id = $1 AND status = 'pending'`, inviteID)
-	return err
+	if err != nil {
+		return err
+	}
+	if rows, err := result.RowsAffected(); err != nil || rows == 0 {
+		return err
+	}
+	return r.clearInvitationDeliveryPayloadTx(ctx, tx, inviteID)
 }
 
 func (r *ReliabilityRepository) getInvitationHouseIDByTokenTx(ctx context.Context, tx *sqlx.Tx, tokenHash string) (string, error) {
@@ -601,12 +688,17 @@ func (r *ReliabilityRepository) insertHouseEventTx(ctx context.Context, tx *sqlx
 	return err
 }
 
-func (r *ReliabilityRepository) enqueueInvitationNotificationTx(ctx context.Context, tx *sqlx.Tx, dedupeSuffix string, notification providers.InvitationNotification) error {
+func (r *ReliabilityRepository) enqueueInvitationNotificationTx(ctx context.Context, tx *sqlx.Tx, dedupeSuffix string, notification providers.InvitationNotification, messageID, jobID string) error {
 	payload, err := json.Marshal(notification)
 	if err != nil {
 		return err
 	}
-	messageID := models.NewID()
+	if messageID == "" {
+		messageID = models.NewID()
+	}
+	if jobID == "" {
+		jobID = models.NewID()
+	}
 	now := r.clock.Now()
 	dedupeKey := "outbox:invitation:" + dedupeSuffix
 	if _, err := tx.ExecContext(ctx, `INSERT INTO outbox_messages
@@ -622,8 +714,47 @@ func (r *ReliabilityRepository) enqueueInvitationNotificationTx(ctx context.Cont
 	_, err = tx.ExecContext(ctx, `INSERT INTO durable_jobs
 		(id, kind, dedupe_key, payload, available_at, attempts, max_attempts, created_at, updated_at)
 		VALUES ($1, 'dispatch_outbox_message', $2, $3, $4, 0, 5, $5, $6)`,
-		models.NewID(), "job:"+dedupeKey, string(jobBody), now, now, now)
+		jobID, "job:"+dedupeKey, string(jobBody), now, now, now)
 	return err
+}
+
+// clearInvitationDeliveryPayloadTx removes AES-GCM material once an invitation
+// cannot be delivered, while preserving redacted operational notification fields.
+func (r *ReliabilityRepository) clearInvitationDeliveryPayloadTx(ctx context.Context, tx *sqlx.Tx, invitationID string) error {
+	return r.clearOutboxDeliveryPayloadTx(ctx, tx, "outbox:invitation:"+invitationID)
+}
+
+func (r *ReliabilityRepository) clearOutboxDeliveryPayloadTx(ctx context.Context, tx *sqlx.Tx, dedupeKey string) error {
+	var payload string
+	err := tx.GetContext(ctx, &payload, `SELECT payload FROM outbox_messages WHERE dedupe_key = $1`, dedupeKey)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var value map[string]any
+	if err := json.Unmarshal([]byte(payload), &value); err != nil {
+		return err
+	}
+	if _, ok := value["delivery"]; !ok {
+		return nil
+	}
+	delete(value, "delivery")
+	redacted, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE outbox_messages SET payload = $1, updated_at = $2 WHERE dedupe_key = $3`, string(redacted), r.clock.Now(), dedupeKey)
+	return err
+}
+
+func (r *ReliabilityRepository) clearOutboxDeliveryPayloadByIDTx(ctx context.Context, tx *sqlx.Tx, messageID string) error {
+	var dedupeKey string
+	if err := tx.GetContext(ctx, &dedupeKey, `SELECT dedupe_key FROM outbox_messages WHERE id = $1`, messageID); err != nil {
+		return err
+	}
+	return r.clearOutboxDeliveryPayloadTx(ctx, tx, dedupeKey)
 }
 
 func (r *ReliabilityRepository) lockHouse(ctx context.Context, tx *sqlx.Tx, houseID string) error {
@@ -633,6 +764,19 @@ func (r *ReliabilityRepository) lockHouse(ctx context.Context, tx *sqlx.Tx, hous
 	}
 	var id string
 	return tx.GetContext(ctx, &id, query, houseID)
+}
+
+func BuildInvitationAcceptanceURL(publicBaseURL, token string) (string, error) {
+	base, err := url.Parse(publicBaseURL)
+	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" || base.User != nil || (base.Path != "" && base.Path != "/") || base.RawQuery != "" || base.Fragment != "" {
+		return "", errors.New("invalid public application origin")
+	}
+	base.Path = "/accept-invitation"
+	base.RawPath = ""
+	query := url.Values{}
+	query.Set("token", token)
+	base.RawQuery = query.Encode()
+	return base.String(), nil
 }
 
 func hashToken(token string) string {

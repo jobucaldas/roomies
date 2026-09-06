@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/mail"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -72,11 +71,12 @@ func (h *InvitationHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	invite, token, err := h.reliabilityRepo.CreateInvitation(r.Context(), repository.CreateInvitationParams{
-		HouseID:   houseID,
-		ActorID:   userID,
-		Email:     req.Email,
-		Role:      req.Role,
-		ExpiresAt: h.clock.Now().Add(h.invitationTTL),
+		HouseID:       houseID,
+		ActorID:       userID,
+		Email:         req.Email,
+		Role:          req.Role,
+		ExpiresAt:     h.clock.Now().Add(h.invitationTTL),
+		PublicBaseURL: h.publicBaseURL,
 	})
 	if err == repository.ErrInvitationPendingExists {
 		writeJSON(w, http.StatusConflict, models.ErrorResponse{Error: err.Error()})
@@ -86,7 +86,11 @@ func (h *InvitationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to create invitation"})
 		return
 	}
-	invite.ManualAcceptanceURL = fmt.Sprintf("%s/accept-invitation?token=%s", h.publicBaseURL, url.QueryEscape(token))
+	invite.ManualAcceptanceURL, err = repository.BuildInvitationAcceptanceURL(h.publicBaseURL, token)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to construct invitation link"})
+		return
+	}
 	// The URL contains a bearer token. It is returned only in this initial response;
 	// idempotent replays retain the invitation result but deliberately omit the URL.
 	w.Header().Set("X-Invitation-Token-Response", "one-time")

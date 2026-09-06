@@ -13,16 +13,17 @@ import (
 )
 
 type Worker struct {
-	logger        *slog.Logger
-	repo          *repository.ReliabilityRepository
-	provider      providers.InvitationProvider
-	owner         string
-	pollInterval  time.Duration
-	leaseDuration time.Duration
-	ready         atomic.Bool
+	logger         *slog.Logger
+	repo           *repository.ReliabilityRepository
+	provider       providers.InvitationProvider
+	owner          string
+	pollInterval   time.Duration
+	leaseDuration  time.Duration
+	deliveryCipher *providers.InvitationDeliveryCipher
+	ready          atomic.Bool
 }
 
-func New(logger *slog.Logger, repo *repository.ReliabilityRepository, provider providers.InvitationProvider, owner string, pollInterval, leaseDuration time.Duration) *Worker {
+func New(logger *slog.Logger, repo *repository.ReliabilityRepository, provider providers.InvitationProvider, owner string, pollInterval, leaseDuration time.Duration, deliveryCipher ...*providers.InvitationDeliveryCipher) *Worker {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -32,13 +33,18 @@ func New(logger *slog.Logger, repo *repository.ReliabilityRepository, provider p
 	if leaseDuration <= 0 {
 		leaseDuration = 30 * time.Second
 	}
+	var cipher *providers.InvitationDeliveryCipher
+	if len(deliveryCipher) > 0 {
+		cipher = deliveryCipher[0]
+	}
 	return &Worker{
-		logger:        logger,
-		repo:          repo,
-		provider:      provider,
-		owner:         owner,
-		pollInterval:  pollInterval,
-		leaseDuration: leaseDuration,
+		logger:         logger,
+		repo:           repo,
+		provider:       provider,
+		owner:          owner,
+		pollInterval:   pollInterval,
+		leaseDuration:  leaseDuration,
+		deliveryCipher: cipher,
 	}
 }
 
@@ -85,6 +91,31 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	}
 	if w.provider == nil {
 		return w.repo.FailOutboxJob(ctx, job, message.ID, errors.New("invitation provider is not configured"))
+	}
+	if notification.Delivery != nil {
+		if err := w.repo.InvitationDeliveryAvailable(ctx, notification.InvitationID); err != nil {
+			if errors.Is(err, repository.ErrInvitationUnavailable) {
+				return w.repo.CompleteOutboxJob(ctx, job, message.ID)
+			}
+			return w.repo.FailOutboxJob(ctx, job, message.ID, err)
+		}
+		if w.deliveryCipher == nil {
+			return w.repo.FailOutboxJob(ctx, job, message.ID, errors.New("invitation delivery cipher is not configured"))
+		}
+		acceptanceURL, err := w.deliveryCipher.Decrypt(notification.Delivery, notification.InvitationID, notification.HouseID, job.ID)
+		if err != nil {
+			return w.repo.FailOutboxJob(ctx, job, message.ID, err)
+		}
+		notification.AcceptanceURL = acceptanceURL
+		defer func() { notification.AcceptanceURL = "" }()
+	} else if notification.Topic == "house.invitation.created" && w.deliveryCipher != nil {
+		if err := w.repo.InvitationDeliveryAvailable(ctx, notification.InvitationID); err != nil {
+			if errors.Is(err, repository.ErrInvitationUnavailable) {
+				return w.repo.CompleteOutboxJob(ctx, job, message.ID)
+			}
+			return w.repo.FailOutboxJob(ctx, job, message.ID, err)
+		}
+		return w.repo.FailOutboxJob(ctx, job, message.ID, errors.New("invitation delivery payload is unavailable"))
 	}
 	if err := w.provider.DispatchInvitation(ctx, notification); err != nil {
 		w.logger.Warn("worker_dispatch_failed",

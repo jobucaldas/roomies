@@ -66,14 +66,22 @@ func (p *SMTPInvitationProvider) DispatchInvitation(ctx context.Context, notific
 	if err != nil {
 		return fmt.Errorf("invalid SMTP sender: %w", err)
 	}
+	body := fmt.Sprintf("You have a Roomies invitation for house %s as %s. Invitation ID: %s.", notification.HouseID, notification.Role, notification.InvitationID)
+	if notification.Topic == "house.invitation.created" {
+		if notification.AcceptanceURL == "" {
+			return fmt.Errorf("invitation acceptance URL is unavailable")
+		}
+		body += "\r\n\r\nAccept this one-time invitation: " + notification.AcceptanceURL
+	}
 	message := strings.Join([]string{
 		"From: " + p.from,
 		"To: " + recipient.Address,
 		"Subject: Roomies invitation",
+		"Message-ID: <roomies-invitation-" + notification.InvitationID + "@roomies>",
 		"MIME-Version: 1.0",
 		"Content-Type: text/plain; charset=UTF-8",
 		"",
-		fmt.Sprintf("You have a Roomies invitation for house %s as %s. Invitation ID: %s.", notification.HouseID, notification.Role, notification.InvitationID),
+		body,
 		"",
 	}, "\r\n")
 	var auth smtp.Auth

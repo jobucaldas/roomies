@@ -48,18 +48,26 @@ func run(logger *slog.Logger, args []string) error {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
+	var deliveryCipher *providers.InvitationDeliveryCipher
+	if cfg.SMTPHost != "" {
+		deliveryCipher, err = providers.NewInvitationDeliveryCipher(cfg)
+		if err != nil {
+			return fmt.Errorf("configure invitation delivery encryption: %w", err)
+		}
+	}
+
 	clk := roomiesclock.RealClock{}
 	userRepo := repository.NewUserRepository(db)
 	houseRepo := repository.NewHouseRepository(db)
 	expenseRepo := repository.NewExpenseRepository(db)
 	noteRepo := repository.NewNoteRepository(db)
-	reliabilityRepo := repository.NewReliabilityRepository(db, clk)
+	reliabilityRepo := repository.NewReliabilityRepository(db, clk, deliveryCipher)
 
 	switch command {
 	case "serve":
 		return runServer(ctx, logger, cfg, clk, userRepo, houseRepo, expenseRepo, noteRepo, reliabilityRepo)
 	case "worker":
-		return runWorker(ctx, logger, cfg, reliabilityRepo)
+		return runWorker(ctx, logger, cfg, reliabilityRepo, deliveryCipher)
 	default:
 		return fmt.Errorf("unknown subcommand %q", command)
 	}
@@ -109,7 +117,7 @@ func runServer(ctx context.Context, logger *slog.Logger, cfg *config.Config, clk
 	return httpServer.Shutdown(shutdownCtx)
 }
 
-func runWorker(ctx context.Context, logger *slog.Logger, cfg *config.Config, reliabilityRepo *repository.ReliabilityRepository) error {
+func runWorker(ctx context.Context, logger *slog.Logger, cfg *config.Config, reliabilityRepo *repository.ReliabilityRepository, deliveryCipher *providers.InvitationDeliveryCipher) error {
 	provider, err := providers.NewInvitationProvider(cfg)
 	if err != nil {
 		return fmt.Errorf("configure invitation provider: %w", err)
@@ -131,6 +139,7 @@ func runWorker(ctx context.Context, logger *slog.Logger, cfg *config.Config, rel
 		owner,
 		time.Duration(cfg.JobPollInterval)*time.Second,
 		time.Duration(cfg.JobLeaseSeconds)*time.Second,
+		deliveryCipher,
 	)
 	healthServer := &http.Server{
 		Addr:              ":" + cfg.WorkerHealthPort,

@@ -1,8 +1,10 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"net/mail"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -11,40 +13,46 @@ import (
 const developmentJWTSecret = "dev-secret-change-in-production"
 
 type Config struct {
-	Port               string
-	WorkerHealthPort   string
-	DatabaseURL        string
-	JWTSecret          string
-	Environment        string
-	CORSAllowedOrigins []string
-	PublicBaseURL      string
-	InvitationTTL      int
-	JobPollInterval    int
-	JobLeaseSeconds    int
-	SMTPHost           string
-	SMTPPort           int
-	SMTPUsername       string
-	SMTPPassword       string
-	SMTPFrom           string
+	Port                      string
+	WorkerHealthPort          string
+	DatabaseURL               string
+	JWTSecret                 string
+	Environment               string
+	CORSAllowedOrigins        []string
+	PublicBaseURL             string
+	InvitationTTL             int
+	JobPollInterval           int
+	JobLeaseSeconds           int
+	SMTPHost                  string
+	SMTPPort                  int
+	SMTPUsername              string
+	SMTPPassword              string
+	SMTPFrom                  string
+	InvitationDeliveryKeyID   string
+	InvitationDeliveryKey     string
+	InvitationDeliveryOldKeys string
 }
 
 func Load() *Config {
 	return &Config{
-		Port:               getEnv("PORT", "8080"),
-		WorkerHealthPort:   getEnv("WORKER_HEALTH_PORT", "8081"),
-		DatabaseURL:        getEnv("DATABASE_URL", "sqlite://roomies.db"),
-		JWTSecret:          getEnv("JWT_SECRET", developmentJWTSecret),
-		Environment:        strings.ToLower(getEnv("APP_ENV", "development")),
-		CORSAllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:8081")),
-		PublicBaseURL:      strings.TrimRight(getEnv("ROOMIES_PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
-		InvitationTTL:      getEnvInt("INVITATION_TTL_HOURS", 168),
-		JobPollInterval:    getEnvInt("JOB_POLL_INTERVAL_SECONDS", 2),
-		JobLeaseSeconds:    getEnvInt("JOB_LEASE_SECONDS", 30),
-		SMTPHost:           strings.TrimSpace(os.Getenv("SMTP_HOST")),
-		SMTPPort:           getEnvInt("SMTP_PORT", 1025),
-		SMTPUsername:       os.Getenv("SMTP_USERNAME"),
-		SMTPPassword:       os.Getenv("SMTP_PASSWORD"),
-		SMTPFrom:           getEnv("SMTP_FROM", "Roomies <no-reply@roomies.local>"),
+		Port:                      getEnv("PORT", "8080"),
+		WorkerHealthPort:          getEnv("WORKER_HEALTH_PORT", "8081"),
+		DatabaseURL:               getEnv("DATABASE_URL", "sqlite://roomies.db"),
+		JWTSecret:                 getEnv("JWT_SECRET", developmentJWTSecret),
+		Environment:               strings.ToLower(getEnv("APP_ENV", "development")),
+		CORSAllowedOrigins:        splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:8081")),
+		PublicBaseURL:             strings.TrimRight(getEnv("ROOMIES_PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
+		InvitationTTL:             getEnvInt("INVITATION_TTL_HOURS", 168),
+		JobPollInterval:           getEnvInt("JOB_POLL_INTERVAL_SECONDS", 2),
+		JobLeaseSeconds:           getEnvInt("JOB_LEASE_SECONDS", 30),
+		SMTPHost:                  strings.TrimSpace(os.Getenv("SMTP_HOST")),
+		SMTPPort:                  getEnvInt("SMTP_PORT", 1025),
+		SMTPUsername:              os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:              os.Getenv("SMTP_PASSWORD"),
+		SMTPFrom:                  getEnv("SMTP_FROM", "Roomies <no-reply@roomies.local>"),
+		InvitationDeliveryKeyID:   strings.TrimSpace(os.Getenv("INVITATION_DELIVERY_KEY_ID")),
+		InvitationDeliveryKey:     strings.TrimSpace(os.Getenv("INVITATION_DELIVERY_KEY")),
+		InvitationDeliveryOldKeys: strings.TrimSpace(os.Getenv("INVITATION_DELIVERY_OLD_KEYS")),
 	}
 }
 
@@ -71,6 +79,10 @@ func (c *Config) Validate() error {
 	if c.PublicBaseURL == "" {
 		return errors.New("ROOMIES_PUBLIC_BASE_URL is required")
 	}
+	publicURL, err := url.Parse(c.PublicBaseURL)
+	if err != nil || (publicURL.Scheme != "http" && publicURL.Scheme != "https") || publicURL.Host == "" || publicURL.User != nil || publicURL.Path != "" && publicURL.Path != "/" || publicURL.RawQuery != "" || publicURL.Fragment != "" {
+		return errors.New("ROOMIES_PUBLIC_BASE_URL must be an absolute http(s) origin without path, credentials, query, or fragment")
+	}
 	if c.InvitationTTL <= 0 {
 		return errors.New("INVITATION_TTL_HOURS must be positive")
 	}
@@ -90,6 +102,13 @@ func (c *Config) Validate() error {
 		return errors.New("SMTP_HOST is required when SMTP credentials are configured")
 	}
 	if c.SMTPHost != "" {
+		if c.InvitationDeliveryKeyID == "" || c.InvitationDeliveryKey == "" {
+			return errors.New("INVITATION_DELIVERY_KEY_ID and INVITATION_DELIVERY_KEY are required when SMTP_HOST is configured")
+		}
+		key, err := base64.StdEncoding.DecodeString(c.InvitationDeliveryKey)
+		if err != nil || len(key) != 32 {
+			return errors.New("INVITATION_DELIVERY_KEY must be a base64-encoded 32-byte AES-256 key")
+		}
 		if c.SMTPFrom == "" {
 			return errors.New("SMTP_FROM is required when SMTP_HOST is configured")
 		}

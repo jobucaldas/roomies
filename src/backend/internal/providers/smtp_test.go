@@ -34,14 +34,14 @@ func TestSMTPInvitationProviderSendsToFakeServer(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected configured production SMTP provider, got %T", provider)
 	}
-	notification := InvitationNotification{InvitationID: "invite-123", HouseID: "house-456", Email: "recipient@example.test", Role: "member"}
+	notification := InvitationNotification{Topic: "house.invitation.created", InvitationID: "invite-123", HouseID: "house-456", Email: "recipient@example.test", Role: "member", AcceptanceURL: "https://roomies.example/accept-invitation?token=one-time-token"}
 	if err := smtpProvider.DispatchInvitation(context.Background(), notification); err != nil {
 		t.Fatal(err)
 	}
 
 	select {
 	case message := <-messageCh:
-		for _, expected := range []string{"To: recipient@example.test", "Subject: Roomies invitation", "house house-456", "invite-123"} {
+		for _, expected := range []string{"To: recipient@example.test", "Subject: Roomies invitation", "house house-456", "invite-123", "one-time-token", "Message-ID: <roomies-invitation-invite-123@roomies>"} {
 			if !strings.Contains(message, expected) {
 				t.Fatalf("SMTP message missing %q: %s", expected, message)
 			}

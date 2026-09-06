@@ -103,6 +103,9 @@ func (r *ReliabilityRepository) CompleteOutboxJob(ctx context.Context, job *Dura
 		if err := requireOneRow(result); err != nil {
 			return err
 		}
+		if err := r.clearOutboxDeliveryPayloadByIDTx(ctx, tx, outboxMessageID); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
@@ -154,6 +157,9 @@ func (r *ReliabilityRepository) FailOutboxJob(ctx context.Context, job *DurableJ
 				return err
 			}
 			if err := requireOneRow(result); err != nil {
+				return err
+			}
+			if err := r.clearOutboxDeliveryPayloadByIDTx(ctx, tx, outboxMessageID); err != nil {
 				return err
 			}
 		} else {

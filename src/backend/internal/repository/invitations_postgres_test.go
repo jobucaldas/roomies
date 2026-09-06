@@ -2,15 +2,19 @@ package repository
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	roomiesclock "github.com/roomies/backend/internal/clock"
+	"github.com/roomies/backend/internal/config"
 	"github.com/roomies/backend/internal/database"
 	"github.com/roomies/backend/internal/models"
+	"github.com/roomies/backend/internal/providers"
 )
 
 func TestPostgresConcurrentInvitationAcceptAndRevoke(t *testing.T) {
@@ -77,6 +81,50 @@ func TestPostgresConcurrentInvitationAcceptAndRevoke(t *testing.T) {
 		default:
 			t.Fatalf("unexpected status %q (accept=%v revoke=%v)", status, acceptErr, revokeErr)
 		}
+	}
+}
+
+func TestPostgresEncryptedInvitationPayloadIsRedactedOnRevoke(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is required for PostgreSQL invitation delivery regression test")
+	}
+	db, err := database.Connect(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if db.DriverName() != "postgres" {
+		t.Skip("DATABASE_URL is not PostgreSQL")
+	}
+	if err := database.RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := providers.NewInvitationDeliveryCipher(&config.Config{InvitationDeliveryKeyID: "test-key", InvitationDeliveryKey: base64.StdEncoding.EncodeToString(make([]byte, 32))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewReliabilityRepository(db, roomiesclock.RealClock{}, cipher)
+	houseID, adminID, inviteeID := seedPostgresInvitationFixture(t, repo)
+	invite, token, err := repo.CreateInvitation(context.Background(), CreateInvitationParams{HouseID: houseID, ActorID: adminID, Email: inviteeID + "@example.test", Role: "member", ExpiresAt: time.Now().Add(time.Hour), PublicBaseURL: "https://roomies.example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload string
+	if err := db.Get(&payload, `SELECT payload FROM outbox_messages WHERE dedupe_key = $1`, "outbox:invitation:"+invite.ID); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(payload, token) || !strings.Contains(payload, "ciphertext") {
+		t.Fatalf("PostgreSQL outbox leaked token or lacked ciphertext: %s", payload)
+	}
+	if _, err := repo.RevokeInvitation(context.Background(), houseID, invite.ID, adminID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Get(&payload, `SELECT payload FROM outbox_messages WHERE dedupe_key = $1`, "outbox:invitation:"+invite.ID); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(payload, "ciphertext") || strings.Contains(payload, token) {
+		t.Fatalf("PostgreSQL revoked payload retained delivery material: %s", payload)
 	}
 }
 
