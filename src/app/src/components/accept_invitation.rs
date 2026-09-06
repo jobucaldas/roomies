@@ -1,4 +1,4 @@
-use crate::api::ApiClient;
+use crate::api::{ApiClient, ApiError};
 use crate::models::User;
 use crate::router::Route;
 use crate::storage;
@@ -42,9 +42,9 @@ pub fn AcceptInvitation() -> Element {
     let mut status = use_signal(String::new);
     let mut success = use_signal(|| false);
     let mut destination = use_signal(String::new);
+    let mut retryable = use_signal(|| false);
 
     {
-        let navigator = navigator.clone();
         use_effect(move || {
             let house_id = destination.read().clone();
             if *success.read() && !house_id.is_empty() {
@@ -70,6 +70,7 @@ pub fn AcceptInvitation() -> Element {
         };
         loading.set(true);
         let api = api.read().clone();
+        let navigator = navigator;
         spawn(async move {
             match api.accept_invitation(&token).await {
                 Ok(response) => {
@@ -79,10 +80,21 @@ pub fn AcceptInvitation() -> Element {
                     status.set("You joined the house. Refreshing your membership…".into());
                 }
                 Err(error) => {
-                    // A rejected, expired, or revoked bearer token must not remain
-                    // available to an unrelated later session in this browser.
-                    storage::clear_pending_invitation();
-                    status.set(format!("Unable to accept this invitation: {error}"));
+                    if invitation_failure_is_retryable(&error) {
+                        // Keep a still-valid bearer token across transient failures so
+                        // the recipient can retry without reopening the email.
+                        retryable.set(true);
+                        status.set(format!("Unable to accept this invitation: {error}"));
+                        if matches!(error, ApiError::Http { status: 401, .. }) {
+                            navigator.replace(Route::Login {});
+                        }
+                    } else {
+                        // A rejected, expired, or revoked bearer token must not remain
+                        // available to an unrelated later session in this browser.
+                        retryable.set(false);
+                        storage::clear_pending_invitation();
+                        status.set(format!("Unable to accept this invitation: {error}"));
+                    }
                 }
             }
             loading.set(false);
@@ -101,9 +113,58 @@ pub fn AcceptInvitation() -> Element {
                 p { role: "status", "{status}" }
             } else if !status.read().is_empty() {
                 p { class: "error", role: "alert", "{status}" }
+                if *retryable.read() {
+                    button {
+                        r#type: "button",
+                        onclick: move |_| {
+                            retryable.set(false);
+                            status.set("Retrying invitation acceptance…".into());
+                            attempted.set(false);
+                        },
+                        "Retry acceptance"
+                    }
+                }
             } else {
                 p { "Checking invitation…" }
             }
+        }
+    }
+}
+
+fn invitation_failure_is_retryable(error: &ApiError) -> bool {
+    match error {
+        ApiError::Transport(_) | ApiError::Decode(_) => true,
+        ApiError::Http { status, .. } => matches!(*status, 401 | 408 | 429) || *status >= 500,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transient_invitation_failures_are_retryable() {
+        assert!(invitation_failure_is_retryable(&ApiError::Transport(
+            "offline".into()
+        )));
+        assert!(invitation_failure_is_retryable(&ApiError::Decode(
+            "bad json".into()
+        )));
+        for status in [401, 408, 429, 500, 503] {
+            assert!(invitation_failure_is_retryable(&ApiError::Http {
+                status,
+                message: "temporary".into(),
+            }));
+        }
+    }
+
+    #[test]
+    fn definitive_invitation_failures_are_cleared() {
+        for status in [400, 403, 404, 409] {
+            assert!(!invitation_failure_is_retryable(&ApiError::Http {
+                status,
+                message: "definitive".into(),
+            }));
         }
     }
 }

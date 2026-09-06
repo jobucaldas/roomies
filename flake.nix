@@ -24,6 +24,7 @@
       ];
       webPackages = with pkgs; [
         dioxus-cli
+        llvmPackages.lld
         go
         nodejs
         pkg-config
@@ -125,7 +126,9 @@
         '';
 
         e2e = mkShell (commonPackages ++ e2ePackages) ''
-          echo "Roomies e2e shell: browser automation tooling"
+          export CHROMIUM_PATH=${pkgs.chromium}/bin/chromium
+          export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+          echo "Roomies e2e shell: browser automation tooling (system Chromium)"
         '';
 
         ocr = mkShell (commonPackages ++ ocrPackages) ''

@@ -7,6 +7,7 @@ export default defineConfig({
   outputDir: 'artifacts/test-results',
   use: {
     baseURL: process.env.ROOMIES_WEB_URL ?? 'http://localhost',
+    executablePath: process.env.CHROMIUM_PATH,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },

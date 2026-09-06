@@ -18,7 +18,7 @@ build:
 	$(COMPOSE) build
 
 build-frontend:
-	cd src/app && dx build --release --web
+	cd src/app && dx build --release
 
 build-backend:
 	cd src/backend && go build -o bin/roomies-backend ./main.go

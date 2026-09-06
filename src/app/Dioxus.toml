@@ -4,6 +4,11 @@ name = "roomies"
 [web.app]
 title = "Roomies"
 
+# wasm-opt cannot process the DWARF emitted by current Rust toolchains; omit
+# debug sections in production artifacts before running the optimizer.
+[web.wasm_opt]
+debug = false
+
 [bundle]
 identifier = "app.roomies"
 publisher = "Roomies"
