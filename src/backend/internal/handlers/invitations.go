@@ -191,7 +191,7 @@ func (h *HouseEventsHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if acceptsEventStream(r) {
-		h.stream(w, r, houseID, cursor)
+		h.stream(w, r, houseID, userID, cursor)
 		return
 	}
 	events, nextCursor, err := h.reliabilityRepo.ListHouseEvents(r.Context(), houseID, cursor, h.maxEventsPerPage)
@@ -202,7 +202,7 @@ func (h *HouseEventsHandler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, models.HouseEventsResponse{Events: events, NextCursor: nextCursor})
 }
 
-func (h *HouseEventsHandler) stream(w http.ResponseWriter, r *http.Request, houseID string, cursor int64) {
+func (h *HouseEventsHandler) stream(w http.ResponseWriter, r *http.Request, houseID, userID string, cursor int64) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "streaming unsupported"})
@@ -228,6 +228,9 @@ func (h *HouseEventsHandler) stream(w http.ResponseWriter, r *http.Request, hous
 		flusher.Flush()
 		return true
 	}
+	if _, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID); err != nil {
+		return
+	}
 	events, _, err := h.reliabilityRepo.ListHouseEvents(r.Context(), houseID, currentCursor, h.maxEventsPerPage)
 	if err != nil || !send(events) {
 		return
@@ -239,6 +242,9 @@ func (h *HouseEventsHandler) stream(w http.ResponseWriter, r *http.Request, hous
 		case <-r.Context().Done():
 			return
 		case <-ticker.C:
+			if _, err := loadHouseMember(r.Context(), h.houseRepo, houseID, userID); err != nil {
+				return
+			}
 			events, _, err := h.reliabilityRepo.ListHouseEvents(r.Context(), houseID, currentCursor, h.maxEventsPerPage)
 			if err != nil {
 				return

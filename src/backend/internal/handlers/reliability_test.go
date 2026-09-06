@@ -181,6 +181,60 @@ func TestHouseEventsSSEReconnectUsesCursorAndPollingFallback(t *testing.T) {
 	}
 }
 
+func TestHouseEventsSSEClosesAfterMemberRemoval(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.Cleanup()
+	adminToken := registerUser(t, env.Router, "Admin", "admin-events-removal@example.com", "password123")
+	memberToken := registerUser(t, env.Router, "Member", "member-events-removal@example.com", "password123")
+	memberID := getUserID(t, env.Router, memberToken)
+	houseID := createHouse(t, env.Router, adminToken, "Events Removal House")
+	addBody, _ := json.Marshal(map[string]string{"user_id": memberID, "role": "member"})
+	addReq := httptest.NewRequest(http.MethodPost, "/api/houses/"+houseID+"/members", bytes.NewReader(addBody))
+	addReq.Header.Set("Authorization", "Bearer "+adminToken)
+	addReq.Header.Set("Content-Type", "application/json")
+	addRes := httptest.NewRecorder()
+	env.Router.ServeHTTP(addRes, addReq)
+	if addRes.Code != http.StatusCreated {
+		t.Fatalf("add member failed: %d %s", addRes.Code, addRes.Body.String())
+	}
+
+	ts := httptest.NewServer(env.Router)
+	defer ts.Close()
+	streamReq, err := http.NewRequest(http.MethodGet, ts.URL+"/api/houses/"+houseID+"/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	streamReq.Header.Set("Authorization", "Bearer "+memberToken)
+	streamReq.Header.Set("Accept", "text/event-stream")
+	streamRes, err := http.DefaultClient.Do(streamReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer streamRes.Body.Close()
+	if streamRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected stream 200, got %d", streamRes.StatusCode)
+	}
+
+	removeReq := httptest.NewRequest(http.MethodDelete, "/api/houses/"+houseID+"/members/"+memberID, nil)
+	removeReq.Header.Set("Authorization", "Bearer "+adminToken)
+	removeRes := httptest.NewRecorder()
+	env.Router.ServeHTTP(removeRes, removeReq)
+	if removeRes.Code != http.StatusOK {
+		t.Fatalf("remove member failed: %d %s", removeRes.Code, removeRes.Body.String())
+	}
+
+	streamDone := make(chan error, 1)
+	go func() {
+		_, readErr := io.Copy(io.Discard, streamRes.Body)
+		streamDone <- readErr
+	}()
+	select {
+	case <-streamDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SSE stream remained open after member removal")
+	}
+}
+
 func createInvitation(t *testing.T, router http.Handler, token, houseID string, body models.CreateInvitationRequest, idempotencyKey string) models.HouseInvitation {
 	t.Helper()
 	res := httptest.NewRecorder()

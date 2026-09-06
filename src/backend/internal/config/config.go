@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"net/mail"
 	"os"
 	"strconv"
 	"strings"
@@ -20,6 +21,11 @@ type Config struct {
 	InvitationTTL      int
 	JobPollInterval    int
 	JobLeaseSeconds    int
+	SMTPHost           string
+	SMTPPort           int
+	SMTPUsername       string
+	SMTPPassword       string
+	SMTPFrom           string
 }
 
 func Load() *Config {
@@ -34,6 +40,11 @@ func Load() *Config {
 		InvitationTTL:      getEnvInt("INVITATION_TTL_HOURS", 168),
 		JobPollInterval:    getEnvInt("JOB_POLL_INTERVAL_SECONDS", 2),
 		JobLeaseSeconds:    getEnvInt("JOB_LEASE_SECONDS", 30),
+		SMTPHost:           strings.TrimSpace(os.Getenv("SMTP_HOST")),
+		SMTPPort:           getEnvInt("SMTP_PORT", 1025),
+		SMTPUsername:       os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:       os.Getenv("SMTP_PASSWORD"),
+		SMTPFrom:           getEnv("SMTP_FROM", "Roomies <no-reply@roomies.local>"),
 	}
 }
 
@@ -68,6 +79,24 @@ func (c *Config) Validate() error {
 	}
 	if c.JobLeaseSeconds <= 0 {
 		return errors.New("JOB_LEASE_SECONDS must be positive")
+	}
+	if c.SMTPHost != "" && (c.SMTPPort <= 0 || c.SMTPPort > 65535) {
+		return errors.New("SMTP_PORT must be between 1 and 65535")
+	}
+	if (c.SMTPUsername == "") != (c.SMTPPassword == "") {
+		return errors.New("SMTP_USERNAME and SMTP_PASSWORD must be provided together")
+	}
+	if c.SMTPHost == "" && c.SMTPUsername != "" {
+		return errors.New("SMTP_HOST is required when SMTP credentials are configured")
+	}
+	if c.SMTPHost != "" {
+		if c.SMTPFrom == "" {
+			return errors.New("SMTP_FROM is required when SMTP_HOST is configured")
+		}
+		address, err := mail.ParseAddress(c.SMTPFrom)
+		if err != nil || address.Address == "" {
+			return errors.New("SMTP_FROM must be a valid email address")
+		}
 	}
 	return nil
 }

@@ -1,13 +1,13 @@
 FROM docker.io/golang:1.23-alpine AS builder
 
-RUN apk add --no-cache git ca-certificates
+RUN apk add --no-cache git ca-certificates gcc musl-dev
 
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 go build -o /roomies-backend ./main.go
+RUN CGO_ENABLED=1 go build -o /roomies-backend ./main.go
 
 FROM docker.io/alpine:3.20
 

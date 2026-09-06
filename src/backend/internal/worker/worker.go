@@ -95,10 +95,18 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		)
 		return w.repo.FailOutboxJob(ctx, job, message.ID, err)
 	}
-	w.logger.Info("worker_dispatch_succeeded",
-		slog.String("job_id", job.ID),
-		slog.String("outbox_message_id", message.ID),
-		slog.String("topic", message.Topic),
-	)
+	if _, fake := w.provider.(*providers.FakeInvitationProvider); fake {
+		w.logger.Info("worker_dispatch_recorded_fake_only",
+			slog.String("job_id", job.ID),
+			slog.String("outbox_message_id", message.ID),
+			slog.String("topic", message.Topic),
+		)
+	} else {
+		w.logger.Info("worker_dispatch_succeeded",
+			slog.String("job_id", job.ID),
+			slog.String("outbox_message_id", message.ID),
+			slog.String("topic", message.Topic),
+		)
+	}
 	return w.repo.CompleteOutboxJob(ctx, job, message.ID)
 }

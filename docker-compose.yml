@@ -31,6 +31,11 @@ services:
       INVITATION_TTL_HOURS: ${INVITATION_TTL_HOURS:-168}
       JOB_POLL_INTERVAL_SECONDS: ${JOB_POLL_INTERVAL_SECONDS:-2}
       JOB_LEASE_SECONDS: ${JOB_LEASE_SECONDS:-30}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-Roomies <no-reply@roomies.local>}
     ports:
       - "${ROOMIES_BACKEND_PORT:-8080}:8080"
     depends_on:
@@ -58,6 +63,11 @@ services:
       INVITATION_TTL_HOURS: ${INVITATION_TTL_HOURS:-168}
       JOB_POLL_INTERVAL_SECONDS: ${JOB_POLL_INTERVAL_SECONDS:-2}
       JOB_LEASE_SECONDS: ${JOB_LEASE_SECONDS:-30}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-Roomies <no-reply@roomies.local>}
     depends_on:
       db:
         condition: service_healthy

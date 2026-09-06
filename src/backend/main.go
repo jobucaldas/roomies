@@ -110,7 +110,15 @@ func runServer(ctx context.Context, logger *slog.Logger, cfg *config.Config, clk
 }
 
 func runWorker(ctx context.Context, logger *slog.Logger, cfg *config.Config, reliabilityRepo *repository.ReliabilityRepository) error {
-	provider := &providers.FakeInvitationProvider{}
+	provider, err := providers.NewInvitationProvider(cfg)
+	if err != nil {
+		return fmt.Errorf("configure invitation provider: %w", err)
+	}
+	if _, fake := provider.(*providers.FakeInvitationProvider); fake {
+		logger.Warn("invitation_provider_fake_only", slog.String("reason", "development/test environment or SMTP credentials absent"))
+	} else {
+		logger.Info("invitation_provider_smtp")
+	}
 	owner, err := os.Hostname()
 	if err != nil {
 		owner = "roomies-worker"
