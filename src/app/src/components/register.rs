@@ -16,7 +16,8 @@ pub fn Register() -> Element {
     let mut api = use_context::<Signal<ApiClient>>();
     let mut current_user = use_context::<Signal<Option<User>>>();
 
-    let on_submit = move |_| {
+    let on_submit = move |event: Event<FormData>| {
+        event.prevent_default();
         loading.set(true);
         error.set(String::new());
         let name = name.read().clone();
@@ -29,7 +30,7 @@ pub fn Register() -> Element {
                     current_user.set(Some(response.user));
                     api.set(client);
                     if crate::storage::pending_invitation().is_some() {
-                        router.replace(Route::AcceptInvitation {});
+                        router.replace(Route::AcceptInvitation { token: None });
                     } else {
                         router.push("/dashboard");
                     }

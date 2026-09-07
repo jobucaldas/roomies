@@ -7,12 +7,12 @@ export default defineConfig({
   outputDir: 'artifacts/test-results',
   use: {
     baseURL: process.env.ROOMIES_WEB_URL ?? 'http://localhost',
-    executablePath: process.env.CHROMIUM_PATH,
+    launchOptions: { executablePath: process.env.CHROMIUM_PATH },
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 900 } } },
-    { name: 'narrow', use: { ...devices['iPhone 13'] } },
+    { name: 'narrow', use: { ...devices['iPhone 13'], browserName: 'chromium' } },
   ],
 });

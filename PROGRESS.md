@@ -22,3 +22,4 @@
 - Added an `/accept-invitation` route that captures the one-time URL into browser session storage, scrubs the address bar, survives login/register, clears it after acceptance/rejection, and refreshes by navigating to the returned house.
 - Added API/model contract tests and a synthetic Playwright/Mailpit harness under `e2e/` for desktop and narrow layouts.
 - Direct web test execution is currently blocked by the pinned Nix Rust 1.86 toolchain versus cached ICU packages requiring Rust 1.88; browser flow was not substituted with a fake pass.
+- Verified the invitation route against a cached Dioxus 0.7.10 builder: current dirty route/form source hashes matched the builder inputs, and served index/JavaScript hashes matched the exported assets. Playwright passed all invitation scenarios on desktop and narrow Chromium (intended auth redirect, wrong/revoked denial, idempotent duplicate acceptance, and monitor authorization).

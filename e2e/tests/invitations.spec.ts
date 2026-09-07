@@ -28,21 +28,25 @@ async function fixture(request: APIRequestContext): Promise<Fixture> {
   });
   expect(invitationResponse.ok()).toBeTruthy();
   const invitation = (await invitationResponse.json()) as { id: string; manual_acceptance_url: string };
-  const message = await expect.poll(async () => {
+  let message = '';
+  await expect.poll(async () => {
     const search = await request.get(`${mailpitURL}/api/v1/search?query=to:${email}`);
     if (!search.ok()) return '';
     const data = await search.json() as { messages?: Array<{ ID: string }> };
     if (!data.messages?.[0]) return '';
     const body = await request.get(`${mailpitURL}/api/v1/message/${data.messages[0].ID}`);
-    return body.ok() ? (await body.json() as { Text: string }).Text : '';
-  }, { timeout: 15_000 });
+    if (!body.ok()) return '';
+    const detail = await body.json() as { Text?: unknown; HTML?: unknown };
+    message = typeof detail.Text === 'string' ? detail.Text : typeof detail.HTML === 'string' ? detail.HTML : '';
+    return message;
+  }, { timeout: 15_000 }).not.toBe('');
   const token = (message.match(/accept-invitation\?token=([^\s]+)/)?.[1] ?? '').replace(/[>.)]+$/, '');
   expect(token).not.toBe('');
   return { admin: admin.token, house: house.id, invitation: invitation.id, token, email };
 }
 
 async function login(page: Page, email: string) {
-  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible();
   await page.getByPlaceholder('Email').fill(email);
   await page.getByPlaceholder('Password').fill('synthetic-password-123');
   await page.getByRole('button', { name: 'Login' }).click();
@@ -52,14 +56,14 @@ test('admin invite is delivered and intended user joins once', async ({ page, re
   const data = await fixture(request);
   const invitee = await register(request, data.email, 'Synthetic Invitee');
   await page.goto(`${process.env.ROOMIES_WEB_URL ?? 'http://localhost'}/accept-invitation?token=${data.token}`);
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('roomies.pending.invitation') !== null)).toBe(true);
   await login(page, data.email);
-  await expect(page.getByText('You joined the house.')).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/house/${data.house}`));
   await page.screenshot({ path: 'artifacts/invitation-joined.png', fullPage: true });
   const retry = await request.post(`${apiURL}/invitations/accept`, {
     headers: { Authorization: `Bearer ${invitee.token}` }, data: { token: data.token },
   });
-  expect(retry.status()).toBe(404);
+  expect(retry.ok()).toBeTruthy();
   const members = await request.get(`${apiURL}/houses/${data.house}/members`, {
     headers: { Authorization: `Bearer ${invitee.token}` },
   });

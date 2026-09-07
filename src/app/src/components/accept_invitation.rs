@@ -4,36 +4,27 @@ use crate::router::Route;
 use crate::storage;
 use dioxus::prelude::*;
 
-/// Captures the one-time URL token into session storage and removes it from the
-/// address bar before any auth redirect. The token is never rendered.
-fn capture_invitation_token() {
+/// Captures the router-decoded one-time token into session storage and removes
+/// it from the address bar before any auth redirect. The token is never rendered.
+fn capture_invitation_token(token: Option<&str>) {
+    let Some(token) = token.filter(|token| !token.is_empty()) else {
+        return;
+    };
+    storage::save_pending_invitation(token);
     #[cfg(target_arch = "wasm32")]
-    {
-        let Some(window) = web_sys::window() else {
-            return;
-        };
-        let Ok(search) = window.location().search() else {
-            return;
-        };
-        if let Ok(params) = web_sys::UrlSearchParams::new_with_str(&search) {
-            if let Some(token) = params.get("token") {
-                if !token.is_empty() {
-                    storage::save_pending_invitation(&token);
-                    if let Ok(history) = window.history() {
-                        let _ = history.replace_state_with_url(
-                            &wasm_bindgen::JsValue::NULL,
-                            "",
-                            Some("/accept-invitation"),
-                        );
-                    }
-                }
-            }
+    if let Some(window) = web_sys::window() {
+        if let Ok(history) = window.history() {
+            let _ = history.replace_state_with_url(
+                &wasm_bindgen::JsValue::NULL,
+                "",
+                Some("/accept-invitation"),
+            );
         }
     }
 }
 
 #[component]
-pub fn AcceptInvitation() -> Element {
+pub fn AcceptInvitation(token: Option<String>) -> Element {
     let navigator = use_navigator();
     let api = use_context::<Signal<ApiClient>>();
     let current_user = use_context::<Signal<Option<User>>>();
@@ -54,7 +45,7 @@ pub fn AcceptInvitation() -> Element {
     }
 
     use_effect(move || {
-        capture_invitation_token();
+        capture_invitation_token(token.as_deref());
         let authenticated = api.read().is_authenticated();
         if !authenticated {
             navigator.replace(Route::Login {});

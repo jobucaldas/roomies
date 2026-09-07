@@ -21,7 +21,7 @@ podman compose -f docker-compose.yml down -v
 podman compose -f e2e/docker-compose.mailpit.yml down -v
 ```
 
-Screenshots and Playwright reports are written under `e2e/artifacts/` (ignored). The suite covers admin email invite/list/revoke, intended-user acceptance after auth redirect, wrong-account/revoked denial, monitor authorization, and desktop/narrow screenshots. Expiry and concurrent retry invariants remain covered by the backend invitation contract tests.
+Screenshots and Playwright reports are written under `e2e/artifacts/` (ignored). The suite covers intended-user acceptance after auth redirect, wrong-account/revoked denial, idempotent duplicate acceptance, monitor authorization, and desktop/narrow layouts. Expiry and retryable-transient-failure invariants remain covered by the backend invitation contract tests.
 
 ## Compose / release smoke
 - `make check-compose`

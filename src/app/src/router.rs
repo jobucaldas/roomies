@@ -7,8 +7,8 @@ pub enum Route {
     Login {},
     #[route("/register")]
     Register {},
-    #[route("/accept-invitation")]
-    AcceptInvitation {},
+    #[route("/accept-invitation?:token")]
+    AcceptInvitation { token: Option<String> },
     #[route("/dashboard")]
     Dashboard {},
     #[route("/house/:id")]
