@@ -11,6 +11,7 @@ type BrowserEvidence = {
   failedRequests: string[];
   assetHashes: Record<string, string>;
   assetBodies: Promise<void>[];
+  expectedInvitationNotFound: boolean;
 };
 const evidenceByPage = new WeakMap<Page, BrowserEvidence>();
 const slug = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -27,6 +28,9 @@ async function writeBrowserEvidence(page: Page, testInfo: TestInfo) {
   const directory = 'artifacts/evidence';
   await mkdir(directory, { recursive: true });
   await page.screenshot({ path: `${directory}/${output}.png`, fullPage: true });
+  const horizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth,
+  );
   const summary = {
     head: process.env.GIT_COMMIT ?? execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
     command: process.env.ROOMIES_E2E_COMMAND ?? 'npx playwright test',
@@ -36,19 +40,42 @@ async function writeBrowserEvidence(page: Page, testInfo: TestInfo) {
     consoleErrorCount: evidence.consoleErrors.length,
     pageErrorCount: evidence.pageErrors.length,
     failedRequestCount: evidence.failedRequests.length,
+    horizontalOverflow,
     assetHashes: evidence.assetHashes,
   };
-  await writeFile(`${directory}/${output}.json`, JSON.stringify(summary, null, 2) + '\\n');
-  if (evidence.consoleErrors.length || evidence.pageErrors.length || evidence.failedRequests.length) {
-    throw new Error(`browser evidence failures: console=${evidence.consoleErrors.length}, page=${evidence.pageErrors.length}, network=${evidence.failedRequests.length}`);
+  await writeFile(`${directory}/${output}.json`, JSON.stringify(summary, null, 2) + '\n');
+  if (
+    evidence.consoleErrors.length
+    || evidence.pageErrors.length
+    || evidence.failedRequests.length
+    || horizontalOverflow
+  ) {
+    throw new Error(`browser evidence failures: console=${evidence.consoleErrors.length}, page=${evidence.pageErrors.length}, network=${evidence.failedRequests.length}, overflow=${horizontalOverflow}`);
   }
 }
 
 test.beforeEach(async ({ page }) => {
-  const evidence: BrowserEvidence = { consoleErrors: [], pageErrors: [], failedRequests: [], assetHashes: {}, assetBodies: [] };
+  const evidence: BrowserEvidence = {
+    consoleErrors: [],
+    pageErrors: [],
+    failedRequests: [],
+    assetHashes: {},
+    assetBodies: [],
+    expectedInvitationNotFound: false,
+  };
   evidenceByPage.set(page, evidence);
   page.on('console', (message) => {
-    if (message.type() === 'error') evidence.consoleErrors.push('console error');
+    if (message.type() !== 'error') return;
+    // The enumeration-safe wrong-account response is intentionally 404. Chromium
+    // mirrors that expected API denial to the console even though the app handles it.
+    if (
+      evidence.expectedInvitationNotFound
+      && message.text().includes('Failed to load resource: the server responded with a status of 404')
+    ) {
+      evidence.expectedInvitationNotFound = false;
+      return;
+    }
+    evidence.consoleErrors.push('console error');
   });
   page.on('pageerror', () => evidence.pageErrors.push('page error'));
   page.on('requestfailed', (request) => {
@@ -144,6 +171,7 @@ test('wrong account, revoked link, and monitor invite are denied', async ({ page
   const wrongEmail = `wrong-${Date.now()}@example.test`;
   const wrong = await register(request, wrongEmail, 'Wrong Account');
   await page.goto(`${process.env.ROOMIES_WEB_URL ?? 'http://localhost'}/accept-invitation?token=${data.token}`);
+  evidenceByPage.get(page)!.expectedInvitationNotFound = true;
   await login(page, wrongEmail);
   await expect(page.getByRole('alert')).toContainText('Unable to accept');
   const wrongDenied = await request.post(`${apiURL}/invitations/accept`, {

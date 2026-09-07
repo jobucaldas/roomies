@@ -165,6 +165,15 @@ th {
     background: #1a73e8;
     color: white;
 }
+@media (max-width: 600px) {
+    .tabs {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .tabs button {
+        min-width: 0;
+    }
+}
 .section {
     margin: 16px 0;
 }
