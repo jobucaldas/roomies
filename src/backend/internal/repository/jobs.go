@@ -111,8 +111,19 @@ func (r *ReliabilityRepository) CompleteOutboxJob(ctx context.Context, job *Dura
 }
 
 func (r *ReliabilityRepository) FailOutboxJob(ctx context.Context, job *DurableJob, outboxMessageID string, cause error) error {
+	return r.failOutboxJob(ctx, job, outboxMessageID, cause, time.Time{})
+}
+
+func (r *ReliabilityRepository) FailOutboxJobAt(ctx context.Context, job *DurableJob, outboxMessageID string, cause error, retryAt time.Time) error {
+	return r.failOutboxJob(ctx, job, outboxMessageID, cause, retryAt)
+}
+
+func (r *ReliabilityRepository) failOutboxJob(ctx context.Context, job *DurableJob, outboxMessageID string, cause error, retryAt time.Time) error {
 	now := r.clock.Now()
-	backoff := jobBackoff(job.Attempts)
+	availableAt := now.Add(jobBackoff(job.Attempts))
+	if retryAt.After(availableAt) {
+		availableAt = retryAt
+	}
 	deadLetter := job.Attempts >= job.MaxAttempts
 	message := cause.Error()
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -140,7 +151,7 @@ func (r *ReliabilityRepository) FailOutboxJob(ctx context.Context, job *DurableJ
 			WHERE id = $4 AND lease_owner = $5 AND lease_generation = $6
 				AND completed_at IS NULL AND dead_lettered_at IS NULL
 				AND lease_expires_at IS NOT NULL AND lease_expires_at > $7`,
-			now.Add(backoff), message, now, job.ID, jobLeaseOwner(job), jobLeaseGeneration(job), now)
+			availableAt, message, now, job.ID, jobLeaseOwner(job), jobLeaseGeneration(job), now)
 		if err != nil {
 			return err
 		}

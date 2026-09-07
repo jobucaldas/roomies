@@ -33,6 +33,18 @@ func TestConfigValidatesSMTPSettings(t *testing.T) {
 	}
 }
 
+func TestConfigRequiresDedicatedNotificationKeyForPush(t *testing.T) {
+	config := &Config{Environment: "test", JWTSecret: "test-secret", CORSAllowedOrigins: []string{"http://localhost"}, Port: "8080", WorkerHealthPort: "8081", PublicBaseURL: "http://localhost", InvitationTTL: 168, JobPollInterval: 2, JobLeaseSeconds: 30, WebPushPublicKey: "public", WebPushPrivateKey: "private"}
+	if err := config.Validate(); err == nil {
+		t.Fatal("expected push without notification encryption key to fail")
+	}
+	config.NotificationDeliveryKeyID = "notification-v1"
+	config.NotificationDeliveryKey = testDeliveryKey()
+	if err := config.Validate(); err != nil {
+		t.Fatalf("expected dedicated key to validate: %v", err)
+	}
+}
+
 func TestProductionConfigRejectsWeakSecretAndWildcardCORS(t *testing.T) {
 	config := &Config{
 		Environment:        "production",

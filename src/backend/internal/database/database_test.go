@@ -218,7 +218,7 @@ func assertCurrentPostgresMigrationState(t *testing.T, db *sqlx.DB, legacyName s
 	expected := []struct {
 		Version int
 		Name    string
-	}{{1, legacyName}, {2, "monetary_cents_columns"}, {3, "reliability_platform"}, {4, "durable_job_lease_generation"}, {5, "redact_invitation_idempotency_tokens"}}
+	}{{1, legacyName}, {2, "monetary_cents_columns"}, {3, "reliability_platform"}, {4, "durable_job_lease_generation"}, {5, "redact_invitation_idempotency_tokens"}, {6, "notifications_and_scheduled_events"}, {7, "house_scoped_notification_capabilities"}}
 	if len(ledger) != len(expected) {
 		t.Fatalf("unexpected migration ledger: %#v", ledger)
 	}
@@ -368,7 +368,7 @@ func TestSQLiteMigrationsUpgradeLegacySchema(t *testing.T) {
 	if err := db.Select(&names, "SELECT name FROM schema_migrations ORDER BY version"); err != nil {
 		t.Fatal(err)
 	}
-	if len(names) != 5 || names[0].Name != "" || names[1].Name != "monetary_cents_columns" || names[2].Name != "reliability_platform" || names[3].Name != "durable_job_lease_generation" || names[4].Name != "redact_invitation_idempotency_tokens" {
+	if len(names) != 7 || names[0].Name != "" || names[1].Name != "monetary_cents_columns" || names[2].Name != "reliability_platform" || names[3].Name != "durable_job_lease_generation" || names[4].Name != "redact_invitation_idempotency_tokens" || names[5].Name != "notifications_and_scheduled_events" || names[6].Name != "house_scoped_notification_capabilities" {
 		t.Fatalf("unexpected migration ledger names: %#v", names)
 	}
 
@@ -431,6 +431,35 @@ func TestSQLiteMigrationRedactsLegacyInvitationIdempotencyToken(t *testing.T) {
 	}
 }
 
+func TestNotificationCapabilityMigrationSevenPreservesRowsAndAllowsMultipleHouses(t *testing.T) {
+	db, err := Connect("sqlite://:memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	for _, migration := range migrations(db.DriverName())[:6] {
+		if err := migration.up(ctx, db); err != nil {
+			t.Fatalf("apply migration %d: %v", migration.version, err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO users(id,name,email,password_hash) VALUES('rotation-user','User','rotation@test','x'); INSERT INTO houses(id,name) VALUES('rotation-house-1','One'),('rotation-house-2','Two'); INSERT INTO house_members(id,house_id,user_id,role) VALUES('rotation-member-1','rotation-house-1','rotation-user','member'),('rotation-member-2','rotation-house-2','rotation-user','member'); INSERT INTO notification_subscriptions(id,house_id,user_id,platform,identity_hash,key_id,ciphertext) VALUES('rotation-sub-1','rotation-house-1','rotation-user','android_fcm','same-capability','key','ciphertext')`); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := migrations(db.DriverName())[6].up(ctx, db); err != nil {
+			t.Fatalf("apply migration 7 pass %d: %v", i+1, err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO notification_subscriptions(id,house_id,user_id,platform,identity_hash,key_id,ciphertext) VALUES('rotation-sub-2','rotation-house-2','rotation-user','android_fcm','same-capability','key','ciphertext')`); err != nil {
+		t.Fatalf("same capability in another house after migration 7: %v", err)
+	}
+	var count int
+	if err := db.Get(&count, `SELECT COUNT(*) FROM notification_subscriptions WHERE identity_hash='same-capability'`); err != nil || count != 2 {
+		t.Fatalf("migration 7 did not preserve/permit rows: count=%d err=%v", count, err)
+	}
+}
+
 func TestSQLiteReliabilityTablesAreCreated(t *testing.T) {
 	db, err := Connect("sqlite://:memory:")
 	if err != nil {
@@ -441,7 +470,7 @@ func TestSQLiteReliabilityTablesAreCreated(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tables := []string{"house_invitations", "idempotency_keys", "outbox_messages", "durable_jobs", "audit_events", "house_events"}
+	tables := []string{"house_invitations", "idempotency_keys", "outbox_messages", "durable_jobs", "audit_events", "house_events", "notification_preferences", "notification_subscriptions", "scheduled_house_events", "notification_deliveries"}
 	for _, table := range tables {
 		var count int
 		if err := db.Get(&count, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $1`, table); err != nil {

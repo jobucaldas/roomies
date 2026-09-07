@@ -13,14 +13,16 @@ import (
 )
 
 type Worker struct {
-	logger         *slog.Logger
-	repo           *repository.ReliabilityRepository
-	provider       providers.InvitationProvider
-	owner          string
-	pollInterval   time.Duration
-	leaseDuration  time.Duration
-	deliveryCipher *providers.InvitationDeliveryCipher
-	ready          atomic.Bool
+	logger               *slog.Logger
+	repo                 *repository.ReliabilityRepository
+	provider             providers.InvitationProvider
+	owner                string
+	pollInterval         time.Duration
+	leaseDuration        time.Duration
+	deliveryCipher       *providers.InvitationDeliveryCipher
+	notificationRepo     *repository.NotificationRepository
+	notificationProvider providers.NotificationProvider
+	ready                atomic.Bool
 }
 
 func New(logger *slog.Logger, repo *repository.ReliabilityRepository, provider providers.InvitationProvider, owner string, pollInterval, leaseDuration time.Duration, deliveryCipher ...*providers.InvitationDeliveryCipher) *Worker {
@@ -48,6 +50,11 @@ func New(logger *slog.Logger, repo *repository.ReliabilityRepository, provider p
 	}
 }
 
+func (w *Worker) ConfigureNotifications(repo *repository.NotificationRepository, provider providers.NotificationProvider) {
+	w.notificationRepo = repo
+	w.notificationProvider = provider
+}
+
 func (w *Worker) Ready() bool {
 	return w.ready.Load()
 }
@@ -70,6 +77,11 @@ func (w *Worker) Run(ctx context.Context) error {
 }
 
 func (w *Worker) RunOnce(ctx context.Context) error {
+	if w.notificationRepo != nil {
+		if _, err := w.notificationRepo.RunDueScheduledEvent(ctx, w.owner, w.leaseDuration); err != nil {
+			return err
+		}
+	}
 	job, err := w.repo.AcquireNextJob(ctx, w.owner, w.leaseDuration)
 	if err != nil || job == nil {
 		return err
@@ -84,6 +96,9 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	}
 	if message.Status == "dispatched" || message.Status == "dead_lettered" {
 		return w.repo.CompleteOutboxJob(ctx, job, "")
+	}
+	if message.Topic == "notification.delivery" {
+		return w.dispatchNotification(ctx, job, message)
 	}
 	var notification providers.InvitationNotification
 	if err := json.Unmarshal([]byte(message.Payload), &notification); err != nil {
@@ -138,6 +153,41 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 			slog.String("outbox_message_id", message.ID),
 			slog.String("topic", message.Topic),
 		)
+	}
+	return w.repo.CompleteOutboxJob(ctx, job, message.ID)
+}
+
+func (w *Worker) dispatchNotification(ctx context.Context, job *repository.DurableJob, message *repository.OutboxMessage) error {
+	if w.notificationRepo == nil || w.notificationProvider == nil {
+		return w.repo.FailOutboxJob(ctx, job, message.ID, errors.New("notification provider is not configured"))
+	}
+	var payload repository.NotificationPayload
+	if err := json.Unmarshal([]byte(message.Payload), &payload); err != nil {
+		return w.repo.FailOutboxJob(ctx, job, message.ID, err)
+	}
+	// One deadline bounds both authorization-lock waits and all external sends
+	// performed while those locks are held.
+	dispatchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	summary, err := w.notificationRepo.WithAuthorizedDispatch(dispatchCtx, payload, func(target repository.NotificationTarget, body []byte) (bool, error) {
+		result, dispatchErr := w.notificationProvider.Dispatch(dispatchCtx, providers.PushTarget{Platform: target.Platform, Endpoint: target.Endpoint, P256DH: target.P256DH, Auth: target.Auth, Token: target.Token}, body)
+		if result.Fake {
+			w.logger.Warn("notification_channel_fake_only", slog.String("platform", target.Platform), slog.String("notification_id", payload.NotificationID))
+		}
+		return result.Revoke, dispatchErr
+	})
+	for _, targetID := range summary.InvalidTargetIDs {
+		w.logger.Error("notification_subscription_quarantined", slog.String("subscription_id", targetID))
+	}
+	if err != nil {
+		var transient *providers.TransientDeliveryError
+		if errors.As(err, &transient) && !transient.RetryAt.IsZero() {
+			return w.repo.FailOutboxJobAt(ctx, job, message.ID, err, transient.RetryAt)
+		}
+		return w.repo.FailOutboxJob(ctx, job, message.ID, err)
+	}
+	if summary.Dispatched && w.notificationProvider.Fake() {
+		w.logger.Warn("notification_dispatch_recorded_fake_only", slog.String("notification_id", payload.NotificationID))
 	}
 	return w.repo.CompleteOutboxJob(ctx, job, message.ID)
 }

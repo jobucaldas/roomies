@@ -62,10 +62,10 @@ func TestInvitationCreateIdempotentReplayRedactsOneTimeToken(t *testing.T) {
 	if err := env.DB.Get(&inviteCount, `SELECT COUNT(*) FROM house_invitations`); err != nil {
 		t.Fatal(err)
 	}
-	if err := env.DB.Get(&jobCount, `SELECT COUNT(*) FROM durable_jobs`); err != nil {
+	if err := env.DB.Get(&jobCount, `SELECT COUNT(*) FROM durable_jobs WHERE dedupe_key LIKE 'job:outbox:invitation:%'`); err != nil {
 		t.Fatal(err)
 	}
-	if err := env.DB.Get(&outboxCount, `SELECT COUNT(*) FROM outbox_messages`); err != nil {
+	if err := env.DB.Get(&outboxCount, `SELECT COUNT(*) FROM outbox_messages WHERE topic = 'house.invitation.created'`); err != nil {
 		t.Fatal(err)
 	}
 	if inviteCount != 1 || jobCount != 1 || outboxCount != 1 {

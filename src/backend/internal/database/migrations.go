@@ -45,6 +45,16 @@ func migrations(driver string) []schemaMigration {
 			name:    "redact_invitation_idempotency_tokens",
 			up:      execStatements(redactInvitationIdempotencyTokensStatement(driver)),
 		},
+		{
+			version: 6,
+			name:    "notifications_and_scheduled_events",
+			up:      execStatements(notificationStatements()...),
+		},
+		{
+			version: 7,
+			name:    "house_scoped_notification_capabilities",
+			up:      execStatements(`DROP INDEX IF EXISTS idx_notification_subscriptions_active_identity`),
+		},
 	}
 }
 

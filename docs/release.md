@@ -17,10 +17,13 @@ Provide the values from `docs/credentials.example.env` via a Kubernetes Secret o
 - `SMTP_*`
 - `INVITATION_DELIVERY_KEY_ID`, `INVITATION_DELIVERY_KEY`, and (during rotation) `INVITATION_DELIVERY_OLD_KEYS`
 - `S3_*`
-- `WEB_PUSH_*`
-- `FCM_*`
+- `NOTIFICATION_DELIVERY_KEY_ID`, `NOTIFICATION_DELIVERY_KEY`, and rotation-only `NOTIFICATION_DELIVERY_OLD_KEYS` (dedicated AES-256 key; never reuse JWT/invitation keys)
+- `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY`, and `WEB_PUSH_SUBJECT`
+- `FCM_PROJECT_ID`; use workload identity or a Secret-mounted ADC file selected by `GOOGLE_APPLICATION_CREDENTIALS`
 
 ## Notes
+
+The backend builder uses Go 1.26 because the pinned `github.com/marknefedov/go-webpush/v2` v2.0.0 module declares Go 1.26 as its minimum. Recurrence is pinned to `github.com/teambition/rrule-go` v1.8.2; expansion is bounded and never calls `All`.
 - The backend runs migrations on startup.
 - `SMTP_HOST` selects SMTP in every environment (use Mailpit for local development); leaving it empty selects the fake non-delivery provider.
 - Invitation creation returns `manual_acceptance_url` only in the initial successful response. Idempotent replays retain the invitation result but omit its one-time bearer URL. When SMTP is configured, the same one-time URL is AES-256-GCM encrypted in the outbox with invitation, house, and job context as associated data; the worker decrypts it only immediately before SMTP dispatch.

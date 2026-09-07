@@ -1,10 +1,12 @@
 package handlers_test
 
 import (
+	"encoding/base64"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,22 +14,24 @@ import (
 	roomiesclock "github.com/roomies/backend/internal/clock"
 	"github.com/roomies/backend/internal/config"
 	"github.com/roomies/backend/internal/database"
+	"github.com/roomies/backend/internal/providers"
 	"github.com/roomies/backend/internal/repository"
 	"github.com/roomies/backend/internal/server"
 )
 
 type testEnv struct {
-	Router          http.Handler
-	DB              *sqlx.DB
-	Clock           *roomiesclock.FakeClock
-	Config          *config.Config
-	UserRepo        *repository.UserRepository
-	HouseRepo       *repository.HouseRepository
-	ExpenseRepo     *repository.ExpenseRepository
-	NoteRepo        *repository.NoteRepository
-	ReliabilityRepo *repository.ReliabilityRepository
-	JWTSecret       string
-	Cleanup         func()
+	Router           http.Handler
+	DB               *sqlx.DB
+	Clock            *roomiesclock.FakeClock
+	Config           *config.Config
+	UserRepo         *repository.UserRepository
+	HouseRepo        *repository.HouseRepository
+	ExpenseRepo      *repository.ExpenseRepository
+	NoteRepo         *repository.NoteRepository
+	ReliabilityRepo  *repository.ReliabilityRepository
+	NotificationRepo *repository.NotificationRepository
+	JWTSecret        string
+	Cleanup          func()
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -58,31 +62,39 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 	userRepo := repository.NewUserRepository(db)
 	houseRepo := repository.NewHouseRepository(db)
-	expenseRepo := repository.NewExpenseRepository(db)
+	notificationKey := base64.StdEncoding.EncodeToString([]byte(strings.Repeat("n", 32)))
+	notificationCipher, err := providers.NewNotificationDeliveryCipher("test-notification-key", notificationKey, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	notificationRepo := repository.NewNotificationRepository(db, clk, notificationCipher)
+	expenseRepo := repository.NewExpenseRepository(db, notificationRepo)
 	noteRepo := repository.NewNoteRepository(db)
 	reliabilityRepo := repository.NewReliabilityRepository(db, clk)
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	router := server.NewHandler(server.Dependencies{
-		Config:          cfg,
-		Logger:          logger,
-		Clock:           clk,
-		UserRepo:        userRepo,
-		HouseRepo:       houseRepo,
-		ExpenseRepo:     expenseRepo,
-		NoteRepo:        noteRepo,
-		ReliabilityRepo: reliabilityRepo,
+		Config:           cfg,
+		Logger:           logger,
+		Clock:            clk,
+		UserRepo:         userRepo,
+		HouseRepo:        houseRepo,
+		ExpenseRepo:      expenseRepo,
+		NoteRepo:         noteRepo,
+		ReliabilityRepo:  reliabilityRepo,
+		NotificationRepo: notificationRepo,
 	})
 	return &testEnv{
-		Router:          router,
-		DB:              db,
-		Clock:           clk,
-		Config:          cfg,
-		UserRepo:        userRepo,
-		HouseRepo:       houseRepo,
-		ExpenseRepo:     expenseRepo,
-		NoteRepo:        noteRepo,
-		ReliabilityRepo: reliabilityRepo,
-		JWTSecret:       cfg.JWTSecret,
-		Cleanup:         func() { _ = db.Close() },
+		Router:           router,
+		DB:               db,
+		Clock:            clk,
+		Config:           cfg,
+		UserRepo:         userRepo,
+		HouseRepo:        houseRepo,
+		ExpenseRepo:      expenseRepo,
+		NoteRepo:         noteRepo,
+		ReliabilityRepo:  reliabilityRepo,
+		NotificationRepo: notificationRepo,
+		JWTSecret:        cfg.JWTSecret,
+		Cleanup:          func() { _ = db.Close() },
 	}
 }

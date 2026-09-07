@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -21,11 +22,16 @@ const expenseSelect = `SELECT e.id, e.house_id, e.payer_id, e.amount, e.amount_c
 	JOIN users u ON u.id = e.payer_id`
 
 type ExpenseRepository struct {
-	db *sqlx.DB
+	db            *sqlx.DB
+	notifications *NotificationRepository
 }
 
-func NewExpenseRepository(db *sqlx.DB) *ExpenseRepository {
-	return &ExpenseRepository{db: db}
+func NewExpenseRepository(db *sqlx.DB, notifications ...*NotificationRepository) *ExpenseRepository {
+	var notificationRepo *NotificationRepository
+	if len(notifications) > 0 {
+		notificationRepo = notifications[0]
+	}
+	return &ExpenseRepository{db: db, notifications: notificationRepo}
 }
 
 // CreateAggregate persists the expense and all of its dependent rows atomically.
@@ -56,6 +62,15 @@ func (r *ExpenseRepository) CreateAggregate(ctx context.Context, expense *models
 	}
 	if err := insertSplits(ctx, tx, splits); err != nil {
 		return err
+	}
+	if expense.Visibility == "shared" && r.notifications != nil {
+		if err := r.notifications.EnqueueTx(ctx, tx, expense.HouseID, "expense_created", "expense", expense.ID, expense.CreatedAt); err != nil {
+			return err
+		}
+		payload, _ := json.Marshal(map[string]string{"category": "expense_created"})
+		if _, err := tx.ExecContext(ctx, `INSERT INTO house_events(id,house_id,event_type,actor_id,resource_type,resource_id,payload,created_at) VALUES($1,$2,'expense.created',$3,'expense',$4,$5,$6)`, models.NewID(), expense.HouseID, expense.PayerID, expense.ID, string(payload), expense.CreatedAt); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

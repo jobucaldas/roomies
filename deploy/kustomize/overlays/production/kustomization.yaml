@@ -25,6 +25,8 @@ configMapGenerator:
       - INVITATION_TTL_HOURS=168
       - JOB_POLL_INTERVAL_SECONDS=2
       - JOB_LEASE_SECONDS=30
+      - WEB_PUSH_SUBJECT=mailto:no-reply@roomies.example.com
+      # FCM_PROJECT_ID may be added here; use workload identity for credentials.
       - TIMEZONE=UTC
 
 generatorOptions:

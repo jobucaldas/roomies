@@ -16,15 +16,16 @@ import (
 )
 
 type Dependencies struct {
-	Config          *config.Config
-	Logger          *slog.Logger
-	Clock           roomiesclock.Clock
-	UserRepo        *repository.UserRepository
-	HouseRepo       *repository.HouseRepository
-	ExpenseRepo     *repository.ExpenseRepository
-	NoteRepo        *repository.NoteRepository
-	ReliabilityRepo *repository.ReliabilityRepository
-	Ready           func() bool
+	Config           *config.Config
+	Logger           *slog.Logger
+	Clock            roomiesclock.Clock
+	UserRepo         *repository.UserRepository
+	HouseRepo        *repository.HouseRepository
+	ExpenseRepo      *repository.ExpenseRepository
+	NoteRepo         *repository.NoteRepository
+	ReliabilityRepo  *repository.ReliabilityRepository
+	NotificationRepo *repository.NotificationRepository
+	Ready            func() bool
 }
 
 func NewHandler(deps Dependencies) http.Handler {
@@ -48,6 +49,7 @@ func NewHandler(deps Dependencies) http.Handler {
 	balanceHandler := handlers.NewBalanceHandler(deps.ExpenseRepo, deps.HouseRepo)
 	invitationHandler := handlers.NewInvitationHandler(deps.HouseRepo, deps.ReliabilityRepo, clk, deps.Config.PublicBaseURL, time.Duration(deps.Config.InvitationTTL)*time.Hour)
 	eventsHandler := handlers.NewHouseEventsHandler(deps.HouseRepo, deps.ReliabilityRepo, 250*time.Millisecond)
+	notificationHandler := handlers.NewNotificationHandler(deps.NotificationRepo, deps.HouseRepo)
 
 	r := chi.NewRouter()
 	r.Use(cors.Handler(cors.Options{
@@ -96,6 +98,19 @@ func NewHandler(deps Dependencies) http.Handler {
 				r.Get("/", houseHandler.Get)
 				r.Put("/", houseHandler.Update)
 				r.Get("/events", eventsHandler.List)
+				r.Get("/notification-preferences", notificationHandler.GetPreferences)
+				r.Put("/notification-preferences", notificationHandler.PutPreferences)
+				r.Route("/notification-subscriptions", func(r chi.Router) {
+					r.Get("/", notificationHandler.ListSubscriptions)
+					r.Post("/", notificationHandler.CreateSubscription)
+					r.Delete("/{subscriptionId}", notificationHandler.DeleteSubscription)
+				})
+				r.Route("/scheduled-events", func(r chi.Router) {
+					r.Get("/", notificationHandler.ListEvents)
+					r.Post("/", notificationHandler.CreateEvent)
+					r.Put("/{eventId}", notificationHandler.UpdateEvent)
+					r.Delete("/{eventId}", notificationHandler.DeleteEvent)
+				})
 
 				r.Route("/members", func(r chi.Router) {
 					r.Get("/", houseHandler.ListMembers)

@@ -57,17 +57,25 @@ func run(logger *slog.Logger, args []string) error {
 	}
 
 	clk := roomiesclock.RealClock{}
+	var notificationCipher *providers.NotificationDeliveryCipher
+	if cfg.NotificationDeliveryKey != "" {
+		notificationCipher, err = providers.NewNotificationDeliveryCipher(cfg.NotificationDeliveryKeyID, cfg.NotificationDeliveryKey, cfg.NotificationDeliveryOldKeys)
+		if err != nil {
+			return fmt.Errorf("configure notification delivery encryption: %w", err)
+		}
+	}
 	userRepo := repository.NewUserRepository(db)
 	houseRepo := repository.NewHouseRepository(db)
-	expenseRepo := repository.NewExpenseRepository(db)
+	notificationRepo := repository.NewNotificationRepository(db, clk, notificationCipher)
+	expenseRepo := repository.NewExpenseRepository(db, notificationRepo)
 	noteRepo := repository.NewNoteRepository(db)
 	reliabilityRepo := repository.NewReliabilityRepository(db, clk, deliveryCipher)
 
 	switch command {
 	case "serve":
-		return runServer(ctx, logger, cfg, clk, userRepo, houseRepo, expenseRepo, noteRepo, reliabilityRepo)
+		return runServer(ctx, logger, cfg, clk, userRepo, houseRepo, expenseRepo, noteRepo, reliabilityRepo, notificationRepo)
 	case "worker":
-		return runWorker(ctx, logger, cfg, reliabilityRepo, deliveryCipher)
+		return runWorker(ctx, logger, cfg, reliabilityRepo, notificationRepo, deliveryCipher)
 	default:
 		return fmt.Errorf("unknown subcommand %q", command)
 	}
@@ -76,17 +84,18 @@ func run(logger *slog.Logger, args []string) error {
 func runServer(ctx context.Context, logger *slog.Logger, cfg *config.Config, clk roomiesclock.Clock,
 	userRepo *repository.UserRepository, houseRepo *repository.HouseRepository,
 	expenseRepo *repository.ExpenseRepository, noteRepo *repository.NoteRepository,
-	reliabilityRepo *repository.ReliabilityRepository,
+	reliabilityRepo *repository.ReliabilityRepository, notificationRepo *repository.NotificationRepository,
 ) error {
 	handler := server.NewHandler(server.Dependencies{
-		Config:          cfg,
-		Logger:          logger,
-		Clock:           clk,
-		UserRepo:        userRepo,
-		HouseRepo:       houseRepo,
-		ExpenseRepo:     expenseRepo,
-		NoteRepo:        noteRepo,
-		ReliabilityRepo: reliabilityRepo,
+		Config:           cfg,
+		Logger:           logger,
+		Clock:            clk,
+		UserRepo:         userRepo,
+		HouseRepo:        houseRepo,
+		ExpenseRepo:      expenseRepo,
+		NoteRepo:         noteRepo,
+		ReliabilityRepo:  reliabilityRepo,
+		NotificationRepo: notificationRepo,
 	})
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -117,7 +126,7 @@ func runServer(ctx context.Context, logger *slog.Logger, cfg *config.Config, clk
 	return httpServer.Shutdown(shutdownCtx)
 }
 
-func runWorker(ctx context.Context, logger *slog.Logger, cfg *config.Config, reliabilityRepo *repository.ReliabilityRepository, deliveryCipher *providers.InvitationDeliveryCipher) error {
+func runWorker(ctx context.Context, logger *slog.Logger, cfg *config.Config, reliabilityRepo *repository.ReliabilityRepository, notificationRepo *repository.NotificationRepository, deliveryCipher *providers.InvitationDeliveryCipher) error {
 	provider, err := providers.NewInvitationProvider(cfg)
 	if err != nil {
 		return fmt.Errorf("configure invitation provider: %w", err)
@@ -132,6 +141,13 @@ func runWorker(ctx context.Context, logger *slog.Logger, cfg *config.Config, rel
 		owner = "roomies-worker"
 	}
 	owner = fmt.Sprintf("%s-%d", owner, os.Getpid())
+	notificationProvider, err := providers.NewNotificationProvider(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("configure notification provider: %w", err)
+	}
+	if notificationProvider.Fake() {
+		logger.Warn("notification_provider_fake_only", slog.String("reason", "push credentials absent; no external delivery"))
+	}
 	processor := worker.New(
 		logger,
 		reliabilityRepo,
@@ -141,6 +157,7 @@ func runWorker(ctx context.Context, logger *slog.Logger, cfg *config.Config, rel
 		time.Duration(cfg.JobLeaseSeconds)*time.Second,
 		deliveryCipher,
 	)
+	processor.ConfigureNotifications(notificationRepo, notificationProvider)
 	healthServer := &http.Server{
 		Addr:              ":" + cfg.WorkerHealthPort,
 		Handler:           workerHealthHandler(processor),
