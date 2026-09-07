@@ -1,4 +1,72 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { expect, test as base, type APIRequestContext, type Page, type TestInfo } from '@playwright/test';
+
+const test = base;
+
+type BrowserEvidence = {
+  consoleErrors: string[];
+  pageErrors: string[];
+  failedRequests: string[];
+  assetHashes: Record<string, string>;
+  assetBodies: Promise<void>[];
+};
+const evidenceByPage = new WeakMap<Page, BrowserEvidence>();
+const slug = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+// There are currently no intentionally aborted application requests. Keep this explicit so
+// adding an exception requires naming the exact request and its reason in review.
+function intentionallyAborted(_url: string, _error: string | undefined): boolean { return false; }
+
+async function writeBrowserEvidence(page: Page, testInfo: TestInfo) {
+  const evidence = evidenceByPage.get(page);
+  if (!evidence) return;
+  await Promise.allSettled(evidence.assetBodies);
+  const output = testInfo.project.name + '-' + slug(testInfo.title);
+  const directory = 'artifacts/evidence';
+  await mkdir(directory, { recursive: true });
+  await page.screenshot({ path: `${directory}/${output}.png`, fullPage: true });
+  const summary = {
+    head: process.env.GIT_COMMIT ?? execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    command: process.env.ROOMIES_E2E_COMMAND ?? 'npx playwright test',
+    project: testInfo.project.name,
+    test: testInfo.title,
+    passCount: testInfo.status === 'passed' ? 1 : 0,
+    consoleErrorCount: evidence.consoleErrors.length,
+    pageErrorCount: evidence.pageErrors.length,
+    failedRequestCount: evidence.failedRequests.length,
+    assetHashes: evidence.assetHashes,
+  };
+  await writeFile(`${directory}/${output}.json`, JSON.stringify(summary, null, 2) + '\\n');
+  if (evidence.consoleErrors.length || evidence.pageErrors.length || evidence.failedRequests.length) {
+    throw new Error(`browser evidence failures: console=${evidence.consoleErrors.length}, page=${evidence.pageErrors.length}, network=${evidence.failedRequests.length}`);
+  }
+}
+
+test.beforeEach(async ({ page }) => {
+  const evidence: BrowserEvidence = { consoleErrors: [], pageErrors: [], failedRequests: [], assetHashes: {}, assetBodies: [] };
+  evidenceByPage.set(page, evidence);
+  page.on('console', (message) => {
+    if (message.type() === 'error') evidence.consoleErrors.push('console error');
+  });
+  page.on('pageerror', () => evidence.pageErrors.push('page error'));
+  page.on('requestfailed', (request) => {
+    const error = request.failure()?.errorText;
+    if (!intentionallyAborted(request.url(), error)) evidence.failedRequests.push('request failed');
+  });
+  page.on('response', (response) => {
+    const url = new URL(response.url());
+    if (!['.html', '.js', '.wasm'].some((extension) => url.pathname.endsWith(extension)) && url.pathname !== '/') return;
+    evidence.assetBodies.push((async () => {
+      try {
+        evidence.assetHashes[url.pathname] = createHash('sha256').update(await response.body()).digest('hex');
+      } catch { /* response may be unavailable after a failed navigation */ }
+    })());
+  });
+});
+
+test.afterEach(async ({ page }, testInfo) => writeBrowserEvidence(page, testInfo));
 
 const apiURL = process.env.ROOMIES_API_URL ?? 'http://localhost:8080/api';
 const mailpitURL = process.env.MAILPIT_URL ?? 'http://localhost:8025';
@@ -59,7 +127,6 @@ test('admin invite is delivered and intended user joins once', async ({ page, re
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem('roomies.pending.invitation') !== null)).toBe(true);
   await login(page, data.email);
   await expect(page).toHaveURL(new RegExp(`/house/${data.house}`));
-  await page.screenshot({ path: 'artifacts/invitation-joined.png', fullPage: true });
   const retry = await request.post(`${apiURL}/invitations/accept`, {
     headers: { Authorization: `Bearer ${invitee.token}` }, data: { token: data.token },
   });
