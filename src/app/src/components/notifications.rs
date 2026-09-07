@@ -60,7 +60,15 @@ fn PreferencesForm(
     on_saved: EventHandler<NotificationPreferences>,
 ) -> Element {
     let api = use_context::<Signal<ApiClient>>();
-    let mut value = use_signal(|| preferences);
+    let mut value = use_signal(|| preferences.clone());
+    let preferences_for_effect = preferences.clone();
+    use_effect(move || {
+        if value().house_id != preferences_for_effect.house_id
+            || value().user_id != preferences_for_effect.user_id
+        {
+            value.set(preferences_for_effect.clone());
+        }
+    });
     let mut status = use_signal(String::new);
     let save_house = house_id.clone();
     let save = move |_| {
@@ -86,8 +94,8 @@ fn PreferencesForm(
     };
     rsx! { div { class: "card",
         h3 { "Your notification preferences" }
-        label { input { r#type: "checkbox", checked: value.read().expense_created_enabled, onchange: move |e| { let mut v = value.read().clone(); v.expense_created_enabled = e.checked(); value.set(v); } } " Shared expense alerts" }
-        label { input { r#type: "checkbox", checked: value.read().reminder_enabled, onchange: move |e| { let mut v = value.read().clone(); v.reminder_enabled = e.checked(); value.set(v); } } " Scheduled reminder alerts" }
+        label { input { r#type: "checkbox", checked: value.read().expense_created_enabled, oninput: move |e| { let mut v = value.read().clone(); v.expense_created_enabled = e.checked(); value.set(v); } } " Shared expense alerts" }
+        label { input { r#type: "checkbox", checked: value.read().reminder_enabled, oninput: move |e| { let mut v = value.read().clone(); v.reminder_enabled = e.checked(); value.set(v); } } " Scheduled reminder alerts" }
         label { "Delivery", select { value: "{value.read().cadence}", onchange: move |e| { let mut v = value.read().clone(); v.cadence=e.value(); value.set(v); }, option { value: "immediate", "Immediate" } option { value: "daily_digest", "Daily digest" } } }
         label { "IANA timezone", input { value: "{value.read().timezone}", placeholder: "Europe/Lisbon", oninput: move |e| { let mut v=value.read().clone(); v.timezone=e.value(); value.set(v); } } }
         label { "Quiet start (local)", input { r#type: "time", value: "{minutes_time(value.read().quiet_start_minutes)}", oninput: move |e| { let mut v=value.read().clone(); v.quiet_start_minutes=time_minutes(&e.value()); value.set(v); } } }
@@ -233,7 +241,7 @@ fn Schedule(
         for event in items.read().iter() { article { class: "card", h4 { "{event.title}" } p { "{event.dtstart_local} · {event.timezone} · {event.rrule}" } if !event.exdates.is_empty() { p { "Exceptions: {exceptions(event)}" } }
             if event.creator_id == user_id || admin {
                 EventEditorButton { event: event.clone(), on_edit: move |event: ScheduledHouseEvent| {
-                    title.set(event.title.clone()); start.set(event.dtstart_local.trim_end_matches(":00").to_string()); zone.set(event.timezone.clone());
+                    title.set(event.title.clone()); start.set(event.dtstart_local.get(..16).unwrap_or(&event.dtstart_local).to_string()); zone.set(event.timezone.clone());
                     let rule = recurrence_fields(&event.rrule); frequency.set(rule.0); interval.set(rule.1); count.set(rule.2); until.set(rule.3); exdates.set(event.exdates.join(", ")); editing.set(Some(event.id)); status.set("Editing scheduled event.".into());
                 } }
                 EventDelete { house_id: house_id.clone(), event_id: event.id.clone() }
