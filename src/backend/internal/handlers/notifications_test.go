@@ -82,3 +82,51 @@ func TestSubscriptionListNeverReturnsCapability(t *testing.T) {
 		t.Fatalf("capability leaked: %s", w.Body.String())
 	}
 }
+
+func TestVAPIDPublicKeyEndpointIsPublicAndDoesNotExposePrivateConfiguration(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.Cleanup()
+	env.Config.WebPushPublicKey = "public-vapid-key"
+	env.Config.WebPushPrivateKey = "private-vapid-key"
+	w := httptest.NewRecorder()
+	env.Router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/notifications/vapid-public-key", nil))
+	if w.Code != http.StatusOK || !bytes.Contains(w.Body.Bytes(), []byte(`"public_key":"public-vapid-key"`)) {
+		t.Fatalf("public VAPID endpoint: %d %s", w.Code, w.Body.String())
+	}
+	if bytes.Contains(w.Body.Bytes(), []byte("private-vapid-key")) {
+		t.Fatalf("private key leaked: %s", w.Body.String())
+	}
+}
+
+func TestScheduledEventUpdateIsLimitedToCreatorOrAdmin(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.Cleanup()
+	admin := registerUser(t, env.Router, "Admin", "event-update-admin@test", "password123")
+	creator := registerUser(t, env.Router, "Creator", "event-update-creator@test", "password123")
+	other := registerUser(t, env.Router, "Other", "event-update-other@test", "password123")
+	houseID := createHouse(t, env.Router, admin, "House")
+	for _, member := range []struct{ token, id string }{{creator, getUserID(t, env.Router, creator)}, {other, getUserID(t, env.Router, other)}} {
+		if _, err := env.DB.Exec(`INSERT INTO house_members(id,house_id,user_id,role) VALUES($1,$2,$3,'member')`, "membership-"+member.id, houseID, member.id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	body := map[string]any{"title": "Bins", "timezone": "UTC", "dtstart_local": "2025-01-02T09:00:00", "rrule": "FREQ=DAILY;COUNT=2", "exdates": []string{}}
+	created := notificationRequest(t, env.Router, "POST", "/api/houses/"+houseID+"/scheduled-events", creator, body)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", created.Code, created.Body.String())
+	}
+	var event struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &event); err != nil {
+		t.Fatal(err)
+	}
+	denied := notificationRequest(t, env.Router, "PUT", "/api/houses/"+houseID+"/scheduled-events/"+event.ID, other, body)
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("non-owner update: %d %s", denied.Code, denied.Body.String())
+	}
+	updated := notificationRequest(t, env.Router, "PUT", "/api/houses/"+houseID+"/scheduled-events/"+event.ID, admin, body)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("admin update: %d %s", updated.Code, updated.Body.String())
+	}
+}

@@ -23,3 +23,7 @@
 - Added API/model contract tests and a synthetic Playwright/Mailpit harness under `e2e/` for desktop and narrow layouts.
 - Frontend web tests pass in the Nix web shell (19 tests), and the release WASM assets build with Dioxus 0.7.10.
 - Exact-head invitation validation passed all six desktop/narrow Playwright scenarios against disposable PostgreSQL and Mailpit services. Served HTML/JavaScript/WASM hashes matched the current build, browser console/page/network error counts were zero, and the narrow layout had no horizontal overflow. Sanitized screenshots and JSON evidence are retained under ignored `e2e/artifacts/evidence/`.
+
+## Notification web UI
+- Added a house Notifications / Schedule tab with self preference controls, subscription metadata, browser-push controls, and role-aware scheduled-event creation, editing, deletion, and viewing. Creator/admin edit forms prefill recurrence data and validate before the server-authoritative request.
+- Browser push uses a root-scoped service worker and runtime public VAPID-key discovery; native desktop intentionally reports it unsupported. The production Dioxus 0.7.10 builder image built the web artifacts with the service worker. Real browser provider delivery and Android FCM remain unexercised.

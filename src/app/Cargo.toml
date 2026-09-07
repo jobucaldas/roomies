@@ -5,7 +5,7 @@ edition = "2021"
 
 [features]
 default = ["web"]
-web = ["dioxus/web", "dep:web-sys", "dep:wasm-bindgen"]
+web = ["dioxus/web", "dep:web-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:serde-wasm-bindgen"]
 desktop = ["dioxus/desktop"]
 mobile = ["dioxus/mobile"]
 
@@ -17,6 +17,8 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 chrono = { version = "0.4", features = ["serde"] }
 web-sys = { version = "0.3", features = ["Window", "Storage", "Location", "History", "UrlSearchParams"], optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
 
 [lib]
 path = "src/lib.rs"

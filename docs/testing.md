@@ -35,3 +35,6 @@ Screenshots and Playwright reports are written under `e2e/artifacts/` (ignored).
 
 ## Current environment gap
 Desktop checks require GTK/WebKit development libraries. Use the `desktop` shell or install those packages locally before running the desktop check.
+
+## Notification preferences and schedules
+The web notification panel exercises self-owned preferences and house-scoped scheduled events through the normal online API. Creators and admins can prefill, edit, cancel, and save event recurrence forms; monitors remain view-only. Browser push is requested only after the **Enable browser push** button is clicked; a supported browser needs a server configured with `WEB_PUSH_PUBLIC_KEY`. The root-scoped `roomies-sw.js` displays generic notification text and does not persist subscription capabilities outside the browser PushSubscription. To reproduce a release build where host tooling lacks the matching wasm-bindgen CLI, use the cached Dioxus 0.7.10 builder image specified in the notification validation record.

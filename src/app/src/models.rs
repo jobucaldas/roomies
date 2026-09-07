@@ -192,3 +192,100 @@ pub struct UpdateNoteRequest {
     pub title: String,
     pub content: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NotificationPreferences {
+    #[serde(default)]
+    pub house_id: String,
+    #[serde(default)]
+    pub user_id: String,
+    #[serde(default = "default_true")]
+    pub expense_created_enabled: bool,
+    #[serde(default = "default_true")]
+    pub reminder_enabled: bool,
+    #[serde(default = "default_cadence")]
+    pub cadence: String,
+    #[serde(default = "default_timezone")]
+    pub timezone: String,
+    #[serde(default)]
+    pub quiet_start_minutes: Option<u16>,
+    #[serde(default)]
+    pub quiet_end_minutes: Option<u16>,
+    #[serde(default)]
+    pub digest_minutes: u16,
+}
+fn default_true() -> bool {
+    true
+}
+fn default_cadence() -> String {
+    "immediate".into()
+}
+fn default_timezone() -> String {
+    "UTC".into()
+}
+impl Default for NotificationPreferences {
+    fn default() -> Self {
+        Self {
+            house_id: String::new(),
+            user_id: String::new(),
+            expense_created_enabled: true,
+            reminder_enabled: true,
+            cadence: default_cadence(),
+            timezone: default_timezone(),
+            quiet_start_minutes: None,
+            quiet_end_minutes: None,
+            digest_minutes: 540,
+        }
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NotificationSubscription {
+    pub id: String,
+    pub house_id: String,
+    pub user_id: String,
+    pub platform: String,
+    pub device_label: String,
+    pub created_at: String,
+    pub last_seen_at: String,
+    #[serde(default)]
+    pub revoked_at: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateNotificationSubscriptionRequest {
+    pub platform: String,
+    pub device_label: String,
+    pub endpoint: String,
+    pub p256dh: String,
+    pub auth: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VapidPublicKey {
+    #[serde(default)]
+    pub public_key: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScheduledHouseEvent {
+    pub id: String,
+    pub house_id: String,
+    pub creator_id: String,
+    pub title: String,
+    pub timezone: String,
+    pub dtstart_local: String,
+    pub rrule: String,
+    #[serde(default)]
+    pub exdates: Vec<String>,
+    #[serde(default)]
+    pub next_occurrence_at: Option<String>,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduledEventRequest {
+    pub title: String,
+    pub timezone: String,
+    pub dtstart_local: String,
+    pub rrule: String,
+    pub exdates: Vec<String>,
+    pub enabled: Option<bool>,
+}

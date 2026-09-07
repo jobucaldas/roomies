@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
@@ -67,6 +68,12 @@ func NewHandler(deps Dependencies) http.Handler {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
+	r.Get("/api/notifications/vapid-public-key", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// The public VAPID key is intentionally discoverable; the private key never leaves configuration.
+		_ = json.NewEncoder(w).Encode(map[string]string{"public_key": deps.Config.WebPushPublicKey})
+	})
+
 	r.Get("/readyz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if !isReady() {

@@ -385,6 +385,108 @@ impl ApiClient {
         self.send(self.request(Method::GET, &format!("/houses/{id}/balances")))
             .await
     }
+    pub async fn get_notification_preferences(
+        &self,
+        id: &str,
+    ) -> Result<NotificationPreferences, ApiError> {
+        self.send(self.request(
+            Method::GET,
+            &format!("/houses/{id}/notification-preferences"),
+        ))
+        .await
+    }
+    pub async fn put_notification_preferences(
+        &self,
+        id: &str,
+        value: &NotificationPreferences,
+    ) -> Result<NotificationPreferences, ApiError> {
+        self.json(
+            Method::PUT,
+            &format!("/houses/{id}/notification-preferences"),
+            value,
+        )
+        .await
+    }
+    pub async fn get_notification_subscriptions(
+        &self,
+        id: &str,
+    ) -> Result<Vec<NotificationSubscription>, ApiError> {
+        self.send(self.request(
+            Method::GET,
+            &format!("/houses/{id}/notification-subscriptions"),
+        ))
+        .await
+    }
+    pub async fn create_notification_subscription(
+        &self,
+        id: &str,
+        value: &CreateNotificationSubscriptionRequest,
+    ) -> Result<NotificationSubscription, ApiError> {
+        self.json(
+            Method::POST,
+            &format!("/houses/{id}/notification-subscriptions"),
+            value,
+        )
+        .await
+    }
+    pub async fn delete_notification_subscription(
+        &self,
+        house_id: &str,
+        subscription_id: &str,
+    ) -> Result<(), ApiError> {
+        self.empty(self.request(
+            Method::DELETE,
+            &format!("/houses/{house_id}/notification-subscriptions/{subscription_id}"),
+        ))
+        .await
+    }
+    pub async fn get_scheduled_events(
+        &self,
+        id: &str,
+    ) -> Result<Vec<ScheduledHouseEvent>, ApiError> {
+        self.send(self.request(Method::GET, &format!("/houses/{id}/scheduled-events")))
+            .await
+    }
+    pub async fn create_scheduled_event(
+        &self,
+        id: &str,
+        value: &ScheduledEventRequest,
+    ) -> Result<ScheduledHouseEvent, ApiError> {
+        self.json(
+            Method::POST,
+            &format!("/houses/{id}/scheduled-events"),
+            value,
+        )
+        .await
+    }
+    pub async fn update_scheduled_event(
+        &self,
+        house_id: &str,
+        event_id: &str,
+        value: &ScheduledEventRequest,
+    ) -> Result<ScheduledHouseEvent, ApiError> {
+        self.json(
+            Method::PUT,
+            &format!("/houses/{house_id}/scheduled-events/{event_id}"),
+            value,
+        )
+        .await
+    }
+    pub async fn delete_scheduled_event(
+        &self,
+        house_id: &str,
+        event_id: &str,
+    ) -> Result<(), ApiError> {
+        self.empty(self.request(
+            Method::DELETE,
+            &format!("/houses/{house_id}/scheduled-events/{event_id}"),
+        ))
+        .await
+    }
+    pub async fn get_vapid_public_key(&self) -> Result<VapidPublicKey, ApiError> {
+        self.send(self.request(Method::GET, "/notifications/vapid-public-key"))
+            .await
+    }
 }
 
 #[derive(Debug, Clone, Serialize, serde::Deserialize, PartialEq)]

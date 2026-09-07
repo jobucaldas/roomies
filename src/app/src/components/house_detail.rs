@@ -1,6 +1,7 @@
 use super::expenses::ExpensesSection;
 use super::invitations::InvitationPanel;
 use super::notes::NotesSection;
+use super::notifications::NotificationsSection;
 use crate::api::ApiClient;
 use crate::core::{can_manage, Role};
 use crate::models::{BalanceResponse, House, HouseMember, User};
@@ -129,6 +130,15 @@ pub fn HouseDetail(id: String) -> Element {
                     }
                     button {
                         role: "tab",
+                        id: "notifications-tab",
+                        aria_selected: *tab.read() == "notifications",
+                        aria_controls: "notifications-panel",
+                        class: if *tab.read() == "notifications" { "active" } else { "" },
+                        onclick: move |_| tab.set("notifications".into()),
+                        "Notifications / Schedule"
+                    }
+                    button {
+                        role: "tab",
                         id: "members-tab",
                         aria_selected: *tab.read() == "members",
                         aria_controls: "members-panel",
@@ -147,6 +157,9 @@ pub fn HouseDetail(id: String) -> Element {
                             NotesSection { house_id: id.clone(), role: role_name.clone() }
                         },
                         "balances" => rsx! { BalancesTab { balances: balances.read().clone() } },
+                        "notifications" => rsx! {
+                            NotificationsSection { house_id: id.clone(), role: role_name.clone(), user_id: user.read().as_ref().map(|u| u.id.clone()).unwrap_or_default() }
+                        },
                         "members" => rsx! {
                             MembersTab {
                                 house_id: id.clone(),
