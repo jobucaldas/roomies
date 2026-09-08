@@ -23,6 +23,15 @@ podman compose -f e2e/docker-compose.mailpit.yml down -v
 
 Screenshots and Playwright reports are written under `e2e/artifacts/` (ignored). The suite covers intended-user acceptance after auth redirect, wrong-account/revoked denial, idempotent duplicate acceptance, monitor authorization, and desktop/narrow layouts. Expiry and retryable-transient-failure invariants remain covered by the backend invitation contract tests.
 
+## CI-gated household browser regression
+The `household-browser` GitHub Actions job runs the desktop and narrow projects for `e2e/tests/household.spec.ts` against a disposable Compose PostgreSQL/backend/worker/frontend/Caddy/Mailpit stack. It builds the frontend through `src/app/Dockerfile`'s pinned Dioxus production builder and uses the checked-out SHA for `GIT_COMMIT`. Reproduce it on Linux from the repository root:
+
+```sh
+make test-e2e-household
+```
+
+The target generates synthetic secrets, installs Chromium with Playwright's supported dependency path, and always removes its Compose project and volumes. On CI failure, only the sanitized evidence JSON is retained for seven days; reports, traces, screenshots, and test-result directories are deliberately excluded because they can contain private browser data. This is a household web-flow gate only; it is not Linux desktop or Android runtime acceptance, real-provider delivery validation, or full-browser-suite acceptance.
+
 ## Household domains UI
 The house Groceries, Chores, Calendar, and Chat tabs use the normal online API only. Run the web unit and lint checks in an isolated Nix target directory to avoid reusing host Rust artifacts:
 
