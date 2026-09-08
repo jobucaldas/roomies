@@ -148,6 +148,10 @@ impl ApiClient {
             .await
             .map_err(|e| ApiError::Transport(e.to_string()))?;
         if response.status().is_success() {
+            response
+                .bytes()
+                .await
+                .map_err(|e| ApiError::Transport(e.to_string()))?;
             Ok(())
         } else {
             if response.status().as_u16() == 401 {

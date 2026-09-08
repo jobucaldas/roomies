@@ -5,23 +5,32 @@ use crate::models::{
 };
 use dioxus::prelude::*;
 
+#[derive(Clone, Debug, PartialEq)]
+enum NotificationLoadState {
+    Loading,
+    Ready,
+    Error(String),
+}
+
+fn notification_controls_ready(state: &NotificationLoadState) -> bool {
+    matches!(state, NotificationLoadState::Ready)
+}
+
 #[component]
 pub fn NotificationsSection(house_id: String, role: String, user_id: String) -> Element {
     let api = use_context::<Signal<ApiClient>>();
     let mut preferences = use_signal(NotificationPreferences::default);
     let mut subscriptions = use_signal(Vec::<NotificationSubscription>::new);
     let mut events = use_signal(Vec::<ScheduledHouseEvent>::new);
-    let mut status = use_signal(|| "Loading notification settings…".to_string());
-    let mut loaded = use_signal(|| false);
+    let mut load_state = use_signal(|| NotificationLoadState::Loading);
     let can_create = Role::parse(&role)
         .map(|value| value != Role::Monitor)
         .unwrap_or(false);
     let load_house = house_id.clone();
     use_effect(move || {
-        if *loaded.read() {
+        if !matches!(*load_state.read(), NotificationLoadState::Loading) {
             return;
         }
-        loaded.set(true);
         let api = api.read().cloned();
         let house_id = load_house.clone();
         spawn(async move {
@@ -34,10 +43,10 @@ pub fn NotificationsSection(house_id: String, role: String, user_id: String) -> 
                     preferences.set(p);
                     subscriptions.set(s);
                     events.set(e);
-                    status.set(String::new());
+                    load_state.set(NotificationLoadState::Ready);
                 }
                 (Err(error), _, _) | (_, Err(error), _) | (_, _, Err(error)) => {
-                    status.set(format!("Unable to load notification settings: {error}"))
+                    load_state.set(NotificationLoadState::Error(error.to_string()))
                 }
             }
         });
@@ -45,10 +54,16 @@ pub fn NotificationsSection(house_id: String, role: String, user_id: String) -> 
     rsx! {
         section {
             h2 { "Notifications & schedule" }
-            if !status.read().is_empty() { p { role: "status", class: "error", "{status}" } }
-            PreferencesForm { house_id: house_id.clone(), preferences: preferences.read().clone(), on_saved: move |value| preferences.set(value) }
-            BrowserPush { house_id: house_id.clone(), subscriptions: subscriptions.read().clone(), on_changed: move |value| subscriptions.set(value) }
-            Schedule { house_id, user_id, events: events.read().clone(), can_create, admin: role == "admin" }
+            if notification_controls_ready(&load_state.read()) {
+                PreferencesForm { house_id: house_id.clone(), preferences: preferences.read().clone(), on_saved: move |value| preferences.set(value) }
+                BrowserPush { house_id: house_id.clone(), subscriptions: subscriptions.read().clone(), on_changed: move |value| subscriptions.set(value) }
+                Schedule { house_id, user_id, events: events.read().clone(), can_create, admin: role == "admin" }
+            } else if let NotificationLoadState::Error(error) = &*load_state.read() {
+                p { role: "status", class: "error", "Unable to load notification settings: {error}" }
+                button { onclick: move |_| load_state.set(NotificationLoadState::Loading), "Retry loading notification settings" }
+            } else {
+                p { role: "status", "Loading notification settings…" }
+            }
         }
     }
 }
@@ -94,8 +109,8 @@ fn PreferencesForm(
     };
     rsx! { div { class: "card",
         h3 { "Your notification preferences" }
-        label { input { r#type: "checkbox", checked: value.read().expense_created_enabled, oninput: move |e| { let mut v = value.read().clone(); v.expense_created_enabled = e.checked(); value.set(v); } } " Shared expense alerts" }
-        label { input { r#type: "checkbox", checked: value.read().reminder_enabled, oninput: move |e| { let mut v = value.read().clone(); v.reminder_enabled = e.checked(); value.set(v); } } " Scheduled reminder alerts" }
+        label { input { r#type: "checkbox", checked: value.read().expense_created_enabled, oninput: move |event| { let mut v = value.read().clone(); v.expense_created_enabled = event.checked(); value.set(v); } } " Shared expense alerts" }
+        label { input { r#type: "checkbox", checked: value.read().reminder_enabled, oninput: move |event| { let mut v = value.read().clone(); v.reminder_enabled = event.checked(); value.set(v); } } " Scheduled reminder alerts" }
         label { "Delivery", select { value: "{value.read().cadence}", onchange: move |e| { let mut v = value.read().clone(); v.cadence=e.value(); value.set(v); }, option { value: "immediate", "Immediate" } option { value: "daily_digest", "Daily digest" } } }
         label { "IANA timezone", input { value: "{value.read().timezone}", placeholder: "Europe/Lisbon", oninput: move |e| { let mut v=value.read().clone(); v.timezone=e.value(); value.set(v); } } }
         label { "Quiet start (local)", input { r#type: "time", value: "{minutes_time(value.read().quiet_start_minutes)}", oninput: move |e| { let mut v=value.read().clone(); v.quiet_start_minutes=time_minutes(&e.value()); value.set(v); } } }
@@ -236,6 +251,26 @@ fn Schedule(
         editing.set(None);
         status.set("Event editing cancelled.".into());
     };
+    let delete_house = house_id.clone();
+    let delete_event = move |deleted_id: String| {
+        let api = api.read().cloned();
+        let house_id = delete_house.clone();
+        spawn(async move {
+            match api.delete_scheduled_event(&house_id, &deleted_id).await {
+                Ok(()) => {
+                    let values = items
+                        .read()
+                        .iter()
+                        .filter(|event| event.id != deleted_id)
+                        .cloned()
+                        .collect();
+                    items.set(values);
+                    status.set("Scheduled event deleted.".into());
+                }
+                Err(error) => status.set(format!("Could not delete event: {error}")),
+            }
+        });
+    };
     let exceptions = |event: &ScheduledHouseEvent| event.exdates.join(", ");
     rsx! { div { class: "card", h3 { "Scheduled events" }
         for event in items.read().iter() { article { class: "card", h4 { "{event.title}" } p { "{event.dtstart_local} · {event.timezone} · {event.rrule}" } if !event.exdates.is_empty() { p { "Exceptions: {exceptions(event)}" } }
@@ -244,7 +279,7 @@ fn Schedule(
                     title.set(event.title.clone()); start.set(event.dtstart_local.get(..16).unwrap_or(&event.dtstart_local).to_string()); zone.set(event.timezone.clone());
                     let rule = recurrence_fields(&event.rrule); frequency.set(rule.0); interval.set(rule.1); count.set(rule.2); until.set(rule.3); exdates.set(event.exdates.join(", ")); editing.set(Some(event.id)); status.set("Editing scheduled event.".into());
                 } }
-                EventDelete { house_id: house_id.clone(), event_id: event.id.clone() }
+                EventDelete { event_id: event.id.clone(), on_delete: delete_event.clone() }
             }
         } }
         if can_create { h4 { if editing().is_some() { "Edit scheduled event" } else { "Add scheduled event" } }
@@ -285,21 +320,8 @@ fn recurrence_fields(rule: &str) -> (String, String, String, String) {
 }
 
 #[component]
-fn EventDelete(house_id: String, event_id: String) -> Element {
-    let api = use_context::<Signal<ApiClient>>();
-    let mut status = use_signal(String::new);
-    let remove = move |_| {
-        let api = api.read().cloned();
-        let h = house_id.clone();
-        let e = event_id.clone();
-        spawn(async move {
-            status.set(match api.delete_scheduled_event(&h, &e).await {
-                Ok(()) => "Event deleted; refresh this tab to update the list.".into(),
-                Err(x) => format!("Could not delete event: {x}"),
-            });
-        });
-    };
-    rsx! {button{onclick:remove,"Delete"}p{role:"status","{status}"}}
+fn EventDelete(event_id: String, on_delete: EventHandler<String>) -> Element {
+    rsx! { button { onclick: move |_| on_delete.call(event_id.clone()), "Delete" } }
 }
 fn minutes_time(value: Option<u16>) -> String {
     value
@@ -379,6 +401,17 @@ fn browser_push_state() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn notification_controls_stay_hidden_until_loading_succeeds() {
+        assert!(!notification_controls_ready(
+            &NotificationLoadState::Loading
+        ));
+        assert!(!notification_controls_ready(&NotificationLoadState::Error(
+            "offline".into()
+        )));
+        assert!(notification_controls_ready(&NotificationLoadState::Ready));
+    }
+
     #[test]
     fn service_worker_uses_generic_deduplicated_payloads() {
         let source = include_str!("../../public/roomies-sw.js");
