@@ -4,10 +4,7 @@ use reqwest::{Client, Method};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
-};
+use std::sync::{Arc, Mutex};
 
 pub fn api_base_url() -> String {
     #[cfg(target_arch = "wasm32")]
@@ -65,12 +62,31 @@ impl fmt::Display for ApiError {
 }
 impl std::error::Error for ApiError {}
 
+#[derive(Default)]
+struct SessionState {
+    token: Option<String>,
+    generation: u64,
+    valid: bool,
+}
+
+struct SessionRequest {
+    builder: reqwest::RequestBuilder,
+    generation: Option<u64>,
+}
+
+impl SessionRequest {
+    fn json<B: Serialize>(mut self, body: &B) -> Self {
+        self.builder = self.builder.json(body);
+        self
+    }
+}
+
 #[derive(Clone)]
 pub struct ApiClient {
-    token: Arc<Mutex<Option<String>>>,
+    session: Arc<Mutex<SessionState>>,
+    transition: Arc<Mutex<()>>,
     pub base_url: String,
     client: Client,
-    session_valid: Arc<AtomicBool>,
     session_store: Arc<dyn storage::SessionTokenStore>,
     storage_error: Arc<Mutex<Option<storage::StorageError>>>,
 }
@@ -84,7 +100,11 @@ impl ApiClient {
         let store = storage::production_store();
         let client = Self::with_base_url_and_store(api_base_url(), store);
         match client.session_store.load() {
-            Ok(token) => *client.token.lock().expect("session token lock poisoned") = token,
+            Ok(token) => {
+                let mut session = client.session.lock().expect("session state lock poisoned");
+                session.valid = token.is_some();
+                session.token = token;
+            }
             Err(error) => client.remember_storage_error(error),
         }
         client
@@ -97,18 +117,19 @@ impl ApiClient {
         session_store: Arc<dyn storage::SessionTokenStore>,
     ) -> Self {
         Self {
-            token: Arc::new(Mutex::new(None)),
+            session: Arc::new(Mutex::new(SessionState::default())),
+            transition: Arc::new(Mutex::new(())),
             base_url: base_url.into().trim_end_matches('/').to_string(),
             client: Client::new(),
-            session_valid: Arc::new(AtomicBool::new(true)),
             session_store,
             storage_error: Arc::new(Mutex::new(None)),
         }
     }
     pub fn has_saved_token(&self) -> bool {
-        self.token
+        self.session
             .lock()
-            .expect("session token lock poisoned")
+            .expect("session state lock poisoned")
+            .token
             .is_some()
     }
     pub fn storage_error(&self) -> Option<storage::StorageError> {
@@ -118,22 +139,32 @@ impl ApiClient {
             .expect("storage error lock poisoned")
     }
     pub fn is_authenticated(&self) -> bool {
-        self.has_saved_token() && self.session_valid.load(Ordering::Relaxed)
+        let session = self.session.lock().expect("session state lock poisoned");
+        session.token.is_some() && session.valid
     }
     fn set_token(&self, token: String) -> Result<(), ApiError> {
+        let _transition = self
+            .transition
+            .lock()
+            .expect("session transition lock poisoned");
         self.session_store
             .save(&token)
             .map_err(ApiError::SessionStorage)?;
-        *self.token.lock().expect("session token lock poisoned") = Some(token);
+        let mut session = self.session.lock().expect("session state lock poisoned");
+        session.generation = session.generation.wrapping_add(1);
+        session.token = Some(token);
+        session.valid = true;
         *self
             .storage_error
             .lock()
             .expect("storage error lock poisoned") = None;
-        self.session_valid.store(true, Ordering::Relaxed);
         Ok(())
     }
     pub fn invalidate_session(&self) {
-        self.session_valid.store(false, Ordering::Relaxed);
+        self.session
+            .lock()
+            .expect("session state lock poisoned")
+            .valid = false;
     }
     fn remember_storage_error(&self, error: storage::StorageError) {
         *self
@@ -141,9 +172,23 @@ impl ApiClient {
             .lock()
             .expect("storage error lock poisoned") = Some(error);
     }
-    fn clear_persisted_session(&self) -> Result<(), storage::StorageError> {
-        *self.token.lock().expect("session token lock poisoned") = None;
-        self.invalidate_session();
+    fn clear_persisted_session(
+        &self,
+        expected_generation: Option<u64>,
+    ) -> Result<(), storage::StorageError> {
+        let _transition = self
+            .transition
+            .lock()
+            .expect("session transition lock poisoned");
+        {
+            let mut session = self.session.lock().expect("session state lock poisoned");
+            if expected_generation.is_some_and(|generation| generation != session.generation) {
+                return Ok(());
+            }
+            session.generation = session.generation.wrapping_add(1);
+            session.token = None;
+            session.valid = false;
+        }
         let result = self.session_store.clear();
         match result {
             Ok(()) => {
@@ -156,38 +201,50 @@ impl ApiClient {
         }
         result
     }
-    fn handle_unauthorized(&self) {
-        let _ = self.clear_persisted_session();
+    fn handle_unauthorized(&self, generation: Option<u64>) {
+        if let Some(generation) = generation {
+            let _ = self.clear_persisted_session(Some(generation));
+        }
     }
-    fn request(&self, method: Method, path: &str) -> reqwest::RequestBuilder {
+    fn request(&self, method: Method, path: &str) -> SessionRequest {
+        let snapshot = {
+            let session = self.session.lock().expect("session state lock poisoned");
+            session
+                .valid
+                .then(|| {
+                    session
+                        .token
+                        .clone()
+                        .map(|token| (token, session.generation))
+                })
+                .flatten()
+        };
         let builder = self
             .client
             .request(method, format!("{}{}", self.base_url, path))
             .header("Content-Type", "application/json");
-        if self.is_authenticated() {
-            let token = self
-                .token
-                .lock()
-                .expect("session token lock poisoned")
-                .clone()
-                .expect("authenticated token");
-            builder.bearer_auth(token)
-        } else {
-            builder
+        match snapshot {
+            Some((token, generation)) => SessionRequest {
+                builder: builder.bearer_auth(token),
+                generation: Some(generation),
+            },
+            None => SessionRequest {
+                builder,
+                generation: None,
+            },
         }
     }
-    async fn send<T: DeserializeOwned>(
-        &self,
-        request: reqwest::RequestBuilder,
-    ) -> Result<T, ApiError> {
+    async fn send<T: DeserializeOwned>(&self, request: SessionRequest) -> Result<T, ApiError> {
+        let generation = request.generation;
         let response = request
+            .builder
             .send()
             .await
             .map_err(|e| ApiError::Transport(e.to_string()))?;
         let status = response.status();
         if !status.is_success() {
             if status.as_u16() == 401 {
-                self.handle_unauthorized();
+                self.handle_unauthorized(generation);
             }
             return Err(ApiError::Http {
                 status: status.as_u16(),
@@ -203,8 +260,10 @@ impl ApiClient {
             .await
             .map_err(|e| ApiError::Decode(e.to_string()))
     }
-    async fn empty(&self, request: reqwest::RequestBuilder) -> Result<(), ApiError> {
+    async fn empty(&self, request: SessionRequest) -> Result<(), ApiError> {
+        let generation = request.generation;
         let response = request
+            .builder
             .send()
             .await
             .map_err(|e| ApiError::Transport(e.to_string()))?;
@@ -216,7 +275,7 @@ impl ApiClient {
             Ok(())
         } else {
             if response.status().as_u16() == 401 {
-                self.handle_unauthorized();
+                self.handle_unauthorized(generation);
             }
             Err(ApiError::Http {
                 status: response.status().as_u16(),
@@ -266,7 +325,7 @@ impl ApiClient {
         self.send(self.request(Method::GET, "/auth/me")).await
     }
     pub fn logout(&self) -> Result<(), storage::StorageError> {
-        self.clear_persisted_session()
+        self.clear_persisted_session(None)
     }
     pub async fn get_houses(&self) -> Result<Vec<House>, ApiError> {
         self.send(self.request(Method::GET, "/houses")).await
@@ -760,6 +819,8 @@ mod tests {
         token: Mutex<Option<String>>,
         save_error: Mutex<Option<storage::StorageError>>,
         clear_error: Mutex<Option<storage::StorageError>>,
+        save_started: Mutex<Option<std::sync::mpsc::Sender<()>>>,
+        save_release: Mutex<Option<std::sync::mpsc::Receiver<()>>>,
         clears: Mutex<usize>,
     }
 
@@ -768,6 +829,12 @@ mod tests {
             Ok(self.token.lock().unwrap().clone())
         }
         fn save(&self, token: &str) -> Result<(), storage::StorageError> {
+            if let Some(started) = self.save_started.lock().unwrap().take() {
+                let _ = started.send(());
+            }
+            if let Some(release) = self.save_release.lock().unwrap().take() {
+                let _ = release.recv();
+            }
             if let Some(error) = *self.save_error.lock().unwrap() {
                 return Err(error);
             }
@@ -846,11 +913,18 @@ mod tests {
     #[test]
     fn session_invalidation_disables_stale_tokens() {
         let client = ApiClient::with_base_url("http://example");
-        *client.token.lock().unwrap() = Some("token".into());
+        {
+            let mut session = client.session.lock().unwrap();
+            session.token = Some("token".into());
+            session.valid = true;
+        }
         assert!(client.is_authenticated());
         client.invalidate_session();
         assert!(!client.is_authenticated());
-        assert_eq!(client.token.lock().unwrap().as_deref(), Some("token"));
+        assert_eq!(
+            client.session.lock().unwrap().token.as_deref(),
+            Some("token")
+        );
     }
 
     #[test]
@@ -872,7 +946,7 @@ mod tests {
         let store = Arc::new(FakeSessionStore::default());
         *store.clear_error.lock().unwrap() = Some(storage::StorageError::DeleteFailed);
         let client = ApiClient::with_base_url_and_store("http://example", store.clone());
-        *client.token.lock().unwrap() = Some("token".into());
+        client.set_token("token".into()).unwrap();
 
         assert_eq!(client.logout(), Err(storage::StorageError::DeleteFailed));
         assert!(!client.has_saved_token());
@@ -888,9 +962,10 @@ mod tests {
         let store = Arc::new(FakeSessionStore::default());
         *store.clear_error.lock().unwrap() = Some(storage::StorageError::DeleteFailed);
         let client = ApiClient::with_base_url_and_store("http://example", store.clone());
-        *client.token.lock().unwrap() = Some("token".into());
+        client.set_token("token".into()).unwrap();
+        let generation = client.session.lock().unwrap().generation;
 
-        client.handle_unauthorized();
+        client.handle_unauthorized(Some(generation));
 
         assert!(!client.has_saved_token());
         assert!(!client.is_authenticated());
@@ -899,6 +974,68 @@ mod tests {
             Some(storage::StorageError::DeleteFailed)
         );
         assert_eq!(*store.clears.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn request_snapshot_remains_panic_free_during_logout() {
+        let store = Arc::new(FakeSessionStore::default());
+        let client = ApiClient::with_base_url_and_store("http://example", store);
+        client.set_token("token".into()).unwrap();
+
+        let request = client.request(Method::GET, "/protected");
+        client.logout().unwrap();
+
+        assert!(request.generation.is_some());
+        assert!(!client.is_authenticated());
+    }
+
+    #[test]
+    fn stale_unauthorized_response_does_not_clear_replacement_session() {
+        let store = Arc::new(FakeSessionStore::default());
+        let client = ApiClient::with_base_url_and_store("http://example", store.clone());
+        client.set_token("first-token".into()).unwrap();
+        let stale_generation = client.request(Method::GET, "/protected").generation;
+        client.set_token("replacement-token".into()).unwrap();
+
+        client.handle_unauthorized(stale_generation);
+
+        assert!(client.is_authenticated());
+        assert_eq!(
+            client.session.lock().unwrap().token.as_deref(),
+            Some("replacement-token")
+        );
+        assert_eq!(
+            store.token.lock().unwrap().as_deref(),
+            Some("replacement-token")
+        );
+        assert_eq!(*store.clears.lock().unwrap(), 0);
+    }
+
+    #[test]
+    fn concurrent_logout_is_ordered_after_in_progress_session_save() {
+        let store = Arc::new(FakeSessionStore::default());
+        let client = ApiClient::with_base_url_and_store("http://example", store.clone());
+        client.set_token("first-token".into()).unwrap();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        *store.save_started.lock().unwrap() = Some(started_tx);
+        *store.save_release.lock().unwrap() = Some(release_rx);
+
+        let saving = {
+            let client = client.clone();
+            std::thread::spawn(move || client.set_token("replacement-token".into()))
+        };
+        started_rx.recv().unwrap();
+        let logging_out = {
+            let client = client.clone();
+            std::thread::spawn(move || client.logout())
+        };
+        release_tx.send(()).unwrap();
+
+        assert!(saving.join().unwrap().is_ok());
+        assert!(logging_out.join().unwrap().is_ok());
+        assert!(!client.is_authenticated());
+        assert_eq!(*store.token.lock().unwrap(), None);
     }
 
     #[test]

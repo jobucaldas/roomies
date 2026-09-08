@@ -1,6 +1,10 @@
 [workspace]
 members = ["src/app"]
+exclude = ["vendor/android-native-keyring-store"]
 resolver = "2"
+
+[patch.crates-io]
+android-native-keyring-store = { path = "vendor/android-native-keyring-store" }
 
 [profile.release]
 opt-level = "s"

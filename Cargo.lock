@@ -49,8 +49,6 @@ dependencies = [
 [[package]]
 name = "android-native-keyring-store"
 version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48c6349ddff23194f8fdce2ea8849380f5a4868c1648965b70e801e104cba9b3"
 dependencies = [
  "base64",
  "jni 0.21.1",
@@ -4909,6 +4907,7 @@ dependencies = [
  "chrono",
  "dioxus",
  "keyring-core",
+ "libc",
  "reqwest",
  "serde",
  "serde-wasm-bindgen",

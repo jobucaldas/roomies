@@ -91,15 +91,26 @@ trait SessionSecretStore: Send + Sync {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-trait LegacyTokenFile: Send + Sync {
-    fn read(&self) -> Result<Option<Vec<u8>>, StorageError>;
-    fn delete(&self) -> Result<(), StorageError>;
+trait LegacyTokenCandidate: Send {
+    fn read(&mut self) -> Result<Vec<u8>, StorageError>;
+    fn delete_verified(self: Box<Self>) -> Result<(), StorageError>;
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+trait LegacyTokenFile: Send + Sync {
+    fn open_candidate(&self) -> Result<Option<Box<dyn LegacyTokenCandidate>>, StorageError>;
+    fn delete_path(&self) -> Result<(), StorageError>;
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+static NATIVE_OPERATION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(not(target_arch = "wasm32"))]
 struct NativeSessionTokenStore {
     secret: std::sync::Arc<dyn SessionSecretStore>,
     legacy: std::sync::Arc<dyn LegacyTokenFile>,
+    #[cfg(target_os = "linux")]
+    linux_interprocess_lock: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -110,6 +121,8 @@ impl NativeSessionTokenStore {
             legacy: std::sync::Arc::new(FilesystemLegacyTokenFile {
                 path: legacy_token_path(),
             }),
+            #[cfg(target_os = "linux")]
+            linux_interprocess_lock: true,
         }
     }
 
@@ -118,43 +131,85 @@ impl NativeSessionTokenStore {
         secret: std::sync::Arc<dyn SessionSecretStore>,
         legacy: std::sync::Arc<dyn LegacyTokenFile>,
     ) -> Self {
-        Self { secret, legacy }
+        Self {
+            secret,
+            legacy,
+            #[cfg(target_os = "linux")]
+            linux_interprocess_lock: false,
+        }
     }
+
+    fn operation_guard(&self) -> Result<NativeOperationGuard<'_>, StorageError> {
+        let process_guard = NATIVE_OPERATION_LOCK
+            .lock()
+            .map_err(|_| StorageError::Unavailable)?;
+        #[cfg(target_os = "linux")]
+        let interprocess_guard = if self.linux_interprocess_lock {
+            Some(LinuxInterprocessLock::acquire()?)
+        } else {
+            None
+        };
+        Ok(NativeOperationGuard {
+            _process_guard: process_guard,
+            #[cfg(target_os = "linux")]
+            _interprocess_guard: interprocess_guard,
+        })
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct NativeOperationGuard<'a> {
+    _process_guard: std::sync::MutexGuard<'a, ()>,
+    #[cfg(target_os = "linux")]
+    _interprocess_guard: Option<LinuxInterprocessLock>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl SessionTokenStore for NativeSessionTokenStore {
     fn load(&self) -> Result<Option<String>, StorageError> {
+        let _guard = self.operation_guard()?;
         if let Some(token) = self.secret.get()? {
             let token = validate_token(token.as_bytes())?;
             // A prior migration may have stored the secret immediately before a
             // crash or failed unlink. Never read that plaintext again.
-            self.legacy.delete()?;
+            self.legacy.delete_path()?;
             return Ok(Some(token));
         }
 
-        let Some(bytes) = self.legacy.read()? else {
+        let Some(mut candidate) = self.legacy.open_candidate()? else {
             return Ok(None);
         };
-        let token = validate_token(&bytes)?;
+        let token = validate_token(&candidate.read()?)?;
         self.secret.set(&token)?;
         match self.secret.get()? {
             Some(saved) if saved == token => {}
-            Some(_) => return Err(StorageError::Corrupt),
+            Some(_) => return Err(StorageError::WriteFailed),
             None => return Err(StorageError::WriteFailed),
         }
-        self.legacy.delete()?;
+        candidate.delete_verified()?;
         Ok(Some(token))
     }
 
     fn save(&self, token: &str) -> Result<(), StorageError> {
         let token = validate_token(token.as_bytes()).map_err(|_| StorageError::WriteFailed)?;
-        self.secret.set(&token)
+        let _guard = self.operation_guard()?;
+        self.secret.set(&token)?;
+        match self.secret.get()? {
+            Some(saved) if saved == token => Ok(()),
+            _ => Err(StorageError::WriteFailed),
+        }
     }
 
     fn clear(&self) -> Result<(), StorageError> {
-        let secret_result = self.secret.delete();
-        let legacy_result = self.legacy.delete();
+        let _guard = self.operation_guard()?;
+        let secret_result = self
+            .secret
+            .delete()
+            .and_then(|()| match self.secret.get()? {
+                None => Ok(()),
+                Some(_) => Err(StorageError::DeleteFailed),
+            });
+        let legacy_result = self.legacy.delete_path();
         secret_result.and(legacy_result)
     }
 }
@@ -237,35 +292,147 @@ impl SessionSecretStore for PlatformSecretStore {
     }
 }
 
+#[cfg(target_os = "linux")]
+struct LinuxInterprocessLock(std::fs::File);
+
+#[cfg(target_os = "linux")]
+impl LinuxInterprocessLock {
+    fn acquire() -> Result<Self, StorageError> {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+
+        let directory = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(format!("/run/user/{}", unsafe { libc::geteuid() }))
+            });
+        let directory_metadata =
+            std::fs::metadata(&directory).map_err(|_| StorageError::Unavailable)?;
+        if !directory_metadata.is_dir()
+            || directory_metadata.uid() != unsafe { libc::geteuid() }
+            || directory_metadata.permissions().mode() & 0o077 != 0
+        {
+            return Err(StorageError::Unavailable);
+        }
+        let path = directory.join("app.roomies-session.lock");
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .mode(0o600)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+            .open(path)
+            .map_err(|_| StorageError::Unavailable)?;
+        let metadata = file.metadata().map_err(|_| StorageError::Unavailable)?;
+        if !metadata.is_file()
+            || metadata.uid() != unsafe { libc::geteuid() }
+            || metadata.permissions().mode() & 0o077 != 0
+        {
+            return Err(StorageError::Unavailable);
+        }
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+            if result == 0 {
+                return Ok(Self(file));
+            }
+            let error = std::io::Error::last_os_error();
+            if !matches!(error.raw_os_error(), Some(code) if code == libc::EWOULDBLOCK || code == libc::EAGAIN)
+                || std::time::Instant::now() >= deadline
+            {
+                return Err(StorageError::Unavailable);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for LinuxInterprocessLock {
+    fn drop(&mut self) {
+        use std::os::fd::AsRawFd;
+        unsafe {
+            libc::flock(self.0.as_raw_fd(), libc::LOCK_UN);
+        }
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 struct FilesystemLegacyTokenFile {
     path: Option<std::path::PathBuf>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl LegacyTokenFile for FilesystemLegacyTokenFile {
-    fn read(&self) -> Result<Option<Vec<u8>>, StorageError> {
+struct FilesystemLegacyTokenCandidate {
+    file: std::fs::File,
+    path: std::path::PathBuf,
+    device: u64,
+    inode: u64,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl LegacyTokenCandidate for FilesystemLegacyTokenCandidate {
+    fn read(&mut self) -> Result<Vec<u8>, StorageError> {
         use std::io::Read;
 
-        let Some(path) = &self.path else {
-            return Ok(None);
-        };
-        let file = match std::fs::File::open(path) {
-            Ok(file) => file,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(_) => return Err(StorageError::Unavailable),
-        };
         let mut bytes = Vec::new();
-        file.take((MAX_TOKEN_BYTES + 1) as u64)
+        self.file
+            .by_ref()
+            .take((MAX_TOKEN_BYTES + 1) as u64)
             .read_to_end(&mut bytes)
             .map_err(|_| StorageError::Unavailable)?;
         if bytes.len() > MAX_TOKEN_BYTES {
             return Err(StorageError::Corrupt);
         }
-        Ok(Some(bytes))
+        Ok(bytes)
     }
 
-    fn delete(&self) -> Result<(), StorageError> {
+    fn delete_verified(self: Box<Self>) -> Result<(), StorageError> {
+        use std::os::unix::fs::MetadataExt;
+
+        let metadata =
+            std::fs::symlink_metadata(&self.path).map_err(|_| StorageError::DeleteFailed)?;
+        if !metadata.is_file() || metadata.dev() != self.device || metadata.ino() != self.inode {
+            return Err(StorageError::DeleteFailed);
+        }
+        std::fs::remove_file(&self.path).map_err(|_| StorageError::DeleteFailed)
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl LegacyTokenFile for FilesystemLegacyTokenFile {
+    fn open_candidate(&self) -> Result<Option<Box<dyn LegacyTokenCandidate>>, StorageError> {
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+
+        let Some(path) = &self.path else {
+            return Ok(None);
+        };
+        let file = match std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK)
+            .open(path)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err(StorageError::Corrupt),
+        };
+        let metadata = file.metadata().map_err(|_| StorageError::Corrupt)?;
+        if !metadata.is_file()
+            || metadata.uid() != unsafe { libc::geteuid() }
+            || metadata.permissions().mode() & 0o077 != 0
+        {
+            return Err(StorageError::Corrupt);
+        }
+        Ok(Some(Box::new(FilesystemLegacyTokenCandidate {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+            file,
+            path: path.clone(),
+        })))
+    }
+
+    fn delete_path(&self) -> Result<(), StorageError> {
         let Some(path) = &self.path else {
             return Ok(());
         };
@@ -351,6 +518,10 @@ mod tests {
         get_error: Mutex<Option<StorageError>>,
         set_error: Mutex<Option<StorageError>>,
         delete_error: Mutex<Option<StorageError>>,
+        ignore_set: Mutex<bool>,
+        ignore_delete: Mutex<bool>,
+        set_started: Mutex<Option<std::sync::mpsc::Sender<()>>>,
+        set_release: Mutex<Option<std::sync::mpsc::Receiver<()>>>,
         sets: Mutex<usize>,
         deletes: Mutex<usize>,
     }
@@ -364,10 +535,18 @@ mod tests {
         }
         fn set(&self, token: &str) -> Result<(), StorageError> {
             *self.sets.lock().unwrap() += 1;
+            if let Some(started) = self.set_started.lock().unwrap().take() {
+                let _ = started.send(());
+            }
+            if let Some(release) = self.set_release.lock().unwrap().take() {
+                let _ = release.recv();
+            }
             if let Some(error) = *self.set_error.lock().unwrap() {
                 return Err(error);
             }
-            *self.value.lock().unwrap() = Some(token.to_owned());
+            if !*self.ignore_set.lock().unwrap() {
+                *self.value.lock().unwrap() = Some(token.to_owned());
+            }
             Ok(())
         }
         fn delete(&self) -> Result<(), StorageError> {
@@ -375,24 +554,53 @@ mod tests {
             if let Some(error) = *self.delete_error.lock().unwrap() {
                 return Err(error);
             }
-            *self.value.lock().unwrap() = None;
+            if !*self.ignore_delete.lock().unwrap() {
+                *self.value.lock().unwrap() = None;
+            }
             Ok(())
         }
     }
 
     #[derive(Default)]
     struct FakeLegacy {
-        value: Mutex<Option<Vec<u8>>>,
-        reads: Mutex<usize>,
-        deletes: Mutex<usize>,
+        value: Arc<Mutex<Option<Vec<u8>>>>,
+        reads: Arc<Mutex<usize>>,
+        deletes: Arc<Mutex<usize>>,
+    }
+
+    struct FakeLegacyCandidate {
+        value: Arc<Mutex<Option<Vec<u8>>>>,
+        reads: Arc<Mutex<usize>>,
+        deletes: Arc<Mutex<usize>>,
+        bytes: Vec<u8>,
+    }
+
+    impl LegacyTokenCandidate for FakeLegacyCandidate {
+        fn read(&mut self) -> Result<Vec<u8>, StorageError> {
+            *self.reads.lock().unwrap() += 1;
+            Ok(self.bytes.clone())
+        }
+
+        fn delete_verified(self: Box<Self>) -> Result<(), StorageError> {
+            *self.deletes.lock().unwrap() += 1;
+            *self.value.lock().unwrap() = None;
+            Ok(())
+        }
     }
 
     impl LegacyTokenFile for FakeLegacy {
-        fn read(&self) -> Result<Option<Vec<u8>>, StorageError> {
-            *self.reads.lock().unwrap() += 1;
-            Ok(self.value.lock().unwrap().clone())
+        fn open_candidate(&self) -> Result<Option<Box<dyn LegacyTokenCandidate>>, StorageError> {
+            Ok(self.value.lock().unwrap().clone().map(|bytes| {
+                Box::new(FakeLegacyCandidate {
+                    value: self.value.clone(),
+                    reads: self.reads.clone(),
+                    deletes: self.deletes.clone(),
+                    bytes,
+                }) as Box<dyn LegacyTokenCandidate>
+            }))
         }
-        fn delete(&self) -> Result<(), StorageError> {
+
+        fn delete_path(&self) -> Result<(), StorageError> {
             *self.deletes.lock().unwrap() += 1;
             *self.value.lock().unwrap() = None;
             Ok(())
@@ -412,6 +620,31 @@ mod tests {
         assert_eq!(store.load().unwrap().as_deref(), Some("token"));
         store.clear().unwrap();
         assert_eq!(*secret.value.lock().unwrap(), None);
+    }
+
+    #[test]
+    fn successful_set_without_durable_mutation_is_rejected() {
+        let secret = Arc::new(FakeSecret::default());
+        *secret.ignore_set.lock().unwrap() = true;
+        let legacy = Arc::new(FakeLegacy::default());
+
+        assert_eq!(
+            store(secret, legacy).save("token"),
+            Err(StorageError::WriteFailed)
+        );
+    }
+
+    #[test]
+    fn successful_delete_without_durable_mutation_is_rejected() {
+        let secret = Arc::new(FakeSecret::default());
+        *secret.value.lock().unwrap() = Some("token".into());
+        *secret.ignore_delete.lock().unwrap() = true;
+        let legacy = Arc::new(FakeLegacy::default());
+
+        assert_eq!(
+            store(secret, legacy).clear(),
+            Err(StorageError::DeleteFailed)
+        );
     }
 
     #[test]
@@ -456,6 +689,20 @@ mod tests {
     }
 
     #[test]
+    fn successful_migration_write_without_durable_mutation_retains_legacy_file() {
+        let secret = Arc::new(FakeSecret::default());
+        *secret.ignore_set.lock().unwrap() = true;
+        let legacy = Arc::new(FakeLegacy::default());
+        *legacy.value.lock().unwrap() = Some(b"legacy-token".to_vec());
+
+        assert_eq!(
+            store(secret, legacy.clone()).load(),
+            Err(StorageError::WriteFailed)
+        );
+        assert!(legacy.value.lock().unwrap().is_some());
+    }
+
+    #[test]
     fn malformed_and_oversized_legacy_tokens_are_rejected_and_retained() {
         for value in [
             b"token with spaces".to_vec(),
@@ -487,6 +734,37 @@ mod tests {
     }
 
     #[test]
+    fn migration_waits_for_concurrent_save_and_does_not_overwrite_it() {
+        let secret = Arc::new(FakeSecret::default());
+        let legacy = Arc::new(FakeLegacy::default());
+        *legacy.value.lock().unwrap() = Some(b"legacy-token".to_vec());
+        let store = Arc::new(store(secret.clone(), legacy));
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        *secret.set_started.lock().unwrap() = Some(started_tx);
+        *secret.set_release.lock().unwrap() = Some(release_rx);
+
+        let saving = {
+            let store = store.clone();
+            std::thread::spawn(move || store.save("new-token"))
+        };
+        started_rx.recv().unwrap();
+        let loading = {
+            let store = store.clone();
+            std::thread::spawn(move || store.load())
+        };
+        release_tx.send(()).unwrap();
+
+        assert_eq!(saving.join().unwrap(), Ok(()));
+        assert_eq!(
+            loading.join().unwrap().unwrap().as_deref(),
+            Some("new-token")
+        );
+        assert_eq!(secret.value.lock().unwrap().as_deref(), Some("new-token"));
+        assert_eq!(*secret.sets.lock().unwrap(), 1);
+    }
+
+    #[test]
     fn clear_removes_secure_and_legacy_values() {
         let secret = Arc::new(FakeSecret::default());
         *secret.value.lock().unwrap() = Some("secure-token".into());
@@ -509,6 +787,133 @@ mod tests {
             Err(StorageError::DeleteFailed)
         );
         assert_eq!(*legacy.value.lock().unwrap(), None);
+    }
+
+    #[cfg(all(unix, not(target_os = "android")))]
+    fn filesystem_test_directory(name: &str) -> std::path::PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = std::env::temp_dir().join(format!(
+            "roomies-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        path
+    }
+
+    #[cfg(all(unix, not(target_os = "android")))]
+    #[test]
+    fn legacy_migration_rejects_symlinks_without_deleting_them() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+
+        let directory = filesystem_test_directory("legacy-symlink");
+        let target = directory.join("target");
+        std::fs::write(&target, b"token").unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let path = directory.join("session.token");
+        symlink(&target, &path).unwrap();
+        let legacy = FilesystemLegacyTokenFile {
+            path: Some(path.clone()),
+        };
+
+        assert!(matches!(
+            legacy.open_candidate(),
+            Err(StorageError::Corrupt)
+        ));
+        assert!(std::fs::symlink_metadata(&path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(all(unix, not(target_os = "android")))]
+    #[test]
+    fn legacy_migration_rejects_group_or_other_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = filesystem_test_directory("legacy-mode");
+        let path = directory.join("session.token");
+        std::fs::write(&path, b"token").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+        let legacy = FilesystemLegacyTokenFile {
+            path: Some(path.clone()),
+        };
+
+        assert!(matches!(
+            legacy.open_candidate(),
+            Err(StorageError::Corrupt)
+        ));
+        assert!(path.exists());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(all(unix, not(target_os = "android")))]
+    #[test]
+    fn legacy_migration_rejects_fifo_without_blocking() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let directory = filesystem_test_directory("legacy-fifo");
+        let path = directory.join("session.token");
+        let c_path = CString::new(path.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+        let legacy = FilesystemLegacyTokenFile {
+            path: Some(path.clone()),
+        };
+
+        assert!(matches!(
+            legacy.open_candidate(),
+            Err(StorageError::Corrupt)
+        ));
+        assert!(path.exists());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(all(unix, not(target_os = "android")))]
+    #[test]
+    fn legacy_candidate_refuses_to_unlink_a_replacement() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = filesystem_test_directory("legacy-replacement");
+        let path = directory.join("session.token");
+        std::fs::write(&path, b"old-token").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let legacy = FilesystemLegacyTokenFile {
+            path: Some(path.clone()),
+        };
+        let mut candidate = legacy.open_candidate().unwrap().unwrap();
+        assert_eq!(candidate.read().unwrap(), b"old-token");
+        std::fs::rename(&path, directory.join("original")).unwrap();
+        std::fs::write(&path, b"new-token").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+        assert_eq!(candidate.delete_verified(), Err(StorageError::DeleteFailed));
+        assert_eq!(std::fs::read(&path).unwrap(), b"new-token");
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn vendored_android_provider_does_not_describe_jni_exceptions() {
+        let vault =
+            include_str!("../../../vendor/android-native-keyring-store/src/by_store/vault.rs");
+        let legacy =
+            include_str!("../../../vendor/android-native-keyring-store/src/by_service/mod.rs");
+        let preferences =
+            include_str!("../../../vendor/android-native-keyring-store/src/shared_preferences.rs");
+        let credentials =
+            include_str!("../../../vendor/android-native-keyring-store/src/by_store/cred.rs");
+        assert!(!vault.contains("exception_describe"));
+        assert!(!legacy.contains("exception_describe"));
+        assert!(!preferences.contains("tracing::error"));
+        assert!(!preferences.contains("tracing::debug"));
+        assert!(!credentials.contains(".commit(env)?;"));
+        assert!(credentials.contains("CommitFailed"));
     }
 
     #[cfg(not(target_os = "android"))]
