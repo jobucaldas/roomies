@@ -47,13 +47,25 @@ test.beforeEach(async ({ page }) => {
 test.afterEach(async ({ page }, info: TestInfo) => {
   const value = evidence.get(page)!;
   await Promise.allSettled(value.assetBodies);
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const configuredCommit = process.env.GIT_COMMIT;
   const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+  const assets = Object.keys(value.assetHashes);
+  expect(configuredCommit, 'GIT_COMMIT must be configured for exact-head evidence').toBe(head);
+  expect(assets.some(path => path === '/' || path.endsWith('.html')), 'served HTML hash is required').toBeTruthy();
+  expect(assets.some(path => path.endsWith('.js')), 'served JavaScript hash is required').toBeTruthy();
+  expect(assets.some(path => path.endsWith('.wasm')), 'served WASM hash is required').toBeTruthy();
+  expect(value.consoleErrors).toEqual([]);
+  expect(value.pageErrors).toEqual([]);
+  expect(value.failedRequests).toEqual([]);
+  expect(value.unexpectedResponses).toEqual([]);
+  expect(horizontalOverflow).toBeFalsy();
   await mkdir('artifacts/evidence', { recursive: true });
   const name = `${info.project.name}-household-${slug(info.title)}`;
   // The chat interaction deletes its synthetic message before this screenshot so evidence never contains a chat body.
   await page.screenshot({ path: `artifacts/evidence/${name}.png`, fullPage: true });
   await writeFile(`artifacts/evidence/${name}.json`, JSON.stringify({
-    head: process.env.GIT_COMMIT ?? execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    head,
     command: process.env.ROOMIES_E2E_COMMAND ?? 'npx playwright test',
     project: info.project.name,
     test: info.title,
@@ -65,11 +77,6 @@ test.afterEach(async ({ page }, info: TestInfo) => {
     horizontalOverflow,
     assetHashes: value.assetHashes,
   }, null, 2) + '\n');
-  expect(value.consoleErrors).toEqual([]);
-  expect(value.pageErrors).toEqual([]);
-  expect(value.failedRequests).toEqual([]);
-  expect(value.unexpectedResponses).toEqual([]);
-  expect(horizontalOverflow).toBeFalsy();
 });
 
 async function register(request: APIRequestContext) {
@@ -138,8 +145,10 @@ test('household groceries chores calendar and chat interactions', async ({ page,
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(page.getByText('Message sent.')).toBeVisible();
   await page.getByRole('button', { name: 'Edit message' }).click();
+  await page.getByLabel('Message').fill('Synthetic edited message');
   await page.getByRole('button', { name: 'Save message' }).click();
   await expect(page.getByText('Message edited.')).toBeVisible();
+  await expect(page.getByText('Synthetic edited message', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Delete message' }).click();
   await expect(page.getByText('Message deleted.')).toBeVisible();
   await page.getByRole('button', { name: 'Refresh chat' }).click();
