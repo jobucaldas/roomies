@@ -15,6 +15,11 @@ pub fn Register() -> Element {
 
     let mut api = use_context::<Signal<ApiClient>>();
     let mut current_user = use_context::<Signal<Option<User>>>();
+    let saved_storage_error = api
+        .read()
+        .storage_error()
+        .map(|error| error.to_string())
+        .unwrap_or_default();
 
     let on_submit = move |event: Event<FormData>| {
         event.prevent_default();
@@ -50,6 +55,8 @@ pub fn Register() -> Element {
 
             if !error.read().is_empty() {
                 div { class: "error", "{error}" }
+            } else if !saved_storage_error.is_empty() {
+                div { class: "error", "{saved_storage_error}" }
             }
 
             form { onsubmit: on_submit,

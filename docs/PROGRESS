@@ -1,0 +1,12 @@
+# Implementation progress
+
+## Native session secrets
+
+- Web continues to store `roomies.session.token` in browser `localStorage`.
+- Linux desktop stores the session bearer token in Secret Service under the stable `app.roomies` namespace, using `keyring-core` and `zbus-secret-service-keyring-store` with pure-Rust cryptography.
+- Android uses the named `app.roomies` `android-native-keyring-store`, whose values are encrypted with Android Keystore-backed key material. The deprecated per-service legacy backend is not enabled.
+- Native clients have no plaintext fallback. Unavailable, corrupt, write, and delete failures become bounded generic errors; bearer values and provider error details are not displayed.
+- The exact former `session.token` path is consulted only after secure storage is available and empty. A nonempty printable token of at most 8 KiB is written and read back from secure storage before the old file is deleted. Failed or invalid migrations retain the file for a later safe retry. Logout and HTTP 401 cleanup clear in-memory authentication and attempt both secure and legacy deletion.
+- Host fake-backed tests cover secure get/set/delete, migration success and idempotence, unavailable storage without plaintext reads, failed writes retaining plaintext, malformed/oversized rejection, and logout/401 cleanup failures.
+
+Build validation covers web tests/checks, Linux desktop compilation, Android cross-compilation, and inclusion of the native keyring code in Dioxus's generated Android shared library. Runtime acceptance against an unlocked Linux Secret Service and an Android device Keystore remains outstanding. The Nix Dioxus 0.6.3 APK assembly step also remains environment-blocked because its generated Gradle project requests Android platform 33/build-tools 34 from the read-only Nix SDK, while the project shell provides platform/build-tools 35; Rust compilation and native-library bundling complete before that failure.

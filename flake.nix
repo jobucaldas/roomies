@@ -2,25 +2,30 @@
   description = "Roomies release baseline shells and checks";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+  inputs.rust-overlay = {
+    url = "github:oxalica/rust-overlay";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, rust-overlay }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs {
         inherit system;
+        overlays = [ (import rust-overlay) ];
         config = {
           allowUnfree = true;
           android_sdk.accept_license = true;
         };
       };
+      rustToolchain = pkgs.rust-bin.stable."1.89.0".default.override {
+        targets = [ "aarch64-linux-android" ];
+      };
       commonPackages = with pkgs; [
-        cargo
-        clippy
+        rustToolchain
         curl
         git
         jq
-        rustc
-        rustfmt
       ];
       webPackages = with pkgs; [
         dioxus-cli

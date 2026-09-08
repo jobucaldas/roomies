@@ -109,7 +109,7 @@ pub fn Dashboard() -> Element {
 
             br {}
             button { onclick: move |_| {
-                api.write().logout();
+                let _ = api.write().logout();
                 current_user.set(None);
                 router.replace(Route::Login {});
             }, "Logout" }

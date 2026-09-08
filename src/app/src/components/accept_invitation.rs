@@ -124,7 +124,7 @@ pub fn AcceptInvitation(token: Option<String>) -> Element {
 
 fn invitation_failure_is_retryable(error: &ApiError) -> bool {
     match error {
-        ApiError::Transport(_) | ApiError::Decode(_) => true,
+        ApiError::Transport(_) | ApiError::Decode(_) | ApiError::SessionStorage(_) => true,
         ApiError::Http { status, .. } => matches!(*status, 401 | 408 | 429) || *status >= 500,
     }
 }

@@ -21,16 +21,16 @@ fn App() -> Element {
             return;
         }
         restore_started.set(true);
-        let mut client = api.read().clone();
+        let client = api.read().clone();
         let mut api = api;
         let mut current_user = current_user;
         let mut session_ready = session_ready;
         spawn(async move {
-            if client.token.is_some() {
+            if client.has_saved_token() {
                 match client.me().await {
                     Ok(user) => current_user.set(Some(user)),
                     Err(ApiError::Http { status: 401, .. }) => {
-                        client.logout();
+                        let _ = client.logout();
                         api.set(client);
                         current_user.set(None);
                     }
