@@ -106,51 +106,53 @@ async function household(page: Page, request: APIRequestContext) {
 
 async function open(page: Page, tab: string, heading: string) {
   await page.getByRole('tab', { name: tab }).click();
-  await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+  const panel = page.getByRole('tabpanel', { name: tab });
+  await expect(panel.getByRole('heading', { name: heading })).toBeVisible();
+  return panel;
 }
 
 test('household groceries chores calendar and chat interactions', async ({ page, request }) => {
   await household(page, request);
 
-  await open(page, 'Groceries', 'Groceries');
-  await page.getByLabel('Name').fill('Validation grocery');
-  await page.getByRole('button', { name: 'Add grocery' }).click();
-  await expect(page.getByText('Grocery saved.')).toBeVisible();
-  await page.getByRole('button', { name: 'Check' }).click();
-  await expect(page.getByText('Checked')).toBeVisible();
-  await page.getByRole('button', { name: 'Delete' }).click();
-  await expect(page.getByText('Grocery deleted.')).toBeVisible();
+  const groceries = await open(page, 'Groceries', 'Groceries');
+  await groceries.getByLabel('Name').fill('Validation grocery');
+  await groceries.getByRole('button', { name: 'Add grocery' }).click();
+  await expect(groceries.getByText('Grocery saved.')).toBeVisible();
+  await groceries.getByRole('button', { name: 'Check' }).click();
+  await expect(groceries.getByText('Checked')).toBeVisible();
+  await groceries.getByRole('button', { name: 'Delete' }).click();
+  await expect(groceries.getByText('Grocery deleted.')).toBeVisible();
 
-  await open(page, 'Chores', 'Chores');
-  await page.getByLabel('Title').fill('Validation chore');
-  await page.getByLabel('Due local').fill('2030-01-07T09:00');
-  await page.getByRole('button', { name: 'Create chore' }).click();
-  await expect(page.getByText('Chore saved.')).toBeVisible();
-  await page.getByRole('button', { name: 'Disable' }).click();
-  await expect(page.getByText('Chore enabled state saved.')).toBeVisible();
-  await page.getByRole('button', { name: 'Delete' }).click();
-  await expect(page.getByText('Chore deleted.')).toBeVisible();
+  const chores = await open(page, 'Chores', 'Chores');
+  await chores.getByLabel('Title').fill('Validation chore');
+  await chores.getByLabel('Due local').fill('2030-01-07T09:00');
+  await chores.getByRole('button', { name: 'Create chore' }).click();
+  await expect(chores.getByText('Chore saved.')).toBeVisible();
+  await chores.getByRole('button', { name: 'Disable' }).click();
+  await expect(chores.getByText('Chore enabled state saved.')).toBeVisible();
+  await chores.getByRole('button', { name: 'Delete' }).click();
+  await expect(chores.getByText('Chore deleted.')).toBeVisible();
 
-  await open(page, 'Calendar', 'Calendar');
-  await page.getByLabel('Title').fill('Validation calendar event');
-  await page.getByLabel('Start local').fill('2030-01-07T09:00');
-  await page.getByLabel('End local').fill('2030-01-07T10:00');
-  await page.getByRole('button', { name: 'Create calendar event' }).click();
-  await expect(page.getByText('Calendar event saved.')).toBeVisible();
-  await page.getByRole('button', { name: 'Delete' }).click();
-  await expect(page.getByText('Calendar event deleted.')).toBeVisible();
+  const calendar = await open(page, 'Calendar', 'Calendar');
+  await calendar.getByLabel('Title').fill('Validation calendar event');
+  await calendar.getByLabel('Start local').fill('2030-01-07T09:00');
+  await calendar.getByLabel('End local').fill('2030-01-07T10:00');
+  await calendar.getByRole('button', { name: 'Create calendar event' }).click();
+  await expect(calendar.getByText('Calendar event saved.')).toBeVisible();
+  await calendar.getByRole('button', { name: 'Delete' }).click();
+  await expect(calendar.getByText('Calendar event deleted.')).toBeVisible();
 
-  await open(page, 'Chat', 'Chat');
-  await page.getByLabel('Message').fill('Synthetic message');
-  await page.getByRole('button', { name: 'Send message' }).click();
-  await expect(page.getByText('Message sent.')).toBeVisible();
-  await page.getByRole('button', { name: 'Edit message' }).click();
-  await page.getByLabel('Message').fill('Synthetic edited message');
-  await page.getByRole('button', { name: 'Save message' }).click();
-  await expect(page.getByText('Message edited.')).toBeVisible();
-  await expect(page.getByText('Synthetic edited message', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Delete message' }).click();
-  await expect(page.getByText('Message deleted.')).toBeVisible();
-  await page.getByRole('button', { name: 'Refresh chat' }).click();
-  await expect(page.getByText('Chat refreshed.')).toBeVisible();
+  const chat = await open(page, 'Chat', 'Chat');
+  await chat.getByLabel('Message').fill('Synthetic message');
+  await chat.getByRole('button', { name: 'Send message' }).click();
+  await expect(chat.getByText('Message sent.')).toBeVisible();
+  await chat.getByRole('button', { name: 'Edit message' }).click();
+  await chat.getByLabel('Message').fill('Synthetic edited message');
+  await chat.getByRole('button', { name: 'Save message' }).click();
+  await expect(chat.getByText('Message edited.')).toBeVisible();
+  await expect(chat.getByText('Synthetic edited message', { exact: true })).toBeVisible();
+  await chat.getByRole('button', { name: 'Delete message' }).click();
+  await expect(chat.getByText('Message deleted.')).toBeVisible();
+  await chat.getByRole('button', { name: 'Refresh chat' }).click();
+  await expect(chat.getByText('Chat refreshed.')).toBeVisible();
 });
