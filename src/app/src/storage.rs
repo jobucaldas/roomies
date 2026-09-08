@@ -899,19 +899,36 @@ mod tests {
     }
 
     #[test]
-    fn vendored_android_provider_does_not_describe_jni_exceptions() {
+    fn vendored_android_named_store_has_no_sensitive_diagnostics() {
         let vault =
             include_str!("../../../vendor/android-native-keyring-store/src/by_store/vault.rs");
-        let legacy =
-            include_str!("../../../vendor/android-native-keyring-store/src/by_service/mod.rs");
-        let preferences =
-            include_str!("../../../vendor/android-native-keyring-store/src/shared_preferences.rs");
+        let store =
+            include_str!("../../../vendor/android-native-keyring-store/src/by_store/store.rs");
         let credentials =
             include_str!("../../../vendor/android-native-keyring-store/src/by_store/cred.rs");
+        let legacy =
+            include_str!("../../../vendor/android-native-keyring-store/src/by_service/mod.rs");
+        let active_helpers = [
+            include_str!("../../../vendor/android-native-keyring-store/src/shared_preferences.rs"),
+            include_str!("../../../vendor/android-native-keyring-store/src/keystore.rs"),
+            include_str!("../../../vendor/android-native-keyring-store/src/crypto.rs"),
+            include_str!("../../../vendor/android-native-keyring-store/src/cipher.rs"),
+            include_str!("../../../vendor/android-native-keyring-store/src/methods.rs"),
+            include_str!("../../../vendor/android-native-keyring-store/src/lib.rs"),
+        ];
+
+        for source in [vault, store, credentials]
+            .into_iter()
+            .chain(active_helpers)
+        {
+            assert!(!source.contains("log::"));
+            assert!(!source.contains("tracing::"));
+        }
+        for source in [vault, store, credentials] {
+            assert!(!source.contains(".field("));
+        }
         assert!(!vault.contains("exception_describe"));
         assert!(!legacy.contains("exception_describe"));
-        assert!(!preferences.contains("tracing::error"));
-        assert!(!preferences.contains("tracing::debug"));
         assert!(!credentials.contains(".commit(env)?;"));
         assert!(credentials.contains("CommitFailed"));
     }

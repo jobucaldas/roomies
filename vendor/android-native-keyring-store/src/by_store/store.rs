@@ -83,11 +83,7 @@ pub struct Store {
 
 impl std::fmt::Debug for Store {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Store")
-            .field("vendor", &self.vendor())
-            .field("id", &self.id)
-            .field("config", &self.config)
-            .finish()
+        f.write_str("AndroidCredentialStore")
     }
 }
 
@@ -194,7 +190,6 @@ impl CredentialStoreApi for Store {
             ));
         }
         let id = format!("{user}{divider}{service}");
-        log::debug!("Building entry {id:?} for ({service:?}, {user:?})");
         let credential = Cred::new_specifier(self.vault.clone(), &id, service, user);
         Ok(Entry::new_with_credential(Arc::new(credential)))
     }

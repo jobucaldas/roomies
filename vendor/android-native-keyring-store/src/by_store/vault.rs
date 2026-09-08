@@ -33,7 +33,6 @@ static VAULTS: Mutex<Vec<AtomicVault>> = Mutex::new(Vec::new());
 /// If an existing vault with that name has a different config, return
 /// an error naming one of the differences.
 pub fn lookup(config: &StoreConfig) -> Result<AtomicVault> {
-    log::debug!("Looking up vault with config: {:?}", config);
     let mut vaults = VAULTS
         .lock()
         .expect("Vaults list lock poisoned: report a bug!");
@@ -42,20 +41,13 @@ pub fn lookup(config: &StoreConfig) -> Result<AtomicVault> {
         let guard = vault.lock().expect("Vault lock poisoned: report a bug!");
         if config.name == guard.config.name {
             config.diff(&guard.config)?;
-            log::debug!("Found already-in-use vault {:?}", config.name);
             return Ok(vault.clone());
         }
     }
     // next look for or create a matching vault with the same filename
     let vault = match Vault::find(config)? {
-        Some(vault) => {
-            log::debug!("Found existing-but-not-in-use vault {:?}", config.name);
-            vault
-        }
-        None => {
-            log::debug!("Creating new vault {:?}", config.name);
-            Vault::new(config)?
-        }
+        Some(vault) => vault,
+        None => Vault::new(config)?,
     };
     let atomic_vault = Arc::new(Mutex::new(vault));
     vaults.push(atomic_vault.clone());
@@ -68,7 +60,6 @@ pub fn lookup(config: &StoreConfig) -> Result<AtomicVault> {
 ///
 /// If the matching vault is in use, return an error.
 pub fn delete(config: &StoreConfig) -> Result<bool> {
-    log::debug!("Deleting vault with config: {:?}", config);
     let vaults = VAULTS
         .lock()
         .expect("Vaults list lock poisoned: report a bug!");
@@ -76,16 +67,13 @@ pub fn delete(config: &StoreConfig) -> Result<bool> {
         let guard = vault.lock().expect("Vault lock poisoned: report a bug!");
         if config.name == guard.config.name {
             config.diff(&guard.config)?;
-            log::debug!("Found already-in-use vault for {}", config.name);
             return Err(Error::NotSupportedByStore("Store is in use".to_string()));
         }
     }
     if let Some(vault) = Vault::find(config)? {
-        log::debug!("Found existing vault to delete for {}", config.name);
         vault.delete()?;
         return Ok(true);
     }
-    log::debug!("No existing vault found to delete");
     Ok(false)
 }
 
@@ -108,9 +96,7 @@ pub struct Vault {
 
 impl std::fmt::Debug for Vault {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Vault")
-            .field("config", &self.config)
-            .finish()
+        f.write_str("AndroidCredentialVault")
     }
 }
 
@@ -148,7 +134,6 @@ impl Vault {
             let err = "must contain a non-alphabetic character".to_string();
             return Err(Error::Invalid("divider".to_string(), err));
         }
-        log::debug!("Creating new vault with config {config:?}");
         let (vm, context) = get_ndk_context()?;
         let mut vault = Self {
             vm,
@@ -187,12 +172,9 @@ impl Vault {
 
     /// Deletes the vault, which better not be in use!
     fn delete(&self) -> Result<()> {
-        log::debug!("Deleting vault with config {:?}", self.config);
         self.with_env(|env| {
             self.delete_key(env)?;
-            if !self.delete_file(env)? {
-                log::warn!("Failed to find file {:?}", self.config.filename);
-            }
+            let _ = self.delete_file(env)?;
             Ok(())
         })?;
         Ok(())
@@ -298,7 +280,6 @@ impl Vault {
     }
 
     fn delete_key(&self, env: &mut JNIEnv) -> AndroidKeyringResult<()> {
-        log::debug!("Deleting key for {:?}", self.config.filename);
         let _lock = KEY_SERVICE_LOCK
             .lock()
             .expect("Key service lock poisoned: report a bug!");
@@ -314,7 +295,6 @@ impl Vault {
     }
 
     pub fn delete_file(&self, env: &mut JNIEnv) -> AndroidKeyringResult<bool> {
-        log::debug!("Deleting file for {:?}", self.config.filename);
         let ctx = Context::from_raw(self.context.clone());
         Ok(ctx.delete_shared_preferences(env, &self.config.filename)?)
     }

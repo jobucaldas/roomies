@@ -22,11 +22,7 @@ pub struct Cred {
 
 impl std::fmt::Debug for Cred {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AndroidCredential")
-            .field("vault", &self.vault)
-            .field("key", &self.id)
-            .field("specifiers", &self.specifiers)
-            .finish()
+        f.write_str("AndroidCredential")
     }
 }
 
@@ -69,11 +65,9 @@ impl CredentialApi for Cred {
         let result = vault.with_key_and_file(|env, key, file| {
             let ciphertext = file.get_binary(env, &self.id)?;
             if let Some(data) = ciphertext {
-                log::debug!("Found secret for id {:?}", self.id);
                 let plaintext = decrypt(env, key, data)?;
                 Ok(Some(plaintext))
             } else {
-                log::debug!("No secret found for id {:?}", self.id);
                 Ok(None)
             }
         })?;
@@ -91,10 +85,8 @@ impl CredentialApi for Cred {
         vault.with_env(|env| {
             let file = vault.get_file(env)?;
             if !file.contains(env, &self.id)? {
-                log::debug!("No credential to delete for id {:?}", self.id);
                 return Err(keyring_core::Error::NoEntry.into());
             }
-            log::debug!("Deleting credential for id {:?}", self.id);
             let editor = file.edit(env)?;
             if !editor.remove(env, &self.id)?.commit(env)? {
                 return Err(crate::error::AndroidKeyringError::CommitFailed);
@@ -112,10 +104,8 @@ impl CredentialApi for Cred {
         vault.with_env(|env| {
             let file = vault.get_file(env)?;
             if !file.contains(env, &self.id)? {
-                log::debug!("No credential for id {:?}", self.id);
                 Err(keyring_core::Error::NoEntry)?;
             }
-            log::debug!("Found credential for id {:?}", self.id);
             Ok(())
         })?;
         Ok(None)
