@@ -7,7 +7,8 @@
 ## Frontend
 - Web: `cargo test -p roomies-app --no-default-features --features web`
 - Desktop: `cargo check -p roomies-app --no-default-features --features desktop`
-- Android: `cd src/app && dx build --release --android`
+- Android ARM64 check: `nix develop .#android --command cargo check -p roomies-app --no-default-features --features mobile --target aarch64-linux-android`
+- Android APK (optimized Rust payload, development signing): `nix develop .#android --command make android`
 
 ## Invitation onboarding browser flow
 The reusable Playwright harness uses synthetic accounts and Mailpit; it never prints or renders bearer tokens. Start the existing stack with SMTP pointed at the disposable sink, then run:
@@ -52,6 +53,7 @@ Chore completion deliberately requires an exact UTC RFC3339 occurrence, while cr
 ## Nix shells
 - `nix develop .#web --command cargo test -p roomies-app --no-default-features --features web`
 - `nix develop .#desktop --command cargo check -p roomies-app --no-default-features --features desktop`
+- `nix develop .#android --command make android`
 - `nix develop .#container --command podman-compose -f docker-compose.yml config`
 
 ## Current environment gap

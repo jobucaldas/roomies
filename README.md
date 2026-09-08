@@ -33,7 +33,7 @@ make smoke
 - Backend: `cd src/backend && DATABASE_URL=sqlite://roomies.db JWT_SECRET=dev-secret go run ./main.go`
 - Web: `cd src/app && dx serve`
 - Linux desktop: `cargo check -p roomies-app --no-default-features --features desktop`
-- Android: `cd src/app && dx build --release --android`
+- Android APK (optimized Rust payload, development signing): `nix develop .#android --command make android`
 
 ## Nix shells
 Available shells: `default`, `web`, `desktop`, `android`, `e2e`, `ocr`, `export`, and `container`.

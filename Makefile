@@ -55,7 +55,7 @@ smoke:
 	curl --fail --silent --show-error http://localhost:8080/healthz
 
 android:
-	cd src/app && dx build --release --android
+	cd src/app && dx build --release --platform android --target aarch64-linux-android
 
 shell-db:
 	$(COMPOSE) -f .devcontainer/docker-compose.yml exec db psql -U roomies roomies

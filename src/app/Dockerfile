@@ -1,4 +1,4 @@
-FROM docker.io/rust:1.88-bookworm AS builder
+FROM docker.io/rust:1.89-bookworm AS builder
 
 ARG DIOXUS_CLI_VERSION=0.7.10
 RUN rustup target add wasm32-unknown-unknown \

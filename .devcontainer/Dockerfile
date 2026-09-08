@@ -1,4 +1,4 @@
-FROM docker.io/rust:1.88-alpine
+FROM docker.io/rust:1.89-alpine
 
 RUN apk add --no-cache \
     git \
@@ -14,7 +14,7 @@ RUN apk add --no-cache \
     nodejs \
     npm \
     && rustup target add wasm32-unknown-unknown \
-    && cargo install dioxus-cli --version 0.7.9 --locked
+    && cargo install dioxus-cli --version 0.7.10 --locked
 
 WORKDIR /workspace
 CMD ["sleep", "infinity"]

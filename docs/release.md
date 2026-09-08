@@ -3,6 +3,9 @@
 ## Build
 - Backend image: `podman build -f src/backend/Dockerfile -t <registry>/roomies-backend:<tag> src/backend`
 - Frontend bundle image: `podman build -f src/app/Dockerfile -t <registry>/roomies-frontend:<tag> .`
+- Android APK with an optimized Rust payload: `nix develop .#android --command make android`
+
+The Android command uses the repository-pinned Rust 1.89.0, Dioxus CLI 0.7.10, Android platform 34/build-tools 34.0.0, and NDK 27.0.12077973. Without a signing configuration, Dioxus intentionally runs Gradle's `assembleDebug` and produces `target/dx/roomies-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk`; this needs no external credentials and is suitable for development/runtime acceptance, not store publication. Device/emulator Keystore behavior must still be accepted separately.
 
 ## Render manifests
 - `kustomize build deploy/kustomize/overlays/production`

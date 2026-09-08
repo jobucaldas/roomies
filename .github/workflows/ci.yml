@@ -132,13 +132,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.89.0
         with:
           targets: aarch64-linux-android
       - uses: android-actions/setup-android@v3
-      - run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973"
-      - run: cargo install dioxus-cli --version 0.7.9 --locked
-      - run: dx build --release --android
+      - run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;27.0.12077973"
+      - run: cargo install dioxus-cli --version 0.7.10 --locked
+      - run: dx build --release --platform android --target aarch64-linux-android
         working-directory: src/app
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}

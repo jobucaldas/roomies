@@ -21,6 +21,17 @@
       rustToolchain = pkgs.rust-bin.stable."1.89.0".default.override {
         targets = [ "aarch64-linux-android" ];
       };
+      cliRustPlatform = pkgs.makeRustPlatform {
+        cargo = rustToolchain;
+        rustc = rustToolchain;
+      };
+      wasmBindgenCli = pkgs.callPackage ./nix/wasm-bindgen-cli-0.2.126.nix {
+        rustPlatform = cliRustPlatform;
+      };
+      dioxusCli = pkgs.callPackage ./nix/dioxus-cli.nix {
+        rustPlatform = cliRustPlatform;
+        wasm-bindgen-cli = wasmBindgenCli;
+      };
       commonPackages = with pkgs; [
         rustToolchain
         curl
@@ -28,7 +39,7 @@
         jq
       ];
       webPackages = with pkgs; [
-        dioxus-cli
+        dioxusCli
         llvmPackages.lld
         go
         nodejs
@@ -52,12 +63,12 @@
         xorg.libXrandr
       ];
       androidSdk = pkgs.androidenv.composeAndroidPackages {
-        buildToolsVersions = [ "35.0.0" ];
+        buildToolsVersions = [ "34.0.0" ];
         includeNDK = true;
         includeEmulator = false;
         includeSystemImages = false;
         ndkVersion = "27.0.12077973";
-        platformVersions = [ "35" ];
+        platformVersions = [ "34" ];
       };
       containerPackages = with pkgs; [
         buildah
@@ -127,7 +138,7 @@
           export ANDROID_SDK_ROOT=${androidSdk.androidsdk}/libexec/android-sdk
           export NDK_HOME=${androidSdk.androidsdk}/libexec/android-sdk/ndk/27.0.12077973
           export JAVA_HOME=${pkgs.jdk21}
-          echo "Accept Android licenses with sdkmanager --licenses before dx build --release --android"
+          echo "Roomies Android shell: dx build --release --platform android --target aarch64-linux-android"
         '';
 
         e2e = mkShell (commonPackages ++ e2ePackages) ''
