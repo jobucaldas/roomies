@@ -55,6 +55,11 @@ func migrations(driver string) []schemaMigration {
 			name:    "house_scoped_notification_capabilities",
 			up:      execStatements(`DROP INDEX IF EXISTS idx_notification_subscriptions_active_identity`),
 		},
+		{
+			version: 8,
+			name:    "household_domains",
+			up:      execStatements(householdStatements(driver)...),
+		},
 	}
 }
 

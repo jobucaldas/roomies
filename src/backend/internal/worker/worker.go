@@ -22,6 +22,7 @@ type Worker struct {
 	deliveryCipher       *providers.InvitationDeliveryCipher
 	notificationRepo     *repository.NotificationRepository
 	notificationProvider providers.NotificationProvider
+	householdRepo        *repository.HouseholdRepository
 	ready                atomic.Bool
 }
 
@@ -55,6 +56,10 @@ func (w *Worker) ConfigureNotifications(repo *repository.NotificationRepository,
 	w.notificationProvider = provider
 }
 
+func (w *Worker) ConfigureHousehold(repo *repository.HouseholdRepository) {
+	w.householdRepo = repo
+}
+
 func (w *Worker) Ready() bool {
 	return w.ready.Load()
 }
@@ -79,6 +84,11 @@ func (w *Worker) Run(ctx context.Context) error {
 func (w *Worker) RunOnce(ctx context.Context) error {
 	if w.notificationRepo != nil {
 		if _, err := w.notificationRepo.RunDueScheduledEvent(ctx, w.owner, w.leaseDuration); err != nil {
+			return err
+		}
+	}
+	if w.householdRepo != nil {
+		if _, err := w.householdRepo.RunChatRetention(ctx, w.owner, w.leaseDuration, 100); err != nil {
 			return err
 		}
 	}

@@ -70,12 +70,13 @@ func run(logger *slog.Logger, args []string) error {
 	expenseRepo := repository.NewExpenseRepository(db, notificationRepo)
 	noteRepo := repository.NewNoteRepository(db)
 	reliabilityRepo := repository.NewReliabilityRepository(db, clk, deliveryCipher)
+	householdRepo := repository.NewHouseholdRepository(db, clk)
 
 	switch command {
 	case "serve":
-		return runServer(ctx, logger, cfg, clk, userRepo, houseRepo, expenseRepo, noteRepo, reliabilityRepo, notificationRepo)
+		return runServer(ctx, logger, cfg, clk, userRepo, houseRepo, expenseRepo, noteRepo, reliabilityRepo, notificationRepo, householdRepo)
 	case "worker":
-		return runWorker(ctx, logger, cfg, reliabilityRepo, notificationRepo, deliveryCipher)
+		return runWorker(ctx, logger, cfg, reliabilityRepo, notificationRepo, householdRepo, deliveryCipher)
 	default:
 		return fmt.Errorf("unknown subcommand %q", command)
 	}
@@ -85,6 +86,7 @@ func runServer(ctx context.Context, logger *slog.Logger, cfg *config.Config, clk
 	userRepo *repository.UserRepository, houseRepo *repository.HouseRepository,
 	expenseRepo *repository.ExpenseRepository, noteRepo *repository.NoteRepository,
 	reliabilityRepo *repository.ReliabilityRepository, notificationRepo *repository.NotificationRepository,
+	householdRepo *repository.HouseholdRepository,
 ) error {
 	handler := server.NewHandler(server.Dependencies{
 		Config:           cfg,
@@ -96,6 +98,7 @@ func runServer(ctx context.Context, logger *slog.Logger, cfg *config.Config, clk
 		NoteRepo:         noteRepo,
 		ReliabilityRepo:  reliabilityRepo,
 		NotificationRepo: notificationRepo,
+		HouseholdRepo:    householdRepo,
 	})
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -126,7 +129,7 @@ func runServer(ctx context.Context, logger *slog.Logger, cfg *config.Config, clk
 	return httpServer.Shutdown(shutdownCtx)
 }
 
-func runWorker(ctx context.Context, logger *slog.Logger, cfg *config.Config, reliabilityRepo *repository.ReliabilityRepository, notificationRepo *repository.NotificationRepository, deliveryCipher *providers.InvitationDeliveryCipher) error {
+func runWorker(ctx context.Context, logger *slog.Logger, cfg *config.Config, reliabilityRepo *repository.ReliabilityRepository, notificationRepo *repository.NotificationRepository, householdRepo *repository.HouseholdRepository, deliveryCipher *providers.InvitationDeliveryCipher) error {
 	provider, err := providers.NewInvitationProvider(cfg)
 	if err != nil {
 		return fmt.Errorf("configure invitation provider: %w", err)
@@ -158,6 +161,7 @@ func runWorker(ctx context.Context, logger *slog.Logger, cfg *config.Config, rel
 		deliveryCipher,
 	)
 	processor.ConfigureNotifications(notificationRepo, notificationProvider)
+	processor.ConfigureHousehold(householdRepo)
 	healthServer := &http.Server{
 		Addr:              ":" + cfg.WorkerHealthPort,
 		Handler:           workerHealthHandler(processor),

@@ -26,6 +26,7 @@ type Dependencies struct {
 	NoteRepo         *repository.NoteRepository
 	ReliabilityRepo  *repository.ReliabilityRepository
 	NotificationRepo *repository.NotificationRepository
+	HouseholdRepo    *repository.HouseholdRepository
 	Ready            func() bool
 }
 
@@ -51,6 +52,7 @@ func NewHandler(deps Dependencies) http.Handler {
 	invitationHandler := handlers.NewInvitationHandler(deps.HouseRepo, deps.ReliabilityRepo, clk, deps.Config.PublicBaseURL, time.Duration(deps.Config.InvitationTTL)*time.Hour)
 	eventsHandler := handlers.NewHouseEventsHandler(deps.HouseRepo, deps.ReliabilityRepo, 250*time.Millisecond)
 	notificationHandler := handlers.NewNotificationHandler(deps.NotificationRepo, deps.HouseRepo)
+	householdHandler := handlers.NewHouseholdHandler(deps.HouseholdRepo, deps.HouseRepo)
 
 	r := chi.NewRouter()
 	r.Use(cors.Handler(cors.Options{
@@ -117,6 +119,36 @@ func NewHandler(deps Dependencies) http.Handler {
 					r.Post("/", notificationHandler.CreateEvent)
 					r.Put("/{eventId}", notificationHandler.UpdateEvent)
 					r.Delete("/{eventId}", notificationHandler.DeleteEvent)
+				})
+				r.Route("/groceries", func(r chi.Router) {
+					r.Get("/", householdHandler.ListGroceries)
+					r.Post("/", householdHandler.CreateGrocery)
+					r.Get("/{groceryId}", householdHandler.GetGrocery)
+					r.Put("/{groceryId}", householdHandler.UpdateGrocery)
+					r.Post("/{groceryId}/toggle", householdHandler.ToggleGrocery)
+					r.Delete("/{groceryId}", householdHandler.DeleteGrocery)
+				})
+				r.Route("/chores", func(r chi.Router) {
+					r.Get("/", householdHandler.ListChores)
+					r.Post("/", householdHandler.CreateChore)
+					r.Get("/{choreId}", householdHandler.GetChore)
+					r.Put("/{choreId}", householdHandler.UpdateChore)
+					r.Delete("/{choreId}", householdHandler.DeleteChore)
+					r.Get("/{choreId}/completions", householdHandler.ListChoreCompletions)
+					r.Post("/{choreId}/completions", householdHandler.CompleteChore)
+				})
+				r.Route("/calendar", func(r chi.Router) {
+					r.Get("/", householdHandler.ListCalendar)
+					r.Post("/", householdHandler.CreateCalendar)
+					r.Get("/{calendarId}", householdHandler.GetCalendar)
+					r.Put("/{calendarId}", householdHandler.UpdateCalendar)
+					r.Delete("/{calendarId}", householdHandler.DeleteCalendar)
+				})
+				r.Route("/chat", func(r chi.Router) {
+					r.Get("/", householdHandler.ListChat)
+					r.Post("/", householdHandler.CreateChat)
+					r.Put("/{messageId}", householdHandler.EditChat)
+					r.Delete("/{messageId}", householdHandler.DeleteChat)
 				})
 
 				r.Route("/members", func(r chi.Router) {

@@ -30,6 +30,7 @@ type testEnv struct {
 	NoteRepo         *repository.NoteRepository
 	ReliabilityRepo  *repository.ReliabilityRepository
 	NotificationRepo *repository.NotificationRepository
+	HouseholdRepo    *repository.HouseholdRepository
 	JWTSecret        string
 	Cleanup          func()
 }
@@ -71,6 +72,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	expenseRepo := repository.NewExpenseRepository(db, notificationRepo)
 	noteRepo := repository.NewNoteRepository(db)
 	reliabilityRepo := repository.NewReliabilityRepository(db, clk)
+	householdRepo := repository.NewHouseholdRepository(db, clk)
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	router := server.NewHandler(server.Dependencies{
 		Config:           cfg,
@@ -82,6 +84,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		NoteRepo:         noteRepo,
 		ReliabilityRepo:  reliabilityRepo,
 		NotificationRepo: notificationRepo,
+		HouseholdRepo:    householdRepo,
 	})
 	return &testEnv{
 		Router:           router,
@@ -94,6 +97,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		NoteRepo:         noteRepo,
 		ReliabilityRepo:  reliabilityRepo,
 		NotificationRepo: notificationRepo,
+		HouseholdRepo:    householdRepo,
 		JWTSecret:        cfg.JWTSecret,
 		Cleanup:          func() { _ = db.Close() },
 	}

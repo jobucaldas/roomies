@@ -368,7 +368,7 @@ func TestSQLiteMigrationsUpgradeLegacySchema(t *testing.T) {
 	if err := db.Select(&names, "SELECT name FROM schema_migrations ORDER BY version"); err != nil {
 		t.Fatal(err)
 	}
-	if len(names) != 7 || names[0].Name != "" || names[1].Name != "monetary_cents_columns" || names[2].Name != "reliability_platform" || names[3].Name != "durable_job_lease_generation" || names[4].Name != "redact_invitation_idempotency_tokens" || names[5].Name != "notifications_and_scheduled_events" || names[6].Name != "house_scoped_notification_capabilities" {
+	if len(names) != 8 || names[0].Name != "" || names[1].Name != "monetary_cents_columns" || names[2].Name != "reliability_platform" || names[3].Name != "durable_job_lease_generation" || names[4].Name != "redact_invitation_idempotency_tokens" || names[5].Name != "notifications_and_scheduled_events" || names[6].Name != "house_scoped_notification_capabilities" || names[7].Name != "household_domains" {
 		t.Fatalf("unexpected migration ledger names: %#v", names)
 	}
 
