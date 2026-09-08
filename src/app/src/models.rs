@@ -289,3 +289,179 @@ pub struct ScheduledEventRequest {
     pub exdates: Vec<String>,
     pub enabled: Option<bool>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GroceryItem {
+    pub id: String,
+    pub house_id: String,
+    pub creator_id: String,
+    pub name: String,
+    pub quantity: String,
+    pub unit: String,
+    pub note: String,
+    #[serde(default)]
+    pub assignee_id: Option<String>,
+    pub checked: bool,
+    #[serde(default)]
+    pub checked_by: Option<String>,
+    #[serde(default)]
+    pub checked_at: Option<String>,
+    pub position: i32,
+    pub version: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroceryRequest {
+    pub name: String,
+    pub quantity: String,
+    pub unit: String,
+    pub note: String,
+    pub assignee_id: Option<String>,
+    pub position: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<i64>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroceryToggleRequest {
+    pub checked: bool,
+    pub version: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Chore {
+    pub id: String,
+    pub house_id: String,
+    pub creator_id: String,
+    pub title: String,
+    pub description: String,
+    #[serde(default)]
+    pub assignee_id: Option<String>,
+    pub timezone: String,
+    pub due_local: String,
+    pub rrule: String,
+    #[serde(default)]
+    pub exdates: Vec<String>,
+    pub enabled: bool,
+    pub version: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChoreRequest {
+    pub title: String,
+    pub description: String,
+    pub assignee_id: Option<String>,
+    pub timezone: String,
+    pub due_local: String,
+    pub rrule: String,
+    pub exdates: Vec<String>,
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<i64>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ChoreCompletion {
+    pub id: String,
+    pub chore_id: String,
+    pub house_id: String,
+    pub occurrence_at: String,
+    pub completed_by: String,
+    pub completed_at: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompleteChoreRequest {
+    pub occurrence_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CalendarEvent {
+    pub id: String,
+    pub house_id: String,
+    pub creator_id: String,
+    pub title: String,
+    pub description: String,
+    pub timezone: String,
+    pub start_local: String,
+    pub end_local: String,
+    pub all_day: bool,
+    pub rrule: String,
+    #[serde(default)]
+    pub exdates: Vec<String>,
+    pub version: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CalendarEventRequest {
+    pub title: String,
+    pub description: String,
+    pub timezone: String,
+    pub start_local: String,
+    pub end_local: String,
+    pub all_day: bool,
+    pub rrule: String,
+    pub exdates: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ChatMessage {
+    pub cursor: i64,
+    pub id: String,
+    pub house_id: String,
+    pub author_id: String,
+    #[serde(default)]
+    pub body: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub deleted_at: Option<String>,
+    #[serde(default)]
+    pub redacted_at: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ChatPage {
+    pub messages: Vec<ChatMessage>,
+    #[serde(default)]
+    pub next_cursor: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessageRequest {
+    pub body: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn household_update_requests_include_versions_and_create_requests_omit_them() {
+        let create = GroceryRequest {
+            name: "Milk".into(),
+            quantity: "1".into(),
+            unit: "L".into(),
+            note: String::new(),
+            assignee_id: None,
+            position: 0,
+            version: None,
+        };
+        let update = ChoreRequest {
+            title: "Bins".into(),
+            description: String::new(),
+            assignee_id: None,
+            timezone: "UTC".into(),
+            due_local: "2025-02-01T09:00:00".into(),
+            rrule: "FREQ=WEEKLY;COUNT=1".into(),
+            exdates: vec!["2025-02-08T09:00:00".into()],
+            enabled: Some(false),
+            version: Some(2),
+        };
+        let create_json = serde_json::to_value(create).unwrap();
+        let update_json = serde_json::to_value(update).unwrap();
+        assert!(create_json.get("version").is_none());
+        assert_eq!(update_json["version"], 2);
+        assert_eq!(update_json["exdates"][0], "2025-02-08T09:00:00");
+    }
+}

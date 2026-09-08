@@ -1,4 +1,5 @@
 use super::expenses::ExpensesSection;
+use super::household::{CalendarSection, ChatSection, ChoresSection, GroceriesSection};
 use super::invitations::InvitationPanel;
 use super::notes::NotesSection;
 use super::notifications::NotificationsSection;
@@ -108,6 +109,42 @@ pub fn HouseDetail(id: String) -> Element {
                     }
                     button {
                         role: "tab",
+                        id: "groceries-tab",
+                        aria_selected: *tab.read() == "groceries",
+                        aria_controls: "groceries-panel",
+                        class: if *tab.read() == "groceries" { "active" } else { "" },
+                        onclick: move |_| tab.set("groceries".into()),
+                        "Groceries"
+                    }
+                    button {
+                        role: "tab",
+                        id: "chores-tab",
+                        aria_selected: *tab.read() == "chores",
+                        aria_controls: "chores-panel",
+                        class: if *tab.read() == "chores" { "active" } else { "" },
+                        onclick: move |_| tab.set("chores".into()),
+                        "Chores"
+                    }
+                    button {
+                        role: "tab",
+                        id: "calendar-tab",
+                        aria_selected: *tab.read() == "calendar",
+                        aria_controls: "calendar-panel",
+                        class: if *tab.read() == "calendar" { "active" } else { "" },
+                        onclick: move |_| tab.set("calendar".into()),
+                        "Calendar"
+                    }
+                    button {
+                        role: "tab",
+                        id: "chat-tab",
+                        aria_selected: *tab.read() == "chat",
+                        aria_controls: "chat-panel",
+                        class: if *tab.read() == "chat" { "active" } else { "" },
+                        onclick: move |_| tab.set("chat".into()),
+                        "Chat"
+                    }
+                    button {
+                        role: "tab",
                         id: "balances-tab",
                         aria_selected: *tab.read() == "balances",
                         aria_controls: "balances-panel",
@@ -156,6 +193,10 @@ pub fn HouseDetail(id: String) -> Element {
                         "notes" => rsx! {
                             NotesSection { house_id: id.clone(), role: role_name.clone() }
                         },
+                        "groceries" => rsx! { GroceriesSection { house_id: id.clone(), role: role_name.clone(), members: members.read().clone() } },
+                        "chores" => rsx! { ChoresSection { house_id: id.clone(), role: role_name.clone(), members: members.read().clone(), user_id: user.read().as_ref().map(|u| u.id.clone()).unwrap_or_default() } },
+                        "calendar" => rsx! { CalendarSection { house_id: id.clone(), role: role_name.clone(), user_id: user.read().as_ref().map(|u| u.id.clone()).unwrap_or_default() } },
+                        "chat" => rsx! { ChatSection { house_id: id.clone(), role: role_name.clone(), user_id: user.read().as_ref().map(|u| u.id.clone()).unwrap_or_default() } },
                         "balances" => rsx! { BalancesTab { balances: balances.read().clone() } },
                         "notifications" => rsx! {
                             NotificationsSection { house_id: id.clone(), role: role_name.clone(), user_id: user.read().as_ref().map(|u| u.id.clone()).unwrap_or_default() }

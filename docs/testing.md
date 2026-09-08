@@ -23,6 +23,18 @@ podman compose -f e2e/docker-compose.mailpit.yml down -v
 
 Screenshots and Playwright reports are written under `e2e/artifacts/` (ignored). The suite covers intended-user acceptance after auth redirect, wrong-account/revoked denial, idempotent duplicate acceptance, monitor authorization, and desktop/narrow layouts. Expiry and retryable-transient-failure invariants remain covered by the backend invitation contract tests.
 
+## Household domains UI
+The house Groceries, Chores, Calendar, and Chat tabs use the normal online API only. Run the web unit and lint checks in an isolated Nix target directory to avoid reusing host Rust artifacts:
+
+```sh
+CARGO_TARGET_DIR=/tmp/roomies-household-ui-target-$$ \
+  nix develop .#web --command cargo test --manifest-path src/app/Cargo.toml --no-default-features --features web
+CARGO_TARGET_DIR=/tmp/roomies-household-ui-target-$$ \
+  nix develop .#web --command cargo clippy --manifest-path src/app/Cargo.toml --no-default-features --features web -- -D warnings
+```
+
+Chore completion deliberately requires an exact UTC RFC3339 occurrence, while creation and edits retain the server-validated local time, IANA timezone, RRULE, and EXDATE fields. Chat refresh and older-page loading are explicit; chat bodies are not cached or queued by the client.
+
 ## Compose / release smoke
 - `make check-compose`
 - `make build`

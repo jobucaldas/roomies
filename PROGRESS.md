@@ -27,3 +27,7 @@
 ## Notification web UI
 - Added a house Notifications / Schedule tab with self preference controls, subscription metadata, browser-push controls, and role-aware scheduled-event creation, editing, deletion, and viewing. Creator/admin edit forms prefill recurrence data and validate before the server-authoritative request.
 - Browser push uses a root-scoped service worker and runtime public VAPID-key discovery; native desktop intentionally reports it unsupported. The production Dioxus 0.7.10 builder image built the web artifacts with the service worker. Real browser provider delivery and Android FCM remain unexercised.
+
+## Household domains UI
+- Added house-scoped Groceries, Chores, Calendar, and Chat tabs with typed API contracts, responsive existing tab styling, explicit loading/error/retry states, and monitor read-only messaging. Groceries support create/edit/check/delete and optional assignees; chores support creator/admin edit/delete/enable/disable plus exact-occurrence completion with recurrence, timezone, and EXDATE fields; calendar supports all-day/timed create/edit/delete with its recurrence fields; and chat supports send, own edit/delete tombstones, explicit refresh, and cursor-based older-page loading without offline queue or body persistence.
+- Frontend web unit tests and clippy pass in an isolated Nix target directory (27 tests). Browser/compose household-flow validation has not yet been rerun for this UI work.

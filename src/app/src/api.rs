@@ -487,6 +487,190 @@ impl ApiClient {
         ))
         .await
     }
+    pub async fn get_groceries(&self, house_id: &str) -> Result<Vec<GroceryItem>, ApiError> {
+        self.send(self.request(Method::GET, &format!("/houses/{house_id}/groceries")))
+            .await
+    }
+    pub async fn create_grocery(
+        &self,
+        house_id: &str,
+        value: &GroceryRequest,
+    ) -> Result<GroceryItem, ApiError> {
+        self.json(
+            Method::POST,
+            &format!("/houses/{house_id}/groceries"),
+            value,
+        )
+        .await
+    }
+    pub async fn update_grocery(
+        &self,
+        house_id: &str,
+        id: &str,
+        value: &GroceryRequest,
+    ) -> Result<GroceryItem, ApiError> {
+        self.json(
+            Method::PUT,
+            &format!("/houses/{house_id}/groceries/{id}"),
+            value,
+        )
+        .await
+    }
+    pub async fn toggle_grocery(
+        &self,
+        house_id: &str,
+        id: &str,
+        value: &GroceryToggleRequest,
+    ) -> Result<GroceryItem, ApiError> {
+        self.json(
+            Method::POST,
+            &format!("/houses/{house_id}/groceries/{id}/toggle"),
+            value,
+        )
+        .await
+    }
+    pub async fn delete_grocery(
+        &self,
+        house_id: &str,
+        id: &str,
+        version: i64,
+    ) -> Result<(), ApiError> {
+        self.empty(self.request(
+            Method::DELETE,
+            &format!("/houses/{house_id}/groceries/{id}?version={version}"),
+        ))
+        .await
+    }
+    pub async fn get_chores(&self, house_id: &str) -> Result<Vec<Chore>, ApiError> {
+        self.send(self.request(Method::GET, &format!("/houses/{house_id}/chores")))
+            .await
+    }
+    pub async fn create_chore(
+        &self,
+        house_id: &str,
+        value: &ChoreRequest,
+    ) -> Result<Chore, ApiError> {
+        self.json(Method::POST, &format!("/houses/{house_id}/chores"), value)
+            .await
+    }
+    pub async fn update_chore(
+        &self,
+        house_id: &str,
+        id: &str,
+        value: &ChoreRequest,
+    ) -> Result<Chore, ApiError> {
+        self.json(
+            Method::PUT,
+            &format!("/houses/{house_id}/chores/{id}"),
+            value,
+        )
+        .await
+    }
+    pub async fn delete_chore(
+        &self,
+        house_id: &str,
+        id: &str,
+        version: i64,
+    ) -> Result<(), ApiError> {
+        self.empty(self.request(
+            Method::DELETE,
+            &format!("/houses/{house_id}/chores/{id}?version={version}"),
+        ))
+        .await
+    }
+    pub async fn get_chore_completions(
+        &self,
+        house_id: &str,
+        id: &str,
+    ) -> Result<Vec<ChoreCompletion>, ApiError> {
+        self.send(self.request(
+            Method::GET,
+            &format!("/houses/{house_id}/chores/{id}/completions"),
+        ))
+        .await
+    }
+    pub async fn complete_chore(
+        &self,
+        house_id: &str,
+        id: &str,
+        value: &CompleteChoreRequest,
+    ) -> Result<ChoreCompletion, ApiError> {
+        self.json(
+            Method::POST,
+            &format!("/houses/{house_id}/chores/{id}/completions"),
+            value,
+        )
+        .await
+    }
+    pub async fn get_calendar(&self, house_id: &str) -> Result<Vec<CalendarEvent>, ApiError> {
+        self.send(self.request(Method::GET, &format!("/houses/{house_id}/calendar")))
+            .await
+    }
+    pub async fn create_calendar(
+        &self,
+        house_id: &str,
+        value: &CalendarEventRequest,
+    ) -> Result<CalendarEvent, ApiError> {
+        self.json(Method::POST, &format!("/houses/{house_id}/calendar"), value)
+            .await
+    }
+    pub async fn update_calendar(
+        &self,
+        house_id: &str,
+        id: &str,
+        value: &CalendarEventRequest,
+    ) -> Result<CalendarEvent, ApiError> {
+        self.json(
+            Method::PUT,
+            &format!("/houses/{house_id}/calendar/{id}"),
+            value,
+        )
+        .await
+    }
+    pub async fn delete_calendar(
+        &self,
+        house_id: &str,
+        id: &str,
+        version: i64,
+    ) -> Result<(), ApiError> {
+        self.empty(self.request(
+            Method::DELETE,
+            &format!("/houses/{house_id}/calendar/{id}?version={version}"),
+        ))
+        .await
+    }
+    pub async fn get_chat(
+        &self,
+        house_id: &str,
+        before: Option<i64>,
+    ) -> Result<ChatPage, ApiError> {
+        let suffix = before
+            .map(|value| format!("?before={value}&limit=50"))
+            .unwrap_or_else(|| "?limit=50".into());
+        self.send(self.request(Method::GET, &format!("/houses/{house_id}/chat{suffix}")))
+            .await
+    }
+    pub async fn create_chat(
+        &self,
+        house_id: &str,
+        value: &ChatMessageRequest,
+    ) -> Result<ChatMessage, ApiError> {
+        self.json(Method::POST, &format!("/houses/{house_id}/chat"), value)
+            .await
+    }
+    pub async fn update_chat(
+        &self,
+        house_id: &str,
+        id: &str,
+        value: &ChatMessageRequest,
+    ) -> Result<ChatMessage, ApiError> {
+        self.json(Method::PUT, &format!("/houses/{house_id}/chat/{id}"), value)
+            .await
+    }
+    pub async fn delete_chat(&self, house_id: &str, id: &str) -> Result<(), ApiError> {
+        self.empty(self.request(Method::DELETE, &format!("/houses/{house_id}/chat/{id}")))
+            .await
+    }
     pub async fn get_vapid_public_key(&self) -> Result<VapidPublicKey, ApiError> {
         self.send(self.request(Method::GET, "/notifications/vapid-public-key"))
             .await
