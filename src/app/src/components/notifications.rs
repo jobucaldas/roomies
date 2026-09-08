@@ -417,6 +417,9 @@ mod tests {
         let source = include_str!("../../public/roomies-sw.js");
         assert!(source.contains("body: 'You have a Roomies notification.'"));
         assert!(source.contains("tag: `roomies-${id}`"));
+        assert!(source.contains("`/house/${encodeURIComponent(houseId)}`"));
+        assert!(source.contains("const path = houseId ?"));
+        assert!(!source.contains("/houses/"));
         assert!(!source.contains("endpoint"));
     }
     #[test]

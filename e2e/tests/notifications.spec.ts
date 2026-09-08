@@ -121,7 +121,10 @@ test('preferences reload and public VAPID unavailable state are explicit', async
   await expect(page.getByLabel('Scheduled reminder alerts')).not.toBeChecked();
   const serviceWorker = await page.request.get(`${web}/roomies-sw.js`);
   expect(serviceWorker.ok()).toBeTruthy();
-  evidence.get(page)!.assetHashes['/roomies-sw.js'] = createHash('sha256').update(await serviceWorker.body()).digest('hex');
+  const serviceWorkerSource = await serviceWorker.text();
+  expect(serviceWorkerSource).toContain('`/house/${encodeURIComponent(');
+  expect(serviceWorkerSource).not.toContain('/houses/');
+  evidence.get(page)!.assetHashes['/roomies-sw.js'] = createHash('sha256').update(serviceWorkerSource).digest('hex');
   const key = await request.get(`${api}/notifications/vapid-public-key`);
   expect(key.ok()).toBeTruthy();
   expect((await key.json()).public_key).toBe('');
