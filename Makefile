@@ -43,7 +43,7 @@ test-e2e-household:
 	$(COMPOSE) --env-file /dev/null -p "$$project" -f docker-compose.yml -f e2e/docker-compose.mailpit.yml up -d --build >/dev/null 2>&1; \
 	timeout 180 sh -c 'until curl -fsS http://localhost:58080/healthz; do sleep 2; done'; \
 	timeout 60 sh -c 'until curl -fsS http://localhost:58000/ >/dev/null; do sleep 2; done'; \
-	cd e2e && npm ci && npx playwright install --with-deps chromium && GIT_COMMIT="$$(git rev-parse HEAD)" ROOMIES_E2E_COMMAND='npx playwright test tests/household.spec.ts' ROOMIES_WEB_URL=http://localhost:58000 ROOMIES_API_URL=http://localhost:58000/api npx playwright test tests/household.spec.ts
+	cd e2e && npm ci && npx playwright install --with-deps chromium && GIT_COMMIT="$$(git rev-parse HEAD)" ROOMIES_E2E_COMMAND='npx playwright test tests/core.spec.ts tests/household.spec.ts' ROOMIES_WEB_URL=http://localhost:58000 ROOMIES_API_URL=http://localhost:58000/api npx playwright test tests/core.spec.ts tests/household.spec.ts
 
 check-compose:
 	@env \

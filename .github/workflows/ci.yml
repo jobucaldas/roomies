@@ -123,13 +123,13 @@ jobs:
           docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml -f e2e/docker-compose.mailpit.yml up -d --build
           timeout 180 sh -c 'until curl -fsS http://localhost:58080/healthz; do sleep 2; done'
           timeout 60 sh -c 'until curl -fsS http://localhost:58000/ >/dev/null; do sleep 2; done'
-      - name: Run household desktop and narrow flow
+      - name: Run core and household desktop and narrow flow
         working-directory: e2e
         env:
-          ROOMIES_E2E_COMMAND: npx playwright test tests/household.spec.ts
+          ROOMIES_E2E_COMMAND: npx playwright test tests/core.spec.ts tests/household.spec.ts
           ROOMIES_WEB_URL: http://localhost:58000
           ROOMIES_API_URL: http://localhost:58000/api
-        run: GIT_COMMIT="$(git rev-parse HEAD)" npx playwright test tests/household.spec.ts
+        run: GIT_COMMIT="$(git rev-parse HEAD)" npx playwright test tests/core.spec.ts tests/household.spec.ts
       - name: Upload sanitized household evidence
         if: failure()
         uses: actions/upload-artifact@v4

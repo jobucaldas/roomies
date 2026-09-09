@@ -107,7 +107,7 @@ async function household(page: Page, request: APIRequestContext) {
 async function open(page: Page, tab: string, heading: string) {
   await page.getByRole('tab', { name: tab }).click();
   const panel = page.getByRole('tabpanel', { name: tab });
-  await expect(panel.getByRole('heading', { name: heading })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: heading, exact: true })).toBeVisible();
   return panel;
 }
 
