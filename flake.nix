@@ -25,7 +25,7 @@
         cargo = rustToolchain;
         rustc = rustToolchain;
       };
-      wasmBindgenCli = pkgs.callPackage ./nix/wasm-bindgen-cli-0.2.126.nix {
+      wasmBindgenCli = pkgs.callPackage ./nix/wasm-bindgen-cli-0.2.127.nix {
         rustPlatform = cliRustPlatform;
       };
       dioxusCli = pkgs.callPackage ./nix/dioxus-cli.nix {
