@@ -6,6 +6,8 @@ on:
 
 jobs:
   backend:
+    env:
+      GOTOOLCHAIN: local
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -24,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.26'
       - run: go test ./...
         env:
           DATABASE_URL: sqlite://ci.db
@@ -92,6 +94,10 @@ jobs:
         run: |
           set -euo pipefail
           password="$(openssl rand -hex 32)"
+          invitation_key="$(openssl rand -base64 32)"
+          echo "::add-mask::${invitation_key}"
+          notification_key="$(openssl rand -base64 32)"
+          echo "::add-mask::${notification_key}"
           {
             echo "COMPOSE_PROJECT_NAME=roomies-household-${GITHUB_RUN_ID}"
             echo "POSTGRES_PASSWORD=${password}"
@@ -103,6 +109,11 @@ jobs:
             echo "ROOMIES_HTTP_PORT=58000"
             echo "SMTP_HOST=mailpit"
             echo "SMTP_PORT=1025"
+            echo "SMTP_FROM=no-reply@roomies.local"
+            echo "INVITATION_DELIVERY_KEY_ID=household-ephemeral"
+            echo "INVITATION_DELIVERY_KEY=${invitation_key}"
+            echo "NOTIFICATION_DELIVERY_KEY_ID=household-notifications-ephemeral"
+            echo "NOTIFICATION_DELIVERY_KEY=${notification_key}"
           } >> "$GITHUB_ENV"
       - name: Build and start household stack
         run: |

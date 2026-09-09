@@ -36,10 +36,11 @@ test-frontend:
 test-e2e-household:
 	@set -eu; \
 	project="roomies-household-$$(id -u)"; \
+	root="$$PWD"; \
 	password="$$(openssl rand -hex 32)"; \
-	export POSTGRES_PASSWORD="$$password" DATABASE_URL="postgres://roomies:$$password@db:5432/roomies?sslmode=disable" JWT_SECRET="$$(openssl rand -hex 48)" CORS_ALLOWED_ORIGINS=http://localhost:58000 ROOMIES_PUBLIC_BASE_URL=http://localhost:58000 ROOMIES_BACKEND_PORT=58080 ROOMIES_HTTP_PORT=58000 SMTP_HOST=mailpit SMTP_PORT=1025; \
-	trap '$(COMPOSE) -p "$$project" -f docker-compose.yml -f e2e/docker-compose.mailpit.yml down --volumes --remove-orphans' EXIT; \
-	$(COMPOSE) -p "$$project" -f docker-compose.yml -f e2e/docker-compose.mailpit.yml up -d --build; \
+	export POSTGRES_PASSWORD="$$password" DATABASE_URL="postgres://roomies:$$password@db:5432/roomies?sslmode=disable" JWT_SECRET="$$(openssl rand -hex 48)" CORS_ALLOWED_ORIGINS=http://localhost:58000 ROOMIES_PUBLIC_BASE_URL=http://localhost:58000 ROOMIES_BACKEND_PORT=58080 ROOMIES_HTTP_PORT=58000 SMTP_HOST=mailpit SMTP_PORT=1025 SMTP_FROM=no-reply@roomies.local SMTP_USERNAME= SMTP_PASSWORD= INVITATION_DELIVERY_KEY_ID=household-ephemeral INVITATION_DELIVERY_KEY="$$(openssl rand -base64 32)" NOTIFICATION_DELIVERY_KEY_ID=household-notifications-ephemeral NOTIFICATION_DELIVERY_KEY="$$(openssl rand -base64 32)" WEB_PUSH_PUBLIC_KEY= WEB_PUSH_PRIVATE_KEY= FCM_PROJECT_ID= GOOGLE_APPLICATION_CREDENTIALS= INVITATION_DELIVERY_OLD_KEYS= NOTIFICATION_DELIVERY_OLD_KEYS=; \
+	trap 'cd "$$root"; $(COMPOSE) --env-file /dev/null -p "$$project" -f docker-compose.yml -f e2e/docker-compose.mailpit.yml down --volumes --remove-orphans' EXIT; \
+	$(COMPOSE) --env-file /dev/null -p "$$project" -f docker-compose.yml -f e2e/docker-compose.mailpit.yml up -d --build >/dev/null 2>&1; \
 	timeout 180 sh -c 'until curl -fsS http://localhost:58080/healthz; do sleep 2; done'; \
 	timeout 60 sh -c 'until curl -fsS http://localhost:58000/ >/dev/null; do sleep 2; done'; \
 	cd e2e && npm ci && npx playwright install --with-deps chromium && GIT_COMMIT="$$(git rev-parse HEAD)" ROOMIES_E2E_COMMAND='npx playwright test tests/household.spec.ts' ROOMIES_WEB_URL=http://localhost:58000 ROOMIES_API_URL=http://localhost:58000/api npx playwright test tests/household.spec.ts
@@ -78,3 +79,7 @@ clean-containers:
 	-$(DOCKER) ps -aq --filter name=roomies | xargs -r $(DOCKER) rm -f
 
 clean: clean-containers clean-generated
+
+.PHONY: release-dry-run
+release-dry-run:
+	bash scripts/release-dry-run.sh

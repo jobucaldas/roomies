@@ -20,3 +20,34 @@ Render with:
 ```bash
 kustomize build deploy/kustomize/overlays/production
 ```
+
+## Credential-free local release rehearsal
+
+Run `nix develop .#container -c make release-dry-run` from a clean commit.
+The ignored `artifacts/release/<full-commit-sha>/` contains production YAML,
+local OCI archives, raw manifests/configs, OCI provenance labels, image metadata,
+source archive, Syft SPDX JSON SBOMs, tool versions, the flake lock, and verified `SHA256SUMS`. Existing bundles are
+never overwritten. Dirty tooling runs are marked preliminary and are not release
+acceptance. Source builds always use `git archive HEAD`, excluding local secrets
+and generated files. The final run must use a clean committed tree.
+
+Roomies images in the bundle use explicit local SHA tags, not `latest` or an
+unapproved registry namespace. The template above remains an owner-customized
+publication template; do not deploy it unchanged. Archive manifest digests are
+actual local OCI content identities, not claims that registry digest references
+are pullable. Caddy's version-tagged runtime is also archived and inspected.
+This is a reproducible procedure, not a bit-for-bit build guarantee: upstream
+base tags and dependency downloads are not all content-pinned. The flake-locked Syft generator scans local OCI archives without registry access
+or update checks. SBOMs are inventories, not signed attestations; scanner IDs and
+timestamps are not promised byte-reproducible. Archive blobs, manifests, configs,
+and index linkage are verified before the bundle receives its checksum file.
+
+R2/S3 remains the production blob-store baseline for future private files. The
+current backend has no blob-consuming feature; `S3_*` is reserved configuration,
+not evidence of an implemented or validated storage adapter.
+
+Registry namespace/publication, multi-architecture target policy, production
+secrets/providers, ingress/TLS, cluster acceptance, signing and attestations are
+owner/environment gates. This rehearsal does not accept native runtime, Linux
+Secret Service, or Android Keystore behavior. Frontend Kubernetes security-context
+hardening remains a separate bounded follow-up.

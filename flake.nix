@@ -77,6 +77,7 @@
         podman-compose
         kubectl
         skopeo
+        syft
       ];
       ocrPackages = with pkgs; [
         imagemagick
