@@ -19,7 +19,10 @@
         };
       };
       rustToolchain = pkgs.rust-bin.stable."1.89.0".default.override {
-        targets = [ "aarch64-linux-android" ];
+        targets = [
+          "aarch64-linux-android"
+          "wasm32-unknown-unknown"
+        ];
       };
       cliRustPlatform = pkgs.makeRustPlatform {
         cargo = rustToolchain;
@@ -42,7 +45,9 @@
         jq
       ];
       webPackages = with pkgs; [
+        binaryen
         dioxusCli
+        wasmBindgenCli
         llvmPackages.lld
         go
         nodejs

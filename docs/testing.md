@@ -6,9 +6,12 @@
 
 ## Frontend
 - Web: `cargo test -p roomies-app --no-default-features --features web`
+- Web release bundle: `nix develop .#web --command sh -c 'cd src/app && dx build --release --debug-symbols=false'`
 - Desktop: `cargo check -p roomies-app --no-default-features --features desktop`
 - Android ARM64 check: `nix develop .#android --command cargo check -p roomies-app --no-default-features --features mobile --target aarch64-linux-android`
 - Android APK (optimized Rust payload, development signing): `nix develop .#android --command make android`
+
+The web release command is a source/build gate for the generated HTML, JavaScript, and WASM assets. It does not provide browser or native runtime acceptance and does not deploy to production. The pinned web shell supplies Rust 1.89.0 with `wasm32-unknown-unknown`, Dioxus CLI 0.7.10, wasm-bindgen CLI 0.2.127, and Binaryen's `wasm-opt`; it does not use rustup or download tools at shell startup. Generated output is ignored under `target/`.
 
 ## Invitation onboarding browser flow
 The reusable Playwright harness uses synthetic accounts and Mailpit; it never prints or renders bearer tokens. Start the existing stack with SMTP pointed at the disposable sink, then run:
