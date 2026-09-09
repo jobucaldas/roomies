@@ -1,6 +1,8 @@
-FROM docker.io/golang:1.26-alpine AS builder
+FROM docker.io/golang:1.26.8-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates gcc musl-dev
+
+ENV GOTOOLCHAIN=local
 
 WORKDIR /build
 COPY go.mod go.sum ./

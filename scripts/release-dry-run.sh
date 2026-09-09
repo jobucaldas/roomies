@@ -2,22 +2,28 @@
 # Run inside nix develop .#container. No registry writes or cluster access.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-sha=$(git rev-parse HEAD)
+test -z "$(git status --porcelain --untracked-files=all)" || { echo "Release requires a clean checkout (including untracked files)" >&2; exit 1; }
+sha=$(git rev-parse --verify "${RELEASE_SHA-HEAD}^{commit}")
+test "$sha" = "$(git rev-parse HEAD)" || { echo "RELEASE_SHA must resolve to checked-out HEAD" >&2; exit 1; }
+version=${RELEASE_VERSION-$sha}
+[[ "$version" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] && [[ "$version" != latest ]] || { echo "RELEASE_VERSION must be a non-latest OCI tag (1-128 characters)" >&2; exit 1; }
 source=https://github.com/jobucaldas/roomies
-out="$PWD/artifacts/release/$sha"
-test ! -e "$out" || { echo "Bundle already exists: $out (move it before rebuilding)" >&2; exit 1; }
-mkdir -p "$out"
+final="$PWD/artifacts/release/$sha"
+test ! -e "$final" || { echo "Bundle already exists: $final (move it before rebuilding)" >&2; exit 1; }
+mkdir -p "${final%/*}"
+out=$(mktemp -d "${final%/*}/.$sha.XXXXXX")
+work=
+trap 'rm -rf "$out"; if test -n "$work"; then rm -rf "$work"; fi' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
-git archive HEAD > "$out/source.tar"
+git archive "$sha" > "$out/source.tar"
 tar -xf "$out/source.tar" -C "$work"
-dirty=false
-if test -n "$(git status --porcelain)"; then dirty=true; fi
-jq -n --arg revision "$sha" --arg source "$source" --argjson preliminary "$dirty" \
-  '{schemaVersion:1,revision:$revision,source:$source,preliminary:$preliminary,publication:"none",sbom:"Syft SPDX JSON; local inventory, not an attestation"}' > "$out/release.json"
+jq -n --arg revision "$sha" --arg version "$version" --arg source "$source" \
+  '{schemaVersion:1,revision:$revision,version:$version,source:$source,publication:"none",sbom:"Syft SPDX JSON; local inventory, not an attestation"}' > "$out/release.json"
 { podman --version; skopeo --version; kustomize version; syft version; } > "$out/tool-versions.txt"
-cp flake.lock "$out/flake.lock"
-cp -R deploy/kustomize "$out/kustomize"
+cp "$work/flake.lock" "$out/flake.lock"
+cp -R "$work/deploy/kustomize" "$out/kustomize"
 for component in backend frontend; do
     image="localhost/roomies-$component:$sha"
     context="$work"
@@ -28,13 +34,13 @@ for component in backend frontend; do
     fi
     podman build --label "org.opencontainers.image.source=$source" \
         --label "org.opencontainers.image.revision=$sha" \
-        --label "org.opencontainers.image.version=$sha" \
+        --label "org.opencontainers.image.version=$version" \
         -t "$image" -f "$dockerfile" "$context"
     podman save --format oci-archive -o "$out/$component.oci.tar" "$image"
     skopeo inspect --raw "oci-archive:$out/$component.oci.tar" > "$out/$component.manifest.json"
     skopeo inspect --config "oci-archive:$out/$component.oci.tar" > "$out/$component.config.json"
     digest="sha256:$(sha256sum "$out/$component.manifest.json" | cut -d ' ' -f1)"
-    jq -e --arg sha "$sha" --arg source "$source" '.config.Labels | .["org.opencontainers.image.revision"] == $sha and .["org.opencontainers.image.version"] == $sha and .["org.opencontainers.image.source"] == $source' "$out/$component.config.json" >/dev/null
+    jq -e --arg sha "$sha" --arg version "$version" --arg source "$source" '.config.Labels | .["org.opencontainers.image.revision"] == $sha and .["org.opencontainers.image.version"] == $version and .["org.opencontainers.image.source"] == $source' "$out/$component.config.json" >/dev/null
     jq -n --arg image "$image" --arg digest "$digest" --arg archive "$component.oci.tar" \
       '{localTag:$image,archive:$archive,ociManifestDigest:$digest,published:false}' > "$out/$component.image.json"
     (cd "$out/kustomize/overlays/production"; kustomize edit set image "roomies-$component=$image")
@@ -50,9 +56,7 @@ jq -n --arg digest "$digest" '{localTag:"docker.io/caddy:2.8-alpine",archive:"ca
 for component in backend frontend caddy; do
     mkdir "$work/$component-oci"
     tar -xf "$out/$component.oci.tar" -C "$work/$component-oci"
-    for blob in "$work/$component-oci"/blobs/sha256/*; do
-        test "$(sha256sum "$blob" | cut -d ' ' -f1)" = "${blob##*/}"
-    done
+    python3 "$work/scripts/validate-oci.py" "$work/$component-oci"
     digest=$(jq -r '.ociManifestDigest' "$out/$component.image.json")
     jq -e --arg digest "$digest" '.manifests | any(.digest == $digest)' "$work/$component-oci/index.json" >/dev/null
     cmp "$out/$component.manifest.json" "$work/$component-oci/blobs/sha256/${digest#sha256:}"
@@ -66,7 +70,7 @@ kustomize build "$out/kustomize/overlays/production" > "$out/production.yaml"
 ! grep -q ':latest' "$out/production.yaml"
 for component in backend frontend; do grep -q "localhost/roomies-$component:$sha" "$out/production.yaml"; done
 cat > "$out/README.txt" <<'NOTE'
-Local-only bundle. Read release.json: preliminary=true is NOT final acceptance.
+Local-only bundle from a clean committed source. Read release.json for identity.
 *.oci.tar are local OCI archives; *.manifest.json are their actual raw manifests.
 *.image.json records SHA-256 of those manifest bytes, NOT a registry pull digest.
 production.yaml uses local SHA tags for Roomies and a version tag for Caddy.
@@ -77,4 +81,6 @@ Checksums cover all bundle files except SHA256SUMS itself. SBOMs are local inven
 not signed attestations. Scanner IDs/timestamps and builds are not byte-reproducible.
 NOTE
 (cd "$out"; find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS; sha256sum -c SHA256SUMS)
-echo "Local release bundle: $out"
+mv -T --no-clobber "$out" "$final"
+test ! -d "$out" || { echo "Bundle destination appeared during build" >&2; exit 1; }
+echo "Local release bundle: $final"

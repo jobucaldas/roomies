@@ -10,8 +10,27 @@ The Android command uses the repository-pinned Rust 1.89.0, Dioxus CLI 0.7.10, A
 ## Render manifests
 - `kustomize build deploy/kustomize/overlays/production`
 
-## Apply to Kubernetes
-- `kubectl apply -k deploy/kustomize/overlays/production`
+## Owner publication and Kubernetes boundary
+The checked-in production overlay is a non-deployable placeholder. Never apply it
+directly. First publish images under the owner-selected registry and create a
+publication overlay replacing **every** image (including Caddy) with a verified,
+published `name@sha256:<64-hex>` reference. Local rehearsal digests are not proof
+of registry availability. Render that owner overlay to `published.yaml`, verify
+all image references are digest-pinned (no tags such as `latest`), and complete
+owner cluster/secrets/TLS checks before any apply. No deployment command against
+the mutable template is provided here. Validate the owner-supplied render before
+requesting deployment approval (this does not prove registry pullability):
+
+```bash
+kustomize build "$PUBLICATION_OVERLAY" > published.yaml
+awk '/^[[:space:]]*image:/ { count++; if ($2 !~ /@sha256:[0-9a-f]{64}$/) bad=1 } END { exit (bad || count == 0) }' published.yaml
+```
+
+The local rehearsal output intentionally does not pass this publication gate.
+
+For credential-free rehearsal, run:
+`nix develop .#container -c env RELEASE_SHA="$(git rev-parse HEAD)" RELEASE_VERSION=local-review make release-dry-run`.
+This output is local-only, not the owner publication overlay.
 
 ## Required secrets
 Provide the values from `docs/credentials.example.env` via a Kubernetes Secret or your secret manager:
@@ -26,7 +45,7 @@ Provide the values from `docs/credentials.example.env` via a Kubernetes Secret o
 
 ## Notes
 
-The backend builder uses Go 1.26 because the pinned `github.com/marknefedov/go-webpush/v2` v2.0.0 module declares Go 1.26 as its minimum. Recurrence is pinned to `github.com/teambition/rrule-go` v1.8.2; expansion is bounded and never calls `All`.
+The backend builder and CI use Go 1.26.8 with GOTOOLCHAIN=local because the pinned `github.com/marknefedov/go-webpush/v2` v2.0.0 module declares Go 1.26 as its minimum. Recurrence is pinned to `github.com/teambition/rrule-go` v1.8.2; expansion is bounded and never calls `All`.
 - The backend runs migrations on startup.
 - `SMTP_HOST` selects SMTP in every environment (use Mailpit for local development); leaving it empty selects the fake non-delivery provider.
 - Invitation creation returns `manual_acceptance_url` only in the initial successful response. Idempotent replays retain the invitation result but omit its one-time bearer URL. When SMTP is configured, the same one-time URL is AES-256-GCM encrypted in the outbox with invitation, house, and job context as associated data; the worker decrypts it only immediately before SMTP dispatch.

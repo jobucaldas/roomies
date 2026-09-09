@@ -78,6 +78,7 @@
         kubectl
         skopeo
         syft
+        python3
       ];
       ocrPackages = with pkgs; [
         imagemagick

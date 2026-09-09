@@ -27,9 +27,18 @@ Run `nix develop .#container -c make release-dry-run` from a clean commit.
 The ignored `artifacts/release/<full-commit-sha>/` contains production YAML,
 local OCI archives, raw manifests/configs, OCI provenance labels, image metadata,
 source archive, Syft SPDX JSON SBOMs, tool versions, the flake lock, and verified `SHA256SUMS`. Existing bundles are
-never overwritten. Dirty tooling runs are marked preliminary and are not release
-acceptance. Source builds always use `git archive HEAD`, excluding local secrets
-and generated files. The final run must use a clean committed tree.
+never overwritten. `RELEASE_SHA` defaults to HEAD and must resolve to the clean
+checked-out HEAD; alternate commits and any non-ignored dirty/untracked files
+are rejected before creating a bundle. `RELEASE_VERSION` defaults to the full
+resolved SHA; explicit values must be 1–128-character OCI tags, excluding
+`latest`. It is recorded in release metadata and Roomies OCI version labels;
+image tags and bundle directory remain SHA-addressed. Source, lockfile and
+Kustomize inputs all come from `git archive` of that commit.
+
+Builds run in a temporary sibling directory, removed on failure; only fully
+validated, checksummed output is atomically renamed to the final SHA directory.
+Failed runs can be retried. A completed SHA bundle is never overwritten, even
+when a different version is requested (move it aside explicitly first).
 
 Roomies images in the bundle use explicit local SHA tags, not `latest` or an
 unapproved registry namespace. The template above remains an owner-customized
