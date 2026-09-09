@@ -120,7 +120,8 @@
             SECURITY_PARSER=${./scripts/check_kustomize_security.py} \
             bash ${./scripts/check-kustomize-security.sh}
           KUSTOMIZE_TREE=$PWD/kustomize-tree PYTHON=${securityCheckPython}/bin/python3 \
-            PYTHONPATH=${./scripts} SECURITY_MUTATION_TEST=${./scripts/test_kustomize_security.py} \
+            PYTHONPATH=${./scripts} SECURITY_PARSER=${./scripts/check_kustomize_security.py} \
+            SECURITY_MUTATION_TEST=${./scripts/test_kustomize_security.py} \
             bash ${./scripts/test-kustomize-security.sh}
           touch $out
         '';

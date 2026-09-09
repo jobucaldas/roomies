@@ -4,9 +4,14 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import os
 from pathlib import Path
+import subprocess
 import sys
+import tempfile
 from typing import Any, Callable
+
+import yaml
 
 from check_kustomize_security import load_documents, validate_security
 
@@ -38,6 +43,41 @@ def assert_rejected(
         )
 
 
+def remove_deployment(documents: list[dict[str, Any]], name: str) -> None:
+    documents[:] = [
+        document
+        for document in documents
+        if not (
+            document.get("kind") == "Deployment"
+            and document.get("metadata", {}).get("name") == name
+        )
+    ]
+
+
+def assert_cli_rejected(contents: str, description: str, expected: str) -> None:
+    checker = Path(
+        os.environ.get(
+            "SECURITY_PARSER", str(Path(__file__).with_name("check_kustomize_security.py"))
+        )
+    )
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", encoding="utf-8") as fixture:
+        fixture.write(contents)
+        fixture.flush()
+        result = subprocess.run(
+            [sys.executable, str(checker), fixture.name],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    if result.returncode == 0:
+        raise AssertionError(f"CLI mutation unexpectedly passed: {description}")
+    if expected not in result.stderr:
+        raise AssertionError(
+            f"CLI mutation failed for an unexpected reason: {description}; "
+            f"expected {expected!r}, got {result.stderr!r}"
+        )
+
+
 def main(path: Path) -> int:
     original = load_documents(path)
     assert_rejected(
@@ -48,6 +88,51 @@ def main(path: Path) -> int:
         ),
         "unsecured",
     )
+
+    duplicate_identity = deepcopy(deployment(original, "roomies-backend"))
+    assert_rejected(
+        original,
+        "duplicate Deployment identity",
+        lambda documents: documents.append(deepcopy(duplicate_identity)),
+        "duplicate resource identity",
+    )
+
+    same_name = {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {"name": "roomies-backend", "namespace": "other"},
+        "spec": {
+            "template": {
+                "spec": {
+                    "containers": [
+                        {"name": "other-unsecured", "image": "example.invalid/mutation"}
+                    ]
+                }
+            }
+        },
+    }
+    for position in ("front", "back"):
+        def add_same_name(documents: list[dict[str, Any]], position: str = position) -> None:
+            if position == "front":
+                documents.insert(0, deepcopy(same_name))
+            else:
+                documents.append(deepcopy(same_name))
+
+        assert_rejected(
+            original,
+            f"unsecured same-name Deployment in another namespace ({position})",
+            add_same_name,
+            "Deployment/other/roomies-backend",
+        )
+
+    for name in ("roomies-backend", "roomies-backend-worker", "roomies-frontend"):
+        assert_rejected(
+            original,
+            f"missing baseline {name}",
+            lambda documents, name=name: remove_deployment(documents, name),
+            f"missing required Deployment/default/{name}",
+        )
+
     assert_rejected(
         original,
         "UID zero",
@@ -68,7 +153,20 @@ def main(path: Path) -> int:
         ].update({"type": "Unconfined"}),
         "seccompProfile.type must be RuntimeDefault",
     )
-    print("Kubernetes security mutation tests passed: unsecured container, UID 0, drop ALL, Unconfined seccomp")
+
+    assert_cli_rejected("just-a-scalar\n", "scalar YAML document", "document[0] must be a mapping")
+    privileged_documents = deepcopy(original)
+    backend_container(privileged_documents)["securityContext"]["privileged"] = "true"
+    assert_cli_rejected(
+        yaml.safe_dump_all(privileged_documents),
+        "string privileged field",
+        "privileged must be a boolean",
+    )
+
+    print(
+        "Kubernetes security mutation tests passed: duplicate identity, duplicate-name namespace, baseline removal, "
+        "unsecured container, UID 0, drop ALL, Unconfined seccomp, scalar document, string privileged"
+    )
     return 0
 
 
