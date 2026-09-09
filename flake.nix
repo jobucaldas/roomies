@@ -32,6 +32,9 @@
         rustPlatform = cliRustPlatform;
         wasm-bindgen-cli = wasmBindgenCli;
       };
+      securityCheckPython = pkgs.python3.withPackages (pythonPackages: [
+        pythonPackages.pyyaml
+      ]);
       commonPackages = with pkgs; [
         rustToolchain
         curl
@@ -70,7 +73,7 @@
         ndkVersion = "27.0.12077973";
         platformVersions = [ "34" ];
       };
-      containerPackages = with pkgs; [
+      containerPackages = (with pkgs; [
         buildah
         kustomize
         podman
@@ -78,8 +81,7 @@
         kubectl
         skopeo
         syft
-        python3
-      ];
+      ]) ++ [ securityCheckPython ];
       ocrPackages = with pkgs; [
         imagemagick
         poppler_utils
@@ -111,10 +113,15 @@
         '';
 
         kustomize-security = pkgs.runCommand "roomies-kustomize-security" {
-          nativeBuildInputs = [ pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.kustomize ];
+          nativeBuildInputs = [ pkgs.bash pkgs.coreutils pkgs.kustomize securityCheckPython ];
         } ''
           cp -R ${./deploy/kustomize} ./kustomize-tree
-          KUSTOMIZE_TREE=$PWD/kustomize-tree bash ${./scripts/check-kustomize-security.sh}
+          KUSTOMIZE_TREE=$PWD/kustomize-tree PYTHON=${securityCheckPython}/bin/python3 \
+            SECURITY_PARSER=${./scripts/check_kustomize_security.py} \
+            bash ${./scripts/check-kustomize-security.sh}
+          KUSTOMIZE_TREE=$PWD/kustomize-tree PYTHON=${securityCheckPython}/bin/python3 \
+            PYTHONPATH=${./scripts} SECURITY_MUTATION_TEST=${./scripts/test_kustomize_security.py} \
+            bash ${./scripts/test-kustomize-security.sh}
           touch $out
         '';
 

@@ -72,6 +72,7 @@ render-manifests:
 
 check-kubernetes-security:
 	KUSTOMIZE=$(KUSTOMIZE) bash scripts/check-kustomize-security.sh
+	KUSTOMIZE=$(KUSTOMIZE) bash scripts/test-kustomize-security.sh
 
 clean-generated:
 	rm -rf target src/backend/bin src/app/dist src/app/target
