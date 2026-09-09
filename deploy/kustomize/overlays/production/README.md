@@ -55,8 +55,30 @@ R2/S3 remains the production blob-store baseline for future private files. The
 current backend has no blob-consuming feature; `S3_*` is reserved configuration,
 not evidence of an implemented or validated storage adapter.
 
-Registry namespace/publication, multi-architecture target policy, production
-secrets/providers, ingress/TLS, cluster acceptance, signing and attestations are
-owner/environment gates. This rehearsal does not accept native runtime, Linux
-Secret Service, or Android Keystore behavior. Frontend Kubernetes security-context
-hardening remains a separate bounded follow-up.
+## Workload security boundary
+
+The base and production manifests now apply the same bounded hardening to all four
+Roomies workload containers (backend, worker, frontend bundle init, and Caddy):
+`runAsNonRoot`, `allowPrivilegeEscalation: false`, `RuntimeDefault` seccomp,
+`capabilities.drop: [ALL]`, and a read-only root filesystem. No `hostPath` volumes
+are used.
+
+The backend image's Alpine `roomies` account is UID 100/GID 101. Both backend
+containers enforce those IDs, use fsGroup 101, and mount only an `/tmp` `emptyDir`;
+production must still provide the required PostgreSQL `DATABASE_URL` rather than
+relying on the image's writable SQLite default. The frontend bundle init runs as
+UID/GID 65532:65532 and copies into the `site` volume without preserving root
+ownership. The Caddy 2.8 Alpine image's `nobody` UID 65534 runs with GID/fsGroup
+65532. The site volume is read-only to Caddy; `/data` and `/config` are separate
+writable `emptyDir` volumes for Caddy runtime state, and `/tmp` is a writable
+`emptyDir` used to copy the image's setcap-marked binary to a capability-free
+path before execution. Caddy listens on unprivileged port 8080, while the
+frontend Service remains port 80 and targets the named `http` port. The Caddyfile
+is read-only.
+
+These are manifest/render and local container checks only. Registry
+namespace/publication, multi-architecture target policy, production
+secrets/providers, ingress/TLS, cluster admission/runtime, signing and
+attestations remain owner/environment gates. No cluster acceptance is claimed.
+The rehearsal also does not accept native runtime, Linux Secret Service, or
+Android Keystore behavior.

@@ -110,6 +110,14 @@
           kustomize build ./kustomize-tree/overlays/production > $out
         '';
 
+        kustomize-security = pkgs.runCommand "roomies-kustomize-security" {
+          nativeBuildInputs = [ pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.kustomize ];
+        } ''
+          cp -R ${./deploy/kustomize} ./kustomize-tree
+          KUSTOMIZE_TREE=$PWD/kustomize-tree bash ${./scripts/check-kustomize-security.sh}
+          touch $out
+        '';
+
         readme-baseline = pkgs.runCommand "roomies-readme-baseline" {
           nativeBuildInputs = [ pkgs.gnugrep ];
         } ''

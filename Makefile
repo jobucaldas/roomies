@@ -3,7 +3,7 @@ COMPOSE := docker compose
 DB_URL ?= postgres://roomies:roomies@localhost:5432/roomies?sslmode=disable
 KUSTOMIZE ?= kustomize
 
-.PHONY: dev dev-backend dev-frontend build build-backend build-frontend test test-backend test-frontend test-e2e-household check-compose smoke android shell-db lint-backend lint-frontend clean clean-generated clean-containers render-manifests
+.PHONY: dev dev-backend dev-frontend build build-backend build-frontend test test-backend test-frontend test-e2e-household check-compose check-kubernetes-security smoke android shell-db lint-backend lint-frontend clean clean-generated clean-containers render-manifests
 
 dev:
 	$(COMPOSE) -f .devcontainer/docker-compose.yml up --build
@@ -69,6 +69,9 @@ lint-frontend:
 
 render-manifests:
 	$(KUSTOMIZE) build deploy/kustomize/overlays/production
+
+check-kubernetes-security:
+	KUSTOMIZE=$(KUSTOMIZE) bash scripts/check-kustomize-security.sh
 
 clean-generated:
 	rm -rf target src/backend/bin src/app/dist src/app/target
