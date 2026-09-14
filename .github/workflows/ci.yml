@@ -12,6 +12,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pre-commit/action@v3
   backend:
     env:
       GOTOOLCHAIN: local
