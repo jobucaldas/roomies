@@ -1,0 +1,13 @@
+:8080
+
+root * /usr/share/caddy/html
+file_server
+
+handle /api/* {
+    reverse_proxy roomies-backend:8080
+}
+
+handle {
+    rewrite * /index.html
+    file_server
+}

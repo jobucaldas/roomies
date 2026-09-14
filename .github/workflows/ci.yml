@@ -1,0 +1,195 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pre-commit
+      - run: pre-commit run --show-diff-on-failure --color=always --all-files
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+      - run: go vet ./...
+        working-directory: src/backend
+        env:
+          GOTOOLCHAIN: local
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo clippy -p roomies-app --no-default-features --features web -- -D warnings
+  backend:
+    env:
+      GOTOOLCHAIN: local
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: roomies
+          POSTGRES_PASSWORD: roomies
+          POSTGRES_DB: roomies
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: src/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+      - run: go test ./...
+        env:
+          DATABASE_URL: sqlite://ci.db
+          JWT_SECRET: ci-only-secret
+      - run: go test ./...
+        env:
+          DATABASE_URL: postgres://roomies:roomies@localhost:5432/roomies?sslmode=disable
+          JWT_SECRET: ci-only-secret
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p roomies-app --no-default-features --features web
+      - run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
+      - run: cargo check -p roomies-app --no-default-features --features desktop
+
+  containers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure ephemeral secrets
+        run: |
+          jwt_secret="$(openssl rand -hex 48)"
+          echo "::add-mask::${jwt_secret}"
+          echo "JWT_SECRET=${jwt_secret}" >> "$GITHUB_ENV"
+      - name: Compose config
+        run: docker compose config
+        env:
+          DATABASE_URL: postgres://roomies:ci-password@db:5432/roomies?sslmode=disable
+          POSTGRES_PASSWORD: ci-password
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+      - name: Build and health smoke
+        run: |
+          docker compose up -d --build
+          trap 'docker compose down -v' EXIT
+          timeout 120 sh -c 'until curl -fsS http://localhost:58080/healthz; do sleep 2; done'
+          timeout 120 sh -c 'until curl -fsS http://localhost:58000/ >/dev/null; do sleep 2; done'
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:58000/api/auth/me)" = 401
+        env:
+          DATABASE_URL: postgres://roomies:ci-password@db:5432/roomies?sslmode=disable
+          POSTGRES_PASSWORD: ci-password
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+          CORS_ALLOWED_ORIGINS: http://localhost:58000
+          ROOMIES_BACKEND_PORT: 58080
+          ROOMIES_HTTP_PORT: 58000
+          ROOMIES_DB_PORT: 55432
+
+  household-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Configure disposable stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          password="$(openssl rand -hex 32)"
+          echo "::add-mask::${password}"
+          jwt_secret="$(openssl rand -hex 48)"
+          echo "::add-mask::${jwt_secret}"
+          invitation_key="$(openssl rand -base64 32)"
+          echo "::add-mask::${invitation_key}"
+          notification_key="$(openssl rand -base64 32)"
+          echo "::add-mask::${notification_key}"
+          {
+            echo "COMPOSE_PROJECT_NAME=roomies-household-${GITHUB_RUN_ID}"
+            echo "POSTGRES_PASSWORD=${password}"
+            echo "DATABASE_URL=postgres://roomies:${password}@db:5432/roomies?sslmode=disable"
+            echo "JWT_SECRET=${jwt_secret}"
+            echo "CORS_ALLOWED_ORIGINS=http://localhost:58000"
+            echo "ROOMIES_PUBLIC_BASE_URL=http://localhost:58000"
+            echo "ROOMIES_BACKEND_PORT=58080"
+            echo "ROOMIES_HTTP_PORT=58000"
+            echo "SMTP_HOST=mailpit"
+            echo "SMTP_PORT=1025"
+            echo "SMTP_FROM=no-reply@roomies.local"
+            echo "INVITATION_DELIVERY_KEY_ID=household-ephemeral"
+            echo "INVITATION_DELIVERY_KEY=${invitation_key}"
+            echo "NOTIFICATION_DELIVERY_KEY_ID=household-notifications-ephemeral"
+            echo "NOTIFICATION_DELIVERY_KEY=${notification_key}"
+          } >> "$GITHUB_ENV"
+      - name: Build and start household stack
+        run: |
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml -f e2e/docker-compose.mailpit.yml up -d --build
+          timeout 180 sh -c 'until curl -fsS http://localhost:58080/healthz; do sleep 2; done'
+          timeout 60 sh -c 'until curl -fsS http://localhost:58000/ >/dev/null; do sleep 2; done'
+      - name: Run core and household desktop and narrow flow
+        working-directory: e2e
+        env:
+          ROOMIES_E2E_COMMAND: npx playwright test tests/core.spec.ts tests/household.spec.ts
+          ROOMIES_WEB_URL: http://localhost:58000
+          ROOMIES_API_URL: http://localhost:58000/api
+        run: GIT_COMMIT="$(git rev-parse HEAD)" npx playwright test tests/core.spec.ts tests/household.spec.ts
+      - name: Upload sanitized household evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: household-browser-evidence-${{ github.run_id }}
+          path: e2e/artifacts/evidence/*.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Tear down household stack
+        if: always()
+        run: docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml -f e2e/docker-compose.mailpit.yml down --volumes --remove-orphans
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.89.0
+        with:
+          targets: aarch64-linux-android
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;27.0.12077973"
+      - run: cargo install dioxus-cli --version 0.7.10 --locked
+      - run: dx build --release --platform android --target aarch64-linux-android
+        working-directory: src/app
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973

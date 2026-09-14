@@ -1,0 +1,12 @@
+localhost:80
+
+handle /api/* {
+    reverse_proxy backend:8080
+}
+
+# Serve exported assets and fall back to Dioxus client-side routing.
+handle {
+    root * /usr/share/caddy/html
+    try_files {path} /index.html
+    file_server
+}

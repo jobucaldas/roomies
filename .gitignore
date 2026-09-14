@@ -1,0 +1,44 @@
+# Build artifacts
+**/target/
+**/dist/
+**/bin/
+**/env/
+
+target/
+dist/
+bin/
+env/
+
+# Dependencies
+src/backend/vendor/
+node_modules/
+**/node_modules/
+e2e/artifacts/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Coverage
+coverage.out
+*.html
+
+artifacts/release/

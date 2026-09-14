@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspace:cached
+      - go-cache:/go
+      - cargo-cache:/root/.cargo
+    environment:
+      - DATABASE_URL=postgres://roomies:roomies@db:5432/roomies?sslmode=disable
+      - PORT=8080
+      - JWT_SECRET=dev-secret-change-in-production
+    ports:
+      - "${ROOMIES_DEV_BACKEND_PORT:-58080}:8080"
+      - "${ROOMIES_DEV_FRONTEND_PORT:-58081}:8081"
+    depends_on:
+      db:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+
+  android:
+    image: docker.io/cirrusci/android-sdk:34
+    profiles: ["android"]
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace:cached
+    command: ["sleep", "infinity"]
+
+  db:
+    image: docker.io/postgres:16-alpine
+    environment:
+      POSTGRES_USER: roomies
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-roomies}
+      POSTGRES_DB: roomies
+    ports:
+      - "${ROOMIES_DEV_DB_PORT:-55432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roomies"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  go-cache:
+  cargo-cache:
+  pgdata:
