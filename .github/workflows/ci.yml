@@ -100,7 +100,7 @@ jobs:
           docker compose up -d --build
           trap 'docker compose down -v' EXIT
           timeout 120 sh -c 'until curl -fsS http://localhost:58080/healthz; do sleep 2; done'
-          curl -fsS http://localhost:58000/ >/dev/null
+          timeout 120 sh -c 'until curl -fsS http://localhost:58000/ >/dev/null; do sleep 2; done'
           test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:58000/api/auth/me)" = 401
         env:
           DATABASE_URL: postgres://roomies:ci-password@db:5432/roomies?sslmode=disable
