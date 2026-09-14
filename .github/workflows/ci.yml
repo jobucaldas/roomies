@@ -84,12 +84,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Configure ephemeral secrets
+        run: |
+          jwt_secret="$(openssl rand -hex 48)"
+          echo "::add-mask::${jwt_secret}"
+          echo "JWT_SECRET=${jwt_secret}" >> "$GITHUB_ENV"
       - name: Compose config
         run: docker compose config
         env:
           DATABASE_URL: postgres://roomies:ci-password@db:5432/roomies?sslmode=disable
           POSTGRES_PASSWORD: ci-password
-          JWT_SECRET: ci-only-secret
+          JWT_SECRET: ${{ env.JWT_SECRET }}
       - name: Build and health smoke
         run: |
           docker compose up -d --build
@@ -100,7 +105,7 @@ jobs:
         env:
           DATABASE_URL: postgres://roomies:ci-password@db:5432/roomies?sslmode=disable
           POSTGRES_PASSWORD: ci-password
-          JWT_SECRET: ci-only-secret
+          JWT_SECRET: ${{ env.JWT_SECRET }}
           CORS_ALLOWED_ORIGINS: http://localhost:58000
           ROOMIES_BACKEND_PORT: 58080
           ROOMIES_HTTP_PORT: 58000
