@@ -17,6 +17,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pre-commit/action@v3
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+      - run: go vet ./...
+        working-directory: src/backend
+        env:
+          GOTOOLCHAIN: local
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo clippy -p roomies-app --no-default-features --features web -- -D warnings
   backend:
     env:
       GOTOOLCHAIN: local
