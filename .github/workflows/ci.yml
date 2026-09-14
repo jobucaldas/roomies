@@ -76,7 +76,6 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p roomies-app --no-default-features --features web
-      - run: cargo check -p roomies-app --no-default-features --features web
       - run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
       - run: cargo check -p roomies-app --no-default-features --features desktop
 
