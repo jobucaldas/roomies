@@ -362,6 +362,36 @@ class NotificationPreferences {
         if (quietEndMinutes != null) 'quiet_end_minutes': quietEndMinutes,
         'digest_minutes': digestMinutes,
       };
+
+  NotificationPreferences copyWith({
+    String? houseId,
+    String? userId,
+    bool? expenseCreatedEnabled,
+    bool? reminderEnabled,
+    String? cadence,
+    String? timezone,
+    int? quietStartMinutes,
+    bool clearQuietStart = false,
+    int? quietEndMinutes,
+    bool clearQuietEnd = false,
+    int? digestMinutes,
+  }) {
+    return NotificationPreferences(
+      houseId: houseId ?? this.houseId,
+      userId: userId ?? this.userId,
+      expenseCreatedEnabled:
+          expenseCreatedEnabled ?? this.expenseCreatedEnabled,
+      reminderEnabled: reminderEnabled ?? this.reminderEnabled,
+      cadence: cadence ?? this.cadence,
+      timezone: timezone ?? this.timezone,
+      quietStartMinutes: clearQuietStart
+          ? null
+          : (quietStartMinutes ?? this.quietStartMinutes),
+      quietEndMinutes:
+          clearQuietEnd ? null : (quietEndMinutes ?? this.quietEndMinutes),
+      digestMinutes: digestMinutes ?? this.digestMinutes,
+    );
+  }
 }
 
 class NotificationSubscription {

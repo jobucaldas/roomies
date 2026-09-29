@@ -18,7 +18,7 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Roomies household management">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -33,6 +33,43 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <script>
+    async function roomiesSubscribePush(vapid, label) {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        throw new Error('Browser push is unsupported.');
+      }
+      const registration = await navigator.serviceWorker.register('/roomies-sw.js', { scope: '/' });
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        throw new Error('Notification permission was denied.');
+      }
+      const key = Uint8Array.from(
+        atob(vapid.replace(/-/g, '+').replace(/_/g, '/')),
+        (c) => c.charCodeAt(0),
+      );
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: key,
+      });
+      const json = subscription.toJSON();
+      return {
+        endpoint: json.endpoint,
+        p256dh: json.keys.p256dh,
+        auth: json.keys.auth,
+        label: label,
+      };
+    }
+    async function roomiesUnsubscribePush() {
+      if (!('serviceWorker' in navigator)) {
+        return;
+      }
+      const registration = await navigator.serviceWorker.getRegistration('/');
+      const subscription = registration && (await registration.pushManager.getSubscription());
+      if (subscription) {
+        await subscription.unsubscribe();
+      }
+    }
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

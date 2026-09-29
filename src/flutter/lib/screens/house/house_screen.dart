@@ -22,13 +22,14 @@ class HouseScreen extends StatefulWidget {
   State<HouseScreen> createState() => _HouseScreenState();
 }
 
-class _HouseScreenState extends State<HouseScreen> {
+class _HouseScreenState extends State<HouseScreen>
+    with SingleTickerProviderStateMixin {
   House? _house;
   List<HouseMember> _members = [];
   BalanceResponse? _balances;
   var _loading = true;
   String? _error;
-  var _tab = 'Expenses';
+  late TabController _tabController;
 
   static const _tabs = [
     'Expenses',
@@ -45,7 +46,23 @@ class _HouseScreenState extends State<HouseScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController.addListener(_onTabChanged);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _tabController.removeListener(_onTabChanged);
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _onTabChanged() {
+    if (!_tabController.indexIsChanging &&
+        _tabs[_tabController.index] == 'Balances') {
+      _loadBalances();
+    }
   }
 
   Future<void> _load() async {
@@ -93,13 +110,6 @@ class _HouseScreenState extends State<HouseScreen> {
     if (mounted) setState(() => _balances = balances);
   }
 
-  void _selectTab(String tab) {
-    setState(() => _tab = tab);
-    if (tab == 'Balances') {
-      _loadBalances();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
@@ -111,79 +121,85 @@ class _HouseScreenState extends State<HouseScreen> {
     final role = _currentRole(userId);
     final admin = _admin(role);
 
-    return RoomiesPage(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_error != null) RoomiesError(_error!),
-          if (_loading)
-            const Text('Loading house…')
-          else if (_house != null) ...[
-            RoomiesHeading(_house!.name),
-            if (admin) _HouseEditor(house: _house!, onSaved: (h) => setState(() => _house = h)),
-          ],
-          RoomiesPrimaryButton(
-            label: 'Back',
-            onPressed: () => context.go('/dashboard'),
+    return Scaffold(
+      backgroundColor: const Color(0xFFF0F2F5),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 960),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_error != null) RoomiesError(_error!),
+                  if (_loading)
+                    const Text('Loading house…')
+                  else if (_house != null) ...[
+                    RoomiesHeading(_house!.name),
+                    if (admin)
+                      _HouseEditor(
+                        house: _house!,
+                        onSaved: (h) => setState(() => _house = h),
+                      ),
+                  ],
+                  TextButton(
+                    onPressed: () => context.go('/dashboard'),
+                    child: const Text('Back'),
+                  ),
+                  TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    tabs: [for (final tab in _tabs) Tab(text: tab)],
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        ExpensesSection(
+                          houseId: widget.houseId,
+                          role: role,
+                          userId: userId,
+                        ),
+                        NotesSection(
+                          houseId: widget.houseId,
+                          role: role,
+                          userId: userId,
+                        ),
+                        GroceriesSection(
+                          houseId: widget.houseId,
+                          role: role,
+                          members: _members,
+                        ),
+                        ChoresSection(houseId: widget.houseId, role: role),
+                        CalendarSection(houseId: widget.houseId, role: role),
+                        ChatSection(
+                          houseId: widget.houseId,
+                          role: role,
+                          userId: userId,
+                        ),
+                        BalancesSection(balances: _balances),
+                        NotificationsSection(
+                          houseId: widget.houseId,
+                          role: role,
+                          userId: userId,
+                        ),
+                        MembersSection(
+                          houseId: widget.houseId,
+                          admin: admin,
+                          members: _members,
+                          onRefresh: _load,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          RoomiesTabStrip(
-            tabs: _tabs,
-            selected: _tab,
-            onSelected: _selectTab,
-          ),
-          RoomiesTabPanel(
-            name: _tab,
-            child: _buildPanel(userId, role, admin),
-          ),
-        ],
+        ),
       ),
     );
-  }
-
-  Widget _buildPanel(String userId, HouseRole? role, bool admin) {
-    switch (_tab) {
-      case 'Expenses':
-        return ExpensesSection(
-          houseId: widget.houseId,
-          role: role,
-          userId: userId,
-        );
-      case 'Notes':
-        return NotesSection(
-          houseId: widget.houseId,
-          role: role,
-          userId: userId,
-        );
-      case 'Groceries':
-        return GroceriesSection(
-          houseId: widget.houseId,
-          role: role,
-          members: _members,
-        );
-      case 'Chores':
-        return ChoresSection(houseId: widget.houseId, role: role);
-      case 'Calendar':
-        return CalendarSection(houseId: widget.houseId, role: role);
-      case 'Chat':
-        return ChatSection(
-          houseId: widget.houseId,
-          role: role,
-          userId: userId,
-        );
-      case 'Balances':
-        return BalancesSection(balances: _balances);
-      case 'Notifications / Schedule':
-        return NotificationsSection(houseId: widget.houseId, role: role);
-      case 'Members':
-        return MembersSection(
-          houseId: widget.houseId,
-          admin: admin,
-          members: _members,
-          onRefresh: _load,
-        );
-      default:
-        return const SizedBox.shrink();
-    }
   }
 }
 
@@ -228,18 +244,22 @@ class _HouseEditorState extends State<_HouseEditor> {
 
   @override
   Widget build(BuildContext context) {
-    return RoomiesCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const RoomiesHeading('House settings', level: 2),
-          RoomiesLabeledField(
-            label: 'Name',
-            child: TextField(controller: _name),
-          ),
-          RoomiesPrimaryButton(label: 'Save house', onPressed: _save),
-          if (_status.isNotEmpty) Text(_status),
-        ],
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const RoomiesHeading('House settings', level: 2),
+            TextFormField(
+              controller: _name,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            FilledButton(onPressed: _save, child: const Text('Save house')),
+            if (_status.isNotEmpty) Text(_status),
+          ],
+        ),
       ),
     );
   }

@@ -167,6 +167,7 @@ async function fixture(request: APIRequestContext, withMonitor = false): Promise
 
 async function login(page: Page, email: string) {
   await page.goto(web);
+  await expect(page.getByPlaceholder('Email')).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible();
   await page.getByPlaceholder('Email').fill(email);
   await page.getByPlaceholder('Password').fill(password);

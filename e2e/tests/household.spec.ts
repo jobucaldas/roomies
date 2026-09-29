@@ -91,6 +91,7 @@ async function register(request: APIRequestContext) {
 
 async function login(page: Page, email: string) {
   await page.goto(web);
+  await expect(page.getByPlaceholder('Email')).toBeVisible({ timeout: 60_000 });
   await page.getByPlaceholder('Email').fill(email);
   await page.getByPlaceholder('Password').fill('synthetic-password-123');
   await page.getByRole('button', { name: 'Login' }).click();

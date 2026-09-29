@@ -34,6 +34,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _error = null;
     });
     final app = context.read<AppState>();
+    final navigator = GoRouter.of(context);
     try {
       final auth =
           await app.api.register(_name.text, _email.text, _password.text);
@@ -41,9 +42,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
       final pending = await app.api.loadPendingInvitation();
       if (pending != null && pending.isNotEmpty) {
-        context.go('/accept-invitation');
+        navigator.go('/accept-invitation');
       } else {
-        context.go('/dashboard');
+        navigator.go('/dashboard');
       }
     } on ApiError catch (error) {
       setState(() => _error = error.message);
