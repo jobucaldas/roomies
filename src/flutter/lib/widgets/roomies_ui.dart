@@ -67,13 +67,15 @@ class RoomiesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
+    // Material ancestor is required for TextField/InputDecorator; GoRouter
+    // route builders do not wrap pages in Scaffold by default.
+    return Material(
       color: const Color(0xFFF0F2F5),
       child: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 960),
-            child: Padding(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: child,
             ),
