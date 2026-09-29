@@ -5,8 +5,9 @@
 - PostgreSQL: `cd src/backend && DATABASE_URL=postgres://roomies:roomies@localhost:5432/roomies?sslmode=disable JWT_SECRET=dev-secret go test ./... -v`
 
 ## Frontend
-- Web: `cargo test -p roomies-app --no-default-features --features web`
-- Web release bundle: `nix develop .#web --command sh -c 'cd src/app && dx build --release --debug-symbols=false'`
+- Production web client (Flutter): `cd src/flutter && flutter analyze && flutter test && flutter build web --release --dart-define=ROOMIES_API_URL=/api`
+- Rust reference client (retained until native targets migrate): `cargo test -p roomies-app --no-default-features --features web`
+- Rust web release bundle: `nix develop .#web --command sh -c 'cd src/app && dx build --release --debug-symbols=false'`
 - Desktop: `cargo check -p roomies-app --no-default-features --features desktop`
 - Android ARM64 check: `nix develop .#android --command cargo check -p roomies-app --no-default-features --features mobile --target aarch64-linux-android`
 - Android APK (optimized Rust payload, development signing): `nix develop .#android --command make android`
@@ -28,7 +29,7 @@ podman compose -f e2e/docker-compose.mailpit.yml down -v
 Screenshots and Playwright reports are written under `e2e/artifacts/` (ignored). The suite covers intended-user acceptance after auth redirect, wrong-account/revoked denial, idempotent duplicate acceptance, monitor authorization, and desktop/narrow layouts. Expiry and retryable-transient-failure invariants remain covered by the backend invitation contract tests.
 
 ## CI-gated core and household browser regression
-The `household-browser` GitHub Actions job runs the desktop and narrow projects for `e2e/tests/core.spec.ts` and `e2e/tests/household.spec.ts` against one disposable Compose PostgreSQL/backend/worker/frontend/Caddy/Mailpit stack. It builds the exact frontend assets through `src/app/Dockerfile`'s pinned Dioxus production builder and uses the checked-out SHA for `GIT_COMMIT`. Reproduce it on Linux from the repository root:
+The `household-browser` GitHub Actions job runs the desktop and narrow projects for `e2e/tests/core.spec.ts` and `e2e/tests/household.spec.ts` against one disposable Compose PostgreSQL/backend/worker/frontend/Caddy/Mailpit stack. It builds the production web client through `src/flutter/Dockerfile` and uses the checked-out SHA for `GIT_COMMIT`. Reproduce it on Linux from the repository root:
 
 ```sh
 make test-e2e-household

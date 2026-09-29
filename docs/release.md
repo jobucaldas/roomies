@@ -2,7 +2,7 @@
 
 ## Build
 - Backend image: `podman build -f src/backend/Dockerfile -t <registry>/roomies-backend:<tag> src/backend`
-- Frontend bundle image: `podman build -f src/app/Dockerfile -t <registry>/roomies-frontend:<tag> .`
+- Frontend bundle image: `podman build -f src/flutter/Dockerfile -t <registry>/roomies-frontend:<tag> .`
 - Web release bundle: `nix develop .#web --command sh -c 'cd src/app && dx build --release --debug-symbols=false'`
 - Android APK with an optimized Rust payload: `nix develop .#android --command make android`
 

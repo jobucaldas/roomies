@@ -102,7 +102,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: src/app/Dockerfile
+      dockerfile: src/flutter/Dockerfile
       args:
         ROOMIES_API_URL: ${ROOMIES_API_URL:-/api}
     volumes:

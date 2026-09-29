@@ -27,7 +27,7 @@ cp -R "$work/deploy/kustomize" "$out/kustomize"
 for component in backend frontend; do
     image="localhost/roomies-$component:$sha"
     context="$work"
-    dockerfile="$work/src/app/Dockerfile"
+    dockerfile="$work/src/flutter/Dockerfile"
     if test "$component" = backend; then
         context="$work/src/backend"
         dockerfile="$context/Dockerfile"

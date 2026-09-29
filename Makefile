@@ -3,7 +3,7 @@ COMPOSE := docker compose
 DB_URL ?= postgres://roomies:roomies@localhost:5432/roomies?sslmode=disable
 KUSTOMIZE ?= kustomize
 
-.PHONY: dev dev-backend dev-frontend build build-backend build-frontend test test-backend test-frontend test-e2e-household check-compose check-kubernetes-security smoke android shell-db lint-backend lint-frontend clean clean-generated clean-containers render-manifests
+.PHONY: dev dev-backend dev-frontend build build-backend build-frontend build-flutter-web test test-backend test-frontend test-flutter test-e2e-household check-compose check-kubernetes-security smoke android shell-db lint-backend lint-frontend lint-flutter clean clean-generated clean-containers render-manifests
 
 dev:
 	$(COMPOSE) -f .devcontainer/docker-compose.yml up --build
@@ -18,7 +18,9 @@ build:
 	$(COMPOSE) build
 
 build-frontend:
-	cd src/app && dx build --release
+	cd src/flutter && flutter build web --release --dart-define=ROOMIES_API_URL=/api
+
+build-flutter-web: build-frontend
 
 build-backend:
 	cd src/backend && go build -o bin/roomies-backend ./main.go
@@ -26,12 +28,19 @@ build-backend:
 test:
 	$(MAKE) test-backend
 	$(MAKE) test-frontend
+	$(MAKE) test-flutter
 
 test-backend:
 	cd src/backend && go test ./... -v
 
 test-frontend:
 	cargo test -p roomies-app --no-default-features --features web
+
+test-flutter:
+	cd src/flutter && flutter test
+
+lint-flutter:
+	cd src/flutter && flutter analyze
 
 test-e2e-household:
 	@set -eu; \
@@ -75,7 +84,7 @@ check-kubernetes-security:
 	KUSTOMIZE=$(KUSTOMIZE) bash scripts/test-kustomize-security.sh
 
 clean-generated:
-	rm -rf target src/backend/bin src/app/dist src/app/target
+	rm -rf target src/backend/bin src/app/dist src/app/target src/flutter/build
 
 clean-containers:
 	-$(COMPOSE) -f docker-compose.yml down -v

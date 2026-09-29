@@ -12,6 +12,11 @@
 - Frontend web tests pass.
 - Desktop checks need GTK/WebKit development libraries in the environment.
 
+## Flutter production web client
+- Added `src/flutter/` as the Compose/Caddy production web client, matching the Rust Dioxus API contracts and Playwright core/household flows (authentication, houses, expenses, notes, balances, members, groceries, chores, calendar, chat, notifications baseline).
+- CI runs `flutter-web` (analyze, test, release build) alongside existing Rust reference-client checks until native targets migrate.
+- E2E asset gates expect Flutter JavaScript bundles instead of Dioxus WASM.
+
 ## Open follow-ups
 - Verify the Nix desktop shell on a clean machine.
 - Wire real production secret delivery into the user's Kubernetes workflow.

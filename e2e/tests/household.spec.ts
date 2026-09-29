@@ -23,7 +23,11 @@ const sanitizedRequest = (method: string, url: string) => `${method} ${new URL(u
 
 function assetPath(url: string) {
   const path = new URL(url).pathname;
-  return path === '/' || path.endsWith('.html') || path.endsWith('.js') || path.endsWith('.wasm') ? path : null;
+  return path === '/' || path.endsWith('.html') || path.endsWith('.js') ? path : null;
+}
+
+function hasWebClientBundle(assetHashes: Record<string, string>) {
+  return Object.keys(assetHashes).some(path => path.endsWith('.js'));
 }
 
 test.beforeEach(async ({ page }) => {
@@ -53,8 +57,7 @@ test.afterEach(async ({ page }, info: TestInfo) => {
   const assets = Object.keys(value.assetHashes);
   expect(configuredCommit, 'GIT_COMMIT must be configured for exact-head evidence').toBe(head);
   expect(assets.some(path => path === '/' || path.endsWith('.html')), 'served HTML hash is required').toBeTruthy();
-  expect(assets.some(path => path.endsWith('.js')), 'served JavaScript hash is required').toBeTruthy();
-  expect(assets.some(path => path.endsWith('.wasm')), 'served WASM hash is required').toBeTruthy();
+  expect(hasWebClientBundle(value.assetHashes), 'served JavaScript hash is required').toBeTruthy();
   expect(value.consoleErrors).toEqual([]);
   expect(value.pageErrors).toEqual([]);
   expect(value.failedRequests).toEqual([]);

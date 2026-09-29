@@ -1,0 +1,53 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+
+import 'screens/accept_invitation_screen.dart';
+import 'screens/dashboard_screen.dart';
+import 'screens/house/house_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/register_screen.dart';
+import 'state/app_state.dart';
+
+GoRouter createRouter(AppState appState) {
+  return GoRouter(
+    refreshListenable: appState,
+    initialLocation: '/',
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/accept-invitation',
+        builder: (context, state) => AcceptInvitationScreen(
+          initialToken: state.uri.queryParameters['token'],
+        ),
+      ),
+      GoRoute(
+        path: '/dashboard',
+        redirect: (context, state) {
+          if (!context.read<AppState>().api.isAuthenticated) return '/';
+          return null;
+        },
+        builder: (context, state) => const DashboardScreen(),
+      ),
+      GoRoute(
+        path: '/house/:id',
+        redirect: (context, state) {
+          if (!context.read<AppState>().api.isAuthenticated) return '/';
+          return null;
+        },
+        builder: (context, state) =>
+            HouseScreen(houseId: state.pathParameters['id']!),
+      ),
+    ],
+    errorBuilder: (context, state) => Scaffold(
+      body: Center(child: Text(state.error.toString())),
+    ),
+  );
+}

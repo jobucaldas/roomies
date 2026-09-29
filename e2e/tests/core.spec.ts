@@ -112,8 +112,7 @@ test.afterEach(async ({ page }, testInfo: TestInfo) => {
   await page.evaluate(() => document.body.replaceChildren()).catch(() => undefined);
   expect(configuredCommit, 'GIT_COMMIT must be configured for exact-head evidence').toBe(head);
   expect(Object.keys(evidence.assetHashes).some(path => path === '/' || path.endsWith('.html'))).toBeTruthy();
-  expect(Object.keys(evidence.assetHashes).some(path => path.endsWith('.js'))).toBeTruthy();
-  expect(Object.keys(evidence.assetHashes).some(path => path.endsWith('.wasm'))).toBeTruthy();
+  expect(hasWebClientBundle(evidence.assetHashes)).toBeTruthy();
   expect(evidence.consoleErrors).toEqual([]);
   expect(evidence.pageErrors).toEqual([]);
   expect(evidence.failedRequests).toEqual([]);
@@ -195,9 +194,15 @@ async function openHouse(page: Page, houseId: string) {
 }
 
 async function cardContains(page: Page, marker: string) {
-  return page.locator('article.card').evaluateAll((cards, value) => (
+  const articleMatch = await page.locator('article.card').evaluateAll((cards, value) => (
     cards.some(card => card.textContent?.includes(value as string) ?? false)
   ), marker);
+  if (articleMatch) return true;
+  return page.getByText(marker, { exact: false }).first().isVisible().catch(() => false);
+}
+
+function hasWebClientBundle(assetHashes: Record<string, string>) {
+  return Object.keys(assetHashes).some(path => path.endsWith('.js'));
 }
 
 async function expectCard(page: Page, marker: string, visible: boolean) {

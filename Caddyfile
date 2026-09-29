@@ -4,7 +4,7 @@ handle /api/* {
     reverse_proxy backend:8080
 }
 
-# Serve exported assets and fall back to Dioxus client-side routing.
+# Serve exported assets and fall back to Flutter web client-side routing.
 handle {
     root * /usr/share/caddy/html
     try_files {path} /index.html
