@@ -119,11 +119,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 const RoomiesHeading('Login', level: 2),
                 Text(
                   authkit
-                      ? 'Continue with AuthKit for secure household access.'
+                      ? 'Sign in with WorkOS AuthKit to continue.'
                       : 'Sign in to your shared house workspace.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 if (_error != null) RoomiesError(_error!),
                 if (_configLoading)
                   const Padding(
@@ -131,8 +131,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Center(child: CircularProgressIndicator()),
                   )
                 else if (authkit) ...[
-                  const Text('Sign in with WorkOS AuthKit to continue.'),
-                  const SizedBox(height: 12),
                   RoomiesPrimaryButton(
                     label: _loading ? 'Redirecting…' : 'Sign in with AuthKit',
                     onPressed: _loading
@@ -140,11 +138,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         : () => _startAuthKit(screenHint: 'sign-in'),
                     enabled: !_loading,
                   ),
-                  TextButton(
-                    onPressed: _loading
-                        ? null
-                        : () => _startAuthKit(screenHint: 'sign-up'),
-                    child: const Text("Don't have an account? Sign up"),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: _loading
+                          ? null
+                          : () => _startAuthKit(screenHint: 'sign-up'),
+                      child: const Text("Don't have an account? Sign up"),
+                    ),
                   ),
                 ] else ...[
                   TextField(
