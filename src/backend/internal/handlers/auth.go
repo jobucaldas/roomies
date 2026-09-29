@@ -10,16 +10,93 @@ import (
 	"github.com/roomies/backend/internal/middleware"
 	"github.com/roomies/backend/internal/models"
 	"github.com/roomies/backend/internal/repository"
+	"github.com/roomies/backend/internal/workosauth"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthHandler struct {
 	userRepo  *repository.UserRepository
 	jwtSecret string
+	workos    *workosauth.Client
 }
 
-func NewAuthHandler(userRepo *repository.UserRepository, jwtSecret string) *AuthHandler {
-	return &AuthHandler{userRepo: userRepo, jwtSecret: jwtSecret}
+func NewAuthHandler(userRepo *repository.UserRepository, jwtSecret string, workos *workosauth.Client) *AuthHandler {
+	return &AuthHandler{userRepo: userRepo, jwtSecret: jwtSecret, workos: workos}
+}
+
+func (h *AuthHandler) Config(w http.ResponseWriter, r *http.Request) {
+	enabled := h.workos != nil && h.workos.Enabled()
+	redirectURI := ""
+	if h.workos != nil {
+		redirectURI = h.workos.RedirectURI
+	}
+	// Password API stays available for CI/e2e fixtures; the Flutter UI hides it when AuthKit is on.
+	writeJSON(w, http.StatusOK, map[string]any{
+		"authkit":      enabled,
+		"password":     true,
+		"redirect_uri": redirectURI,
+	})
+}
+
+func (h *AuthHandler) WorkOSAuthorize(w http.ResponseWriter, r *http.Request) {
+	if h.workos == nil || !h.workos.Enabled() {
+		writeJSON(w, http.StatusServiceUnavailable, models.ErrorResponse{Error: "WorkOS AuthKit is not configured"})
+		return
+	}
+	screenHint := strings.TrimSpace(r.URL.Query().Get("screen_hint"))
+	switch screenHint {
+	case "", "sign-in", "sign-up":
+	default:
+		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "screen_hint must be sign-in or sign-up"})
+		return
+	}
+	state := strings.TrimSpace(r.URL.Query().Get("state"))
+	authorizationURL, err := h.workos.AuthorizationURL(screenHint, state)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"url": authorizationURL})
+}
+
+type workOSCallbackRequest struct {
+	Code  string `json:"code"`
+	State string `json:"state"`
+}
+
+func (h *AuthHandler) WorkOSCallback(w http.ResponseWriter, r *http.Request) {
+	if h.workos == nil || !h.workos.Enabled() {
+		writeJSON(w, http.StatusServiceUnavailable, models.ErrorResponse{Error: "WorkOS AuthKit is not configured"})
+		return
+	}
+	var req workOSCallbackRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "invalid request body"})
+		return
+	}
+	req.Code = strings.TrimSpace(req.Code)
+	if req.Code == "" {
+		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "code is required"})
+		return
+	}
+	result, err := h.workos.AuthenticateWithCode(r.Context(), req.Code, clientIP(r), r.UserAgent())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, models.ErrorResponse{Error: err.Error()})
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(result.User.Email))
+	name := workosauth.DisplayName(result.User)
+	user, err := h.userRepo.UpsertFromWorkOS(r.Context(), result.User.ID, email, name)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to persist authenticated user"})
+		return
+	}
+	token, err := h.generateToken(user)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to generate token"})
+		return
+	}
+	writeJSON(w, http.StatusOK, models.AuthResponse{Token: token, User: *user})
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +180,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+	if user.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
 		writeJSON(w, http.StatusUnauthorized, models.ErrorResponse{Error: "invalid email or password"})
 		return
 	}
@@ -136,4 +213,15 @@ func (h *AuthHandler) generateToken(user *models.User) (string, error) {
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(h.jwtSecret))
+}
+
+func clientIP(r *http.Request) string {
+	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); forwarded != "" {
+		return forwarded
+	}
+	host := r.RemoteAddr
+	if i := strings.LastIndex(host, ":"); i >= 0 {
+		return host[:i]
+	}
+	return host
 }

@@ -135,6 +135,54 @@ class ApiClient {
     throw ApiError.http(response.statusCode, response.body);
   }
 
+  Future<AuthConfig> getAuthConfig() async {
+    final gen = _generation;
+    return _send(
+      () => _http.get(Uri.parse('$baseUrl/auth/config'), headers: _headers()),
+      AuthConfig.fromJson,
+      generation: gen,
+    );
+  }
+
+  Future<String> workosAuthorizeUrl({String screenHint = 'sign-in'}) async {
+    final gen = _generation;
+    final response = await _http
+        .get(
+          Uri.parse('$baseUrl/auth/workos/authorize').replace(
+            queryParameters: {'screen_hint': screenHint},
+          ),
+          headers: _headers(),
+        )
+        .catchError((Object e) => throw ApiError.transport(e.toString()));
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final url = body['url'] as String?;
+      if (url == null || url.isEmpty) {
+        throw ApiError.http(response.statusCode, 'missing authorization url');
+      }
+      return url;
+    }
+    if (response.statusCode == 401) {
+      _handleUnauthorized(gen);
+    }
+    throw ApiError.http(response.statusCode, response.body);
+  }
+
+  Future<AuthResponse> completeWorkOSCallback(String code) async {
+    final gen = _generation;
+    final result = await _send(
+      () => _http.post(
+        Uri.parse('$baseUrl/auth/workos/callback'),
+        headers: _headers(),
+        body: jsonEncode({'code': code}),
+      ),
+      AuthResponse.fromJson,
+      generation: gen,
+    );
+    await _setToken(result.token);
+    return result;
+  }
+
   Future<AuthResponse> register(String name, String email, String password) async {
     final gen = _generation;
     final result = await _send(

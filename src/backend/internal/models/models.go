@@ -16,6 +16,7 @@ type User struct {
 	Name         string    `db:"name" json:"name"`
 	Email        string    `db:"email" json:"email"`
 	PasswordHash string    `db:"password_hash" json:"-"`
+	WorkOSUserID string    `db:"workos_user_id" json:"-"`
 	CreatedAt    time.Time `db:"created_at" json:"created_at"`
 }
 

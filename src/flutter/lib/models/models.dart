@@ -250,6 +250,24 @@ class AuthResponse {
       );
 }
 
+class AuthConfig {
+  AuthConfig({
+    required this.authkit,
+    required this.password,
+    this.redirectUri = '',
+  });
+
+  final bool authkit;
+  final bool password;
+  final String redirectUri;
+
+  factory AuthConfig.fromJson(Map<String, dynamic> json) => AuthConfig(
+        authkit: json['authkit'] as bool? ?? false,
+        password: json['password'] as bool? ?? true,
+        redirectUri: json['redirect_uri'] as String? ?? '',
+      );
+}
+
 class MessageResponse {
   MessageResponse({required this.message});
 

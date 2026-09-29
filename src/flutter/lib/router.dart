@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import 'screens/accept_invitation_screen.dart';
+import 'screens/auth_callback_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/house/house_screen.dart';
 import 'screens/login_screen.dart';
@@ -21,6 +22,14 @@ GoRouter createRouter(AppState appState) {
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/callback',
+        builder: (context, state) => AuthCallbackScreen(
+          code: state.uri.queryParameters['code'],
+          error: state.uri.queryParameters['error'] ??
+              state.uri.queryParameters['error_description'],
+        ),
       ),
       GoRoute(
         path: '/accept-invitation',

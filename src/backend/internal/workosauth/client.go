@@ -1,0 +1,154 @@
+package workosauth
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+)
+
+const defaultAPIBase = "https://api.workos.com"
+
+// Client talks to WorkOS User Management for AuthKit.
+type Client struct {
+	APIKey     string
+	ClientID   string
+	RedirectURI string
+	HTTPClient *http.Client
+	APIBase    string
+}
+
+func (c *Client) Enabled() bool {
+	return strings.TrimSpace(c.APIKey) != "" &&
+		strings.TrimSpace(c.ClientID) != "" &&
+		strings.TrimSpace(c.RedirectURI) != ""
+}
+
+func (c *Client) httpClient() *http.Client {
+	if c.HTTPClient != nil {
+		return c.HTTPClient
+	}
+	return &http.Client{Timeout: 15 * time.Second}
+}
+
+func (c *Client) apiBase() string {
+	if strings.TrimSpace(c.APIBase) != "" {
+		return strings.TrimRight(c.APIBase, "/")
+	}
+	return defaultAPIBase
+}
+
+// AuthorizationURL builds the AuthKit hosted sign-in/up URL.
+func (c *Client) AuthorizationURL(screenHint, state string) (string, error) {
+	if !c.Enabled() {
+		return "", fmt.Errorf("workos authkit is not configured")
+	}
+	values := url.Values{}
+	values.Set("response_type", "code")
+	values.Set("client_id", c.ClientID)
+	values.Set("redirect_uri", c.RedirectURI)
+	values.Set("provider", "authkit")
+	if screenHint != "" {
+		values.Set("screen_hint", screenHint)
+	}
+	if state != "" {
+		values.Set("state", state)
+	}
+	return c.apiBase() + "/user_management/authorize?" + values.Encode(), nil
+}
+
+type AuthenticateResult struct {
+	User        User   `json:"user"`
+	AccessToken string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+type User struct {
+	ID        string `json:"id"`
+	Email     string `json:"email"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}
+
+type apiError struct {
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
+	Message          string `json:"message"`
+}
+
+func (c *Client) AuthenticateWithCode(ctx context.Context, code, ipAddress, userAgent string) (*AuthenticateResult, error) {
+	if !c.Enabled() {
+		return nil, fmt.Errorf("workos authkit is not configured")
+	}
+	body := map[string]string{
+		"client_id":     c.ClientID,
+		"client_secret": c.APIKey,
+		"grant_type":    "authorization_code",
+		"code":          code,
+	}
+	if ipAddress != "" {
+		body["ip_address"] = ipAddress
+	}
+	if userAgent != "" {
+		body["user_agent"] = userAgent
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiBase()+"/user_management/authenticate", bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+
+	resp, err := c.httpClient().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var apiErr apiError
+		_ = json.Unmarshal(raw, &apiErr)
+		msg := apiErr.ErrorDescription
+		if msg == "" {
+			msg = apiErr.Message
+		}
+		if msg == "" {
+			msg = apiErr.Error
+		}
+		if msg == "" {
+			msg = strings.TrimSpace(string(raw))
+		}
+		if msg == "" {
+			msg = "workos authentication failed"
+		}
+		return nil, fmt.Errorf("%s", msg)
+	}
+	var result AuthenticateResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, err
+	}
+	if result.User.ID == "" || result.User.Email == "" {
+		return nil, fmt.Errorf("workos authentication returned an incomplete user")
+	}
+	return &result, nil
+}
+
+func DisplayName(user User) string {
+	name := strings.TrimSpace(strings.TrimSpace(user.FirstName) + " " + strings.TrimSpace(user.LastName))
+	if name != "" {
+		return name
+	}
+	return user.Email
+}

@@ -140,11 +140,23 @@ async function fixture(request: APIRequestContext): Promise<Fixture> {
   return { admin: admin.token, house: house.id, invitation: invitation.id, token, email };
 }
 
-async function login(page: Page, email: string) {
+async function login(page: Page, email: string, token?: string) {
+  const emailField = page.getByPlaceholder('Email');
+  const authkit = page.getByRole('button', { name: 'Sign in with AuthKit' });
+  await Promise.race([
+    emailField.waitFor({ state: 'visible', timeout: 60_000 }),
+    authkit.waitFor({ state: 'visible', timeout: 60_000 }),
+  ]);
   await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible();
-  await page.getByPlaceholder('Email').fill(email);
-  await page.getByPlaceholder('Password').fill('synthetic-password-123');
-  await page.getByRole('button', { name: 'Login' }).click();
+  if (await emailField.isVisible()) {
+    await emailField.fill(email);
+    await page.getByPlaceholder('Password').fill('synthetic-password-123');
+    await page.getByRole('button', { name: 'Login' }).click();
+  } else {
+    expect(token, 'AuthKit UI requires API token for e2e login').toBeTruthy();
+    await page.evaluate((value) => localStorage.setItem('flutter.roomies.session.token', value as string), token);
+    await page.reload();
+  }
 }
 
 test('admin invite is delivered and intended user joins once', async ({ page, request }) => {
@@ -152,7 +164,7 @@ test('admin invite is delivered and intended user joins once', async ({ page, re
   const invitee = await register(request, data.email, 'Synthetic Invitee');
   await page.goto(`${process.env.ROOMIES_WEB_URL ?? 'http://localhost'}/accept-invitation?token=${data.token}`);
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem('roomies.pending.invitation') !== null)).toBe(true);
-  await login(page, data.email);
+  await login(page, data.email, invitee.token);
   await expect(page).toHaveURL(new RegExp(`/house/${data.house}`));
   const retry = await request.post(`${apiURL}/invitations/accept`, {
     headers: { Authorization: `Bearer ${invitee.token}` }, data: { token: data.token },
@@ -172,7 +184,7 @@ test('wrong account, revoked link, and monitor invite are denied', async ({ page
   const wrong = await register(request, wrongEmail, 'Wrong Account');
   await page.goto(`${process.env.ROOMIES_WEB_URL ?? 'http://localhost'}/accept-invitation?token=${data.token}`);
   evidenceByPage.get(page)!.expectedInvitationNotFound = true;
-  await login(page, wrongEmail);
+  await login(page, wrongEmail, wrong.token);
   await expect(page.getByRole('alert')).toContainText('Unable to accept');
   const wrongDenied = await request.post(`${apiURL}/invitations/accept`, {
     headers: { Authorization: `Bearer ${wrong.token}` }, data: { token: data.token },

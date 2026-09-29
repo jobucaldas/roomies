@@ -89,12 +89,23 @@ async function register(request: APIRequestContext) {
   return { email, ...(await response.json() as { token: string }) };
 }
 
-async function login(page: Page, email: string) {
+async function login(page: Page, email: string, token?: string) {
   await page.goto(web);
-  await expect(page.getByPlaceholder('Email')).toBeVisible({ timeout: 60_000 });
-  await page.getByPlaceholder('Email').fill(email);
-  await page.getByPlaceholder('Password').fill('synthetic-password-123');
-  await page.getByRole('button', { name: 'Login' }).click();
+  const emailField = page.getByPlaceholder('Email');
+  const authkit = page.getByRole('button', { name: 'Sign in with AuthKit' });
+  await Promise.race([
+    emailField.waitFor({ state: 'visible', timeout: 60_000 }),
+    authkit.waitFor({ state: 'visible', timeout: 60_000 }),
+  ]);
+  if (await emailField.isVisible()) {
+    await emailField.fill(email);
+    await page.getByPlaceholder('Password').fill('synthetic-password-123');
+    await page.getByRole('button', { name: 'Login' }).click();
+  } else {
+    expect(token, 'AuthKit UI requires API token for e2e login').toBeTruthy();
+    await page.evaluate((value) => localStorage.setItem('flutter.roomies.session.token', value as string), token);
+    await page.goto(`${web}/dashboard`);
+  }
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 
@@ -103,7 +114,7 @@ async function household(page: Page, request: APIRequestContext) {
   const response = await request.post(`${api}/houses`, { headers: { Authorization: `Bearer ${user.token}` }, data: { name: 'Household validation' } });
   expect(response.ok()).toBeTruthy();
   const { id } = await response.json() as { id: string };
-  await login(page, user.email);
+  await login(page, user.email, user.token);
   await page.goto(`${web}/house/${id}`);
   await expect(page.getByRole('heading', { name: 'Household validation' })).toBeVisible();
 }

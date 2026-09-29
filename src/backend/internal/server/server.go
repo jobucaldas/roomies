@@ -14,6 +14,7 @@ import (
 	"github.com/roomies/backend/internal/handlers"
 	"github.com/roomies/backend/internal/middleware"
 	"github.com/roomies/backend/internal/repository"
+	"github.com/roomies/backend/internal/workosauth"
 )
 
 type Dependencies struct {
@@ -44,7 +45,12 @@ func NewHandler(deps Dependencies) http.Handler {
 		isReady = func() bool { return true }
 	}
 
-	authHandler := handlers.NewAuthHandler(deps.UserRepo, deps.Config.JWTSecret)
+	workosClient := &workosauth.Client{
+		APIKey:      deps.Config.WorkOSAPIKey,
+		ClientID:    deps.Config.WorkOSClientID,
+		RedirectURI: deps.Config.WorkOSRedirect(),
+	}
+	authHandler := handlers.NewAuthHandler(deps.UserRepo, deps.Config.JWTSecret, workosClient)
 	houseHandler := handlers.NewHouseHandler(deps.HouseRepo, deps.UserRepo, deps.ReliabilityRepo)
 	expenseHandler := handlers.NewExpenseHandler(deps.ExpenseRepo, deps.HouseRepo)
 	noteHandler := handlers.NewNoteHandler(deps.NoteRepo, deps.HouseRepo)
@@ -88,6 +94,9 @@ func NewHandler(deps Dependencies) http.Handler {
 	})
 
 	r.Route("/api/auth", func(r chi.Router) {
+		r.Get("/config", authHandler.Config)
+		r.Get("/workos/authorize", authHandler.WorkOSAuthorize)
+		r.Post("/workos/callback", authHandler.WorkOSCallback)
 		r.Post("/register", authHandler.Register)
 		r.Post("/login", authHandler.Login)
 	})

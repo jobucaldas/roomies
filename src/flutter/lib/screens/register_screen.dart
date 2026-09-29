@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_error.dart';
+import '../auth/open_url.dart';
+import '../models/models.dart';
 import '../state/app_state.dart';
 import '../widgets/roomies_ui.dart';
 
@@ -17,8 +19,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  AuthConfig? _config;
   var _loading = false;
+  var _configLoading = true;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConfig();
+  }
 
   @override
   void dispose() {
@@ -26,6 +36,47 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _email.dispose();
     _password.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadConfig() async {
+    try {
+      final config = await context.read<AppState>().api.getAuthConfig();
+      if (!mounted) return;
+      setState(() {
+        _config = config;
+        _configLoading = false;
+      });
+      if (config.authkit) {
+        await _startAuthKit();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _config = AuthConfig(authkit: false, password: true);
+        _configLoading = false;
+        _error = 'Could not load auth settings: $error';
+      });
+    }
+  }
+
+  Future<void> _startAuthKit() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final url = await context
+          .read<AppState>()
+          .api
+          .workosAuthorizeUrl(screenHint: 'sign-up');
+      openExternalUrl(url);
+    } on ApiError catch (error) {
+      setState(() => _error = error.message);
+    } catch (error) {
+      setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _submit() async {
@@ -57,6 +108,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authkit = _config?.authkit == true;
     return RoomiesPage(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,28 +116,41 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const RoomiesHeading('Roomies'),
           const RoomiesHeading('Register', level: 2),
           if (_error != null) RoomiesError(_error!),
-          TextField(
-            controller: _name,
-            decoration: const InputDecoration(hintText: 'Name'),
-          ),
-          TextField(
-            controller: _email,
-            decoration: const InputDecoration(hintText: 'Email'),
-          ),
-          TextField(
-            controller: _password,
-            decoration: const InputDecoration(hintText: 'Password'),
-            obscureText: true,
-          ),
-          RoomiesPrimaryButton(
-            label: _loading ? 'Creating account...' : 'Register',
-            enabled: !_loading,
-            onPressed: _submit,
-          ),
-          TextButton(
-            onPressed: () => context.go('/'),
-            child: const Text('Already have an account? Login'),
-          ),
+          if (_configLoading || (authkit && _loading))
+            const Text('Redirecting to AuthKit…')
+          else if (authkit) ...[
+            const Text('Create your account with WorkOS AuthKit.'),
+            FilledButton(
+              onPressed: _loading ? null : _startAuthKit,
+              child: const Text('Sign up with AuthKit'),
+            ),
+            TextButton(
+              onPressed: () => context.go('/'),
+              child: const Text('Already have an account? Login'),
+            ),
+          ] else ...[
+            TextField(
+              controller: _name,
+              decoration: const InputDecoration(hintText: 'Name'),
+            ),
+            TextField(
+              controller: _email,
+              decoration: const InputDecoration(hintText: 'Email'),
+            ),
+            TextField(
+              controller: _password,
+              decoration: const InputDecoration(hintText: 'Password'),
+              obscureText: true,
+            ),
+            FilledButton(
+              onPressed: _loading ? null : _submit,
+              child: Text(_loading ? 'Creating account...' : 'Register'),
+            ),
+            TextButton(
+              onPressed: () => context.go('/'),
+              child: const Text('Already have an account? Login'),
+            ),
+          ],
         ],
       ),
     );

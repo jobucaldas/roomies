@@ -60,6 +60,14 @@ func migrations(driver string) []schemaMigration {
 			name:    "household_domains",
 			up:      execStatements(householdStatements(driver)...),
 		},
+		{
+			version: 9,
+			name:    "workos_authkit_users",
+			up:      execStatements(
+				`ALTER TABLE users ADD COLUMN workos_user_id TEXT`,
+				`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_workos_user_id ON users(workos_user_id) WHERE workos_user_id IS NOT NULL AND workos_user_id != ''`,
+			),
+		},
 	}
 }
 

@@ -165,13 +165,24 @@ async function fixture(request: APIRequestContext, withMonitor = false): Promise
   return { admin, member, unlisted, monitor, houseId };
 }
 
-async function login(page: Page, email: string) {
+async function login(page: Page, email: string, token?: string) {
   await page.goto(web);
-  await expect(page.getByPlaceholder('Email')).toBeVisible({ timeout: 60_000 });
+  const emailField = page.getByPlaceholder('Email');
+  const authkit = page.getByRole('button', { name: 'Sign in with AuthKit' });
+  await Promise.race([
+    emailField.waitFor({ state: 'visible', timeout: 60_000 }),
+    authkit.waitFor({ state: 'visible', timeout: 60_000 }),
+  ]);
   await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible();
-  await page.getByPlaceholder('Email').fill(email);
-  await page.getByPlaceholder('Password').fill(password);
-  await page.getByRole('button', { name: 'Login' }).click();
+  if (await emailField.isVisible()) {
+    await emailField.fill(email);
+    await page.getByPlaceholder('Password').fill(password);
+    await page.getByRole('button', { name: 'Login' }).click();
+  } else {
+    expect(token, 'AuthKit UI requires API token for e2e login').toBeTruthy();
+    await page.evaluate((value) => localStorage.setItem('flutter.roomies.session.token', value as string), token);
+    await page.goto(`${web}/dashboard`);
+  }
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 
@@ -226,7 +237,7 @@ test('private expense stays hidden from an unlisted member', async ({ page, requ
   const description = 'core-private-expense';
   let expenseId = '';
   try {
-    await login(page, data.admin.email);
+    await login(page, data.admin.email, data.admin.token);
     await openHouse(page, data.houseId);
     await openTab(page, 'Expenses', 'Expenses');
     await page.getByRole('button', { name: 'Add expense' }).click();
@@ -262,13 +273,13 @@ test('private expense stays hidden from an unlisted member', async ({ page, requ
     expect(unlistedDetail.status()).toBe(404);
 
     await logout(page);
-    await login(page, data.unlisted!.email);
+    await login(page, data.unlisted!.email, data.unlisted!.token);
     await openHouse(page, data.houseId);
     await openTab(page, 'Expenses', 'Expenses');
     await expectCard(page, description, false);
 
     await logout(page);
-    await login(page, data.member.email);
+    await login(page, data.member.email, data.member.token);
     await openHouse(page, data.houseId);
     await openTab(page, 'Expenses', 'Expenses');
     await expectCard(page, description, true);
@@ -285,7 +296,7 @@ test('shared expense editing, deletion, and settlement suggestions are scoped to
   const updatedDescription = 'core-edited-expense';
   let expenseId = '';
   try {
-    await login(page, data.admin.email);
+    await login(page, data.admin.email, data.admin.token);
     await openHouse(page, data.houseId);
     await openTab(page, 'Expenses', 'Expenses');
     await page.getByRole('button', { name: 'Add expense' }).click();
@@ -348,7 +359,7 @@ test('member can create, edit, and delete a note', async ({ page, request }) => 
   const content = 'core-note-content';
   const updatedTitle = 'core-edited-note';
   const updatedContent = 'core-edited-note-content';
-  await login(page, data.member.email);
+  await login(page, data.member.email, data.member.token);
   await openHouse(page, data.houseId);
   await openTab(page, 'Notes', 'Notes');
   await expect(page.getByText('Loading notes…')).toHaveCount(0);
@@ -380,7 +391,7 @@ test('member can create, edit, and delete a note', async ({ page, request }) => 
 
 test('admin role controls apply and monitor mutations stay unavailable', async ({ page, request }) => {
   const data = await fixture(request, true);
-  await login(page, data.admin.email);
+  await login(page, data.admin.email, data.admin.token);
   await openHouse(page, data.houseId);
   const members = await openTab(page, 'Members', 'Members');
   const memberCard = members.locator('article.card').filter({ hasText: data.member.name });
@@ -398,7 +409,7 @@ test('admin role controls apply and monitor mutations stay unavailable', async (
   ))).toBe(true);
 
   await logout(page);
-  await login(page, data.member.email);
+  await login(page, data.member.email, data.member.token);
   await openHouse(page, data.houseId);
   const memberPanel = await openTab(page, 'Members', 'Members');
   const loadedMonitorCard = memberPanel.locator('article.card').filter({ hasText: data.member.name });

@@ -39,6 +39,9 @@ type Config struct {
 	WebPushSubject              string
 	FCMProjectID                string
 	FCMCredentialsFile          string
+	WorkOSAPIKey                string
+	WorkOSClientID              string
+	WorkOSRedirectURI           string
 }
 
 func Load() *Config {
@@ -69,7 +72,26 @@ func Load() *Config {
 		WebPushSubject:              getEnv("WEB_PUSH_SUBJECT", "mailto:no-reply@roomies.local"),
 		FCMProjectID:                strings.TrimSpace(os.Getenv("FCM_PROJECT_ID")),
 		FCMCredentialsFile:          strings.TrimSpace(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")),
+		WorkOSAPIKey:                strings.TrimSpace(os.Getenv("WORKOS_API_KEY")),
+		WorkOSClientID:              strings.TrimSpace(os.Getenv("WORKOS_CLIENT_ID")),
+		WorkOSRedirectURI:           strings.TrimSpace(os.Getenv("WORKOS_REDIRECT_URI")),
 	}
+}
+
+// WorkOSRedirect returns the AuthKit callback URL. Defaults to {PublicBaseURL}/callback.
+func (c *Config) WorkOSRedirect() string {
+	if c.WorkOSRedirectURI != "" {
+		return c.WorkOSRedirectURI
+	}
+	if c.PublicBaseURL == "" {
+		return ""
+	}
+	return strings.TrimRight(c.PublicBaseURL, "/") + "/callback"
+}
+
+// WorkOSEnabled is true when AuthKit API credentials are present.
+func (c *Config) WorkOSEnabled() bool {
+	return c.WorkOSAPIKey != "" && c.WorkOSClientID != "" && c.WorkOSRedirect() != ""
 }
 
 func (c *Config) Validate() error {
@@ -81,6 +103,15 @@ func (c *Config) Validate() error {
 			if origin == "*" {
 				return errors.New("wildcard CORS origin is not allowed in production")
 			}
+		}
+	}
+	if (c.WorkOSAPIKey == "") != (c.WorkOSClientID == "") {
+		return errors.New("WORKOS_API_KEY and WORKOS_CLIENT_ID must be provided together")
+	}
+	if c.WorkOSRedirectURI != "" {
+		redirectURL, err := url.Parse(c.WorkOSRedirectURI)
+		if err != nil || (redirectURL.Scheme != "http" && redirectURL.Scheme != "https") || redirectURL.Host == "" {
+			return errors.New("WORKOS_REDIRECT_URI must be an absolute http(s) URL")
 		}
 	}
 	if len(c.CORSAllowedOrigins) == 0 {
