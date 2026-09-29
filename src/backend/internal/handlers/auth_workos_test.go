@@ -1,4 +1,4 @@
-package handlers
+package handlers_test
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/roomies/backend/internal/handlers"
 	"github.com/roomies/backend/internal/workosauth"
 )
 
@@ -24,6 +25,9 @@ func TestAuthConfigReportsAuthKitDisabledByDefault(t *testing.T) {
 	}
 	if body["authkit"] != false {
 		t.Fatalf("authkit = %#v", body["authkit"])
+	}
+	if body["password"] != true {
+		t.Fatalf("password = %#v", body["password"])
 	}
 }
 
@@ -49,7 +53,7 @@ func TestWorkOSCallbackUpsertsUser(t *testing.T) {
 		APIBase:     server.URL,
 		HTTPClient:  server.Client(),
 	}
-	handler := NewAuthHandler(env.UserRepo, env.JWTSecret, workos)
+	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, workos)
 	payload, _ := json.Marshal(map[string]string{"code": "abc"})
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/workos/callback", bytes.NewReader(payload))
 	w := httptest.NewRecorder()
