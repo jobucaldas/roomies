@@ -40,5 +40,6 @@ Thumbs.db
 # Coverage
 coverage.out
 *.html
+!src/flutter/web/index.html
 
 artifacts/release/
