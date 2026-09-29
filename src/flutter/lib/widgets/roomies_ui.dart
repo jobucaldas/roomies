@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/roomies_theme.dart';
+
 /// Matches Dioxus `.card` / `article.card` layout for Playwright and visual parity.
 class RoomiesCard extends StatelessWidget {
   const RoomiesCard({super.key, required this.child, this.semanticLabel});
@@ -12,18 +14,21 @@ class RoomiesCard extends StatelessWidget {
     return Semantics(
       container: true,
       label: semanticLabel,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
         width: double.infinity,
         margin: const EdgeInsets.symmetric(vertical: 10),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
+          color: RoomiesColors.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: RoomiesColors.line),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 3,
-              offset: const Offset(0, 1),
+              color: RoomiesColors.ink.withValues(alpha: 0.05),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
             ),
           ],
         ),
@@ -34,7 +39,11 @@ class RoomiesCard extends StatelessWidget {
 }
 
 class RoomiesArticleCard extends RoomiesCard {
-  const RoomiesArticleCard({super.key, required super.child, super.semanticLabel});
+  const RoomiesArticleCard({
+    super.key,
+    required super.child,
+    super.semanticLabel,
+  });
 }
 
 class RoomiesError extends StatelessWidget {
@@ -48,40 +57,141 @@ class RoomiesError extends StatelessWidget {
       liveRegion: true,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         margin: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFFFDE8E8),
-          borderRadius: BorderRadius.circular(4),
+          color: RoomiesColors.dangerSoft,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFF0B8B0)),
         ),
-        child: Text(message, style: const TextStyle(color: Color(0xFFC53030))),
+        child: Text(
+          message,
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: RoomiesColors.danger,
+              ),
+        ),
+      ),
+    );
+  }
+}
+
+class RoomiesAtmosphere extends StatelessWidget {
+  const RoomiesAtmosphere({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFCBE3E1),
+            Color(0xFFE7EEF0),
+            Color(0xFFF3F6F7),
+            Color(0xFFDDE8EA),
+          ],
+          stops: [0.0, 0.35, 0.7, 1.0],
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            top: -80,
+            right: -40,
+            child: _Blob(
+              size: 240,
+              color: RoomiesColors.teal.withValues(alpha: 0.14),
+            ),
+          ),
+          Positioned(
+            bottom: -60,
+            left: -50,
+            child: _Blob(
+              size: 220,
+              color: RoomiesColors.tealDeep.withValues(alpha: 0.10),
+            ),
+          ),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _Blob extends StatelessWidget {
+  const _Blob({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color,
+        ),
       ),
     );
   }
 }
 
 class RoomiesPage extends StatelessWidget {
-  const RoomiesPage({super.key, required this.child});
+  const RoomiesPage({
+    super.key,
+    required this.child,
+    this.maxWidth = 960,
+    this.atmosphere = true,
+    this.centered = false,
+  });
 
   final Widget child;
+  final double maxWidth;
+  final bool atmosphere;
+  final bool centered;
 
   @override
   Widget build(BuildContext context) {
     // Material ancestor is required for TextField/InputDecorator; GoRouter
     // route builders do not wrap pages in Scaffold by default.
-    return Material(
-      color: const Color(0xFFF0F2F5),
-      child: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 960),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
+    final content = SafeArea(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: centered ? 24 : 20,
+              vertical: centered ? 48 : 24,
+            ),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 420),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, animatedChild) {
+                return Opacity(
+                  opacity: value,
+                  child: Transform.translate(
+                    offset: Offset(0, (1 - value) * 12),
+                    child: animatedChild,
+                  ),
+                );
+              },
               child: child,
             ),
           ),
         ),
       ),
+    );
+
+    return Material(
+      color: RoomiesColors.canvas,
+      child: atmosphere ? RoomiesAtmosphere(child: content) : content,
     );
   }
 }
@@ -94,29 +204,54 @@ class RoomiesHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context).textTheme;
     final style = switch (level) {
-      1 => const TextStyle(
-          fontSize: 28,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFF1A73E8),
-        ),
-      2 => const TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF444444),
-        ),
-      3 => const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF555555),
-        ),
-      _ => const TextStyle(fontSize: 16),
+      1 => theme.headlineLarge,
+      2 => theme.headlineMedium,
+      3 => theme.titleLarge,
+      _ => theme.bodyLarge,
     };
     return Semantics(
       header: true,
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 8, top: 8),
+        padding: EdgeInsets.only(
+          bottom: level == 1 ? 12 : 8,
+          top: level == 1 ? 4 : 8,
+        ),
         child: Text(text, style: style),
+      ),
+    );
+  }
+}
+
+class RoomiesBrandMark extends StatelessWidget {
+  const RoomiesBrandMark({super.key, this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      header: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Roomies',
+            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                  fontSize: compact ? 32 : 44,
+                ),
+          ),
+          if (!compact) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Shared homes, clearer money and chores.',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: RoomiesColors.inkMuted,
+                  ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -137,15 +272,13 @@ class RoomiesPrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-      child: ElevatedButton(
-        onPressed: enabled ? onPressed : null,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF1A73E8),
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: const Color(0xFFCCCCCC),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton(
+          onPressed: enabled ? onPressed : null,
+          child: Text(label),
         ),
-        child: Text(label),
       ),
     );
   }
@@ -169,10 +302,13 @@ class RoomiesLabeledField extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-          const SizedBox(height: 4),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 6),
           child,
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
         ],
       ),
     );
@@ -207,20 +343,23 @@ class RoomiesTabStrip extends StatelessWidget {
                     button: true,
                     selected: selected == tab,
                     label: tab,
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        backgroundColor: selected == tab
-                            ? const Color(0xFF1A73E8)
-                            : const Color(0xFFE0E0E0),
-                        foregroundColor: selected == tab
-                            ? Colors.white
-                            : const Color(0xFF555555),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          backgroundColor: selected == tab
+                              ? RoomiesColors.teal
+                              : RoomiesColors.mist,
+                          foregroundColor: selected == tab
+                              ? Colors.white
+                              : RoomiesColors.inkMuted,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
+                        onPressed: () => onSelected(tab),
+                        child: Text(tab, textAlign: TextAlign.center),
                       ),
-                      onPressed: () => onSelected(tab),
-                      child: Text(tab, textAlign: TextAlign.center),
                     ),
                   ),
                 ),

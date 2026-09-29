@@ -6,6 +6,7 @@ import '../api/api_error.dart';
 import '../auth/open_url.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
+import '../theme/roomies_theme.dart';
 import '../widgets/roomies_ui.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -104,47 +105,80 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final authkit = _config?.authkit == true;
     return RoomiesPage(
+      maxWidth: 480,
+      centered: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const RoomiesHeading('Roomies'),
-          const RoomiesHeading('Login', level: 2),
-          if (_error != null) RoomiesError(_error!),
-          if (_configLoading)
-            const Text('Loading sign-in options…')
-          else if (authkit) ...[
-            const Text('Sign in with WorkOS AuthKit to continue.'),
-            FilledButton(
-              onPressed: _loading
-                  ? null
-                  : () => _startAuthKit(screenHint: 'sign-in'),
-              child: Text(_loading ? 'Redirecting…' : 'Sign in with AuthKit'),
+          const RoomiesBrandMark(),
+          const SizedBox(height: 28),
+          RoomiesCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const RoomiesHeading('Login', level: 2),
+                Text(
+                  authkit
+                      ? 'Continue with AuthKit for secure household access.'
+                      : 'Sign in to your shared house workspace.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                if (_error != null) RoomiesError(_error!),
+                if (_configLoading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (authkit) ...[
+                  const Text('Sign in with WorkOS AuthKit to continue.'),
+                  const SizedBox(height: 12),
+                  RoomiesPrimaryButton(
+                    label: _loading ? 'Redirecting…' : 'Sign in with AuthKit',
+                    onPressed: _loading
+                        ? null
+                        : () => _startAuthKit(screenHint: 'sign-in'),
+                    enabled: !_loading,
+                  ),
+                  TextButton(
+                    onPressed: _loading
+                        ? null
+                        : () => _startAuthKit(screenHint: 'sign-up'),
+                    child: const Text("Don't have an account? Sign up"),
+                  ),
+                ] else ...[
+                  TextField(
+                    controller: _email,
+                    decoration: const InputDecoration(hintText: 'Email'),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _password,
+                    decoration: const InputDecoration(hintText: 'Password'),
+                    obscureText: true,
+                  ),
+                  const SizedBox(height: 8),
+                  RoomiesPrimaryButton(
+                    label: _loading ? 'Logging in...' : 'Login',
+                    onPressed: _loading ? null : _submitPassword,
+                    enabled: !_loading,
+                  ),
+                  TextButton(
+                    onPressed: () => context.go('/register'),
+                    child: const Text("Don't have an account? Register"),
+                  ),
+                ],
+              ],
             ),
-            TextButton(
-              onPressed:
-                  _loading ? null : () => _startAuthKit(screenHint: 'sign-up'),
-              child: const Text("Don't have an account? Sign up"),
-            ),
-          ] else ...[
-            TextField(
-              controller: _email,
-              decoration: const InputDecoration(hintText: 'Email'),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            TextField(
-              controller: _password,
-              decoration: const InputDecoration(hintText: 'Password'),
-              obscureText: true,
-            ),
-            FilledButton(
-              onPressed: _loading ? null : _submitPassword,
-              child: Text(_loading ? 'Logging in...' : 'Login'),
-            ),
-            TextButton(
-              onPressed: () => context.go('/register'),
-              child: const Text("Don't have an account? Register"),
-            ),
-          ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'Private by default · house-scoped everything',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: RoomiesColors.inkMuted,
+                ),
+          ),
         ],
       ),
     );

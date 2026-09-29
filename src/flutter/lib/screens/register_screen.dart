@@ -110,47 +110,66 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     final authkit = _config?.authkit == true;
     return RoomiesPage(
+      maxWidth: 480,
+      centered: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const RoomiesHeading('Roomies'),
-          const RoomiesHeading('Register', level: 2),
-          if (_error != null) RoomiesError(_error!),
-          if (_configLoading || (authkit && _loading))
-            const Text('Redirecting to AuthKit…')
-          else if (authkit) ...[
-            const Text('Create your account with WorkOS AuthKit.'),
-            FilledButton(
-              onPressed: _loading ? null : _startAuthKit,
-              child: const Text('Sign up with AuthKit'),
+          const RoomiesBrandMark(),
+          const SizedBox(height: 28),
+          RoomiesCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const RoomiesHeading('Register', level: 2),
+                if (_error != null) RoomiesError(_error!),
+                if (_configLoading || (authkit && _loading))
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: Text('Redirecting to AuthKit…')),
+                  )
+                else if (authkit) ...[
+                  const Text('Create your account with WorkOS AuthKit.'),
+                  const SizedBox(height: 12),
+                  RoomiesPrimaryButton(
+                    label: 'Sign up with AuthKit',
+                    onPressed: _loading ? null : _startAuthKit,
+                    enabled: !_loading,
+                  ),
+                  TextButton(
+                    onPressed: () => context.go('/'),
+                    child: const Text('Already have an account? Login'),
+                  ),
+                ] else ...[
+                  TextField(
+                    controller: _name,
+                    decoration: const InputDecoration(hintText: 'Name'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _email,
+                    decoration: const InputDecoration(hintText: 'Email'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _password,
+                    decoration: const InputDecoration(hintText: 'Password'),
+                    obscureText: true,
+                  ),
+                  const SizedBox(height: 8),
+                  RoomiesPrimaryButton(
+                    label: _loading ? 'Creating account...' : 'Register',
+                    onPressed: _loading ? null : _submit,
+                    enabled: !_loading,
+                  ),
+                  TextButton(
+                    onPressed: () => context.go('/'),
+                    child: const Text('Already have an account? Login'),
+                  ),
+                ],
+              ],
             ),
-            TextButton(
-              onPressed: () => context.go('/'),
-              child: const Text('Already have an account? Login'),
-            ),
-          ] else ...[
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(hintText: 'Name'),
-            ),
-            TextField(
-              controller: _email,
-              decoration: const InputDecoration(hintText: 'Email'),
-            ),
-            TextField(
-              controller: _password,
-              decoration: const InputDecoration(hintText: 'Password'),
-              obscureText: true,
-            ),
-            FilledButton(
-              onPressed: _loading ? null : _submit,
-              child: Text(_loading ? 'Creating account...' : 'Register'),
-            ),
-            TextButton(
-              onPressed: () => context.go('/'),
-              child: const Text('Already have an account? Login'),
-            ),
-          ],
+          ),
         ],
       ),
     );

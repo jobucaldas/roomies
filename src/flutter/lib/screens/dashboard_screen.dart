@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../state/app_state.dart';
+import '../theme/roomies_theme.dart';
 import '../widgets/roomies_ui.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -69,18 +70,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AppState>().user;
     return RoomiesPage(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const RoomiesHeading('Dashboard', level: 2),
-          const Text('Welcome to Roomies!'),
-          RoomiesPrimaryButton(label: 'Logout', onPressed: _logout),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const RoomiesBrandMark(compact: true),
+                    const RoomiesHeading('Dashboard', level: 2),
+                    Text(
+                      user == null
+                          ? 'Welcome to Roomies!'
+                          : 'Welcome back, ${user.name}.',
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: _logout,
+                child: const Text('Logout'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           const RoomiesHeading('Create New House', level: 2),
           RoomiesCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(
+                  'Start a house for expenses, chores, and shared notes.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 12),
                 TextField(
                   controller: _houseName,
                   decoration: const InputDecoration(hintText: 'House name'),
@@ -95,17 +124,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const RoomiesHeading('Your Houses', level: 2),
           if (_error != null) RoomiesError(_error!),
           if (_loading)
-            const Text('Loading...')
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            )
           else if (_houses.isEmpty)
-            const Text('No houses yet. Create one above!')
+            RoomiesCard(
+              child: Text(
+                'No houses yet. Create one above!',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            )
           else
             ..._houses.map(
               (house) => RoomiesCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    RoomiesHeading(house.name, level: 3),
-                    TextButton(
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: RoomiesColors.tealSoft,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        house.name.isEmpty
+                            ? '?'
+                            : house.name.substring(0, 1).toUpperCase(),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              color: RoomiesColors.tealDeep,
+                            ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: RoomiesHeading(house.name, level: 3),
+                    ),
+                    FilledButton(
                       onPressed: () => context.go('/house/${house.id}'),
                       child: const Text('View House'),
                     ),

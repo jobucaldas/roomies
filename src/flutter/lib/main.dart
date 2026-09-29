@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 import 'api/api_client.dart';
 import 'router.dart';
 import 'state/app_state.dart';
+import 'theme/roomies_theme.dart';
+import 'widgets/roomies_ui.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,16 +40,15 @@ class _RoomiesAppState extends State<RoomiesApp> {
       value: widget.appState,
       child: MaterialApp.router(
         title: 'Roomies',
-        theme: ThemeData(
-          scaffoldBackgroundColor: const Color(0xFFF0F2F5),
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1A73E8)),
-          useMaterial3: true,
-        ),
+        theme: buildRoomiesTheme(),
         routerConfig: _router,
         builder: (context, child) {
           if (!widget.appState.sessionReady) {
-            return const Scaffold(
-              body: Center(child: Text('Restoring session…')),
+            return RoomiesAtmosphere(
+              child: const Scaffold(
+                backgroundColor: Colors.transparent,
+                body: Center(child: Text('Restoring session…')),
+              ),
             );
           }
           return child ?? const SizedBox.shrink();

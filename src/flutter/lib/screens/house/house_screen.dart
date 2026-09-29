@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/roles.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
+import '../../theme/roomies_theme.dart';
 import '../../widgets/roomies_ui.dart';
 import 'balances_section.dart';
 import 'expenses_section.dart';
@@ -122,78 +123,94 @@ class _HouseScreenState extends State<HouseScreen>
     final admin = _admin(role);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F2F5),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 960),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_error != null) RoomiesError(_error!),
-                  if (_loading)
-                    const Text('Loading house…')
-                  else if (_house != null) ...[
-                    RoomiesHeading(_house!.name),
-                    if (admin)
-                      _HouseEditor(
-                        house: _house!,
-                        onSaved: (h) => setState(() => _house = h),
+      backgroundColor: Colors.transparent,
+      body: RoomiesAtmosphere(
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 960),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_error != null) RoomiesError(_error!),
+                    if (_loading)
+                      const Expanded(
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (_house != null) ...[
+                      Row(
+                        children: [
+                          Expanded(child: RoomiesHeading(_house!.name)),
+                          TextButton(
+                            onPressed: () => context.go('/dashboard'),
+                            child: const Text('Back'),
+                          ),
+                        ],
                       ),
+                      if (admin)
+                        _HouseEditor(
+                          house: _house!,
+                          onSaved: (h) => setState(() => _house = h),
+                        ),
+                      const SizedBox(height: 8),
+                      Material(
+                        color: RoomiesColors.surface.withValues(alpha: 0.72),
+                        borderRadius: BorderRadius.circular(16),
+                        child: TabBar(
+                          controller: _tabController,
+                          isScrollable: true,
+                          tabs: [for (final tab in _tabs) Tab(text: tab)],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: TabBarView(
+                          controller: _tabController,
+                          children: [
+                            ExpensesSection(
+                              houseId: widget.houseId,
+                              role: role,
+                              userId: userId,
+                            ),
+                            NotesSection(
+                              houseId: widget.houseId,
+                              role: role,
+                              userId: userId,
+                            ),
+                            GroceriesSection(
+                              houseId: widget.houseId,
+                              role: role,
+                              members: _members,
+                            ),
+                            ChoresSection(
+                                houseId: widget.houseId, role: role),
+                            CalendarSection(
+                                houseId: widget.houseId, role: role),
+                            ChatSection(
+                              houseId: widget.houseId,
+                              role: role,
+                              userId: userId,
+                            ),
+                            BalancesSection(balances: _balances),
+                            NotificationsSection(
+                              houseId: widget.houseId,
+                              role: role,
+                              userId: userId,
+                            ),
+                            MembersSection(
+                              houseId: widget.houseId,
+                              admin: admin,
+                              members: _members,
+                              onRefresh: _load,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
-                  TextButton(
-                    onPressed: () => context.go('/dashboard'),
-                    child: const Text('Back'),
-                  ),
-                  TabBar(
-                    controller: _tabController,
-                    isScrollable: true,
-                    tabs: [for (final tab in _tabs) Tab(text: tab)],
-                  ),
-                  Expanded(
-                    child: TabBarView(
-                      controller: _tabController,
-                      children: [
-                        ExpensesSection(
-                          houseId: widget.houseId,
-                          role: role,
-                          userId: userId,
-                        ),
-                        NotesSection(
-                          houseId: widget.houseId,
-                          role: role,
-                          userId: userId,
-                        ),
-                        GroceriesSection(
-                          houseId: widget.houseId,
-                          role: role,
-                          members: _members,
-                        ),
-                        ChoresSection(houseId: widget.houseId, role: role),
-                        CalendarSection(houseId: widget.houseId, role: role),
-                        ChatSection(
-                          houseId: widget.houseId,
-                          role: role,
-                          userId: userId,
-                        ),
-                        BalancesSection(balances: _balances),
-                        NotificationsSection(
-                          houseId: widget.houseId,
-                          role: role,
-                          userId: userId,
-                        ),
-                        MembersSection(
-                          houseId: widget.houseId,
-                          admin: admin,
-                          members: _members,
-                          onRefresh: _load,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
