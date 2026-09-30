@@ -244,8 +244,10 @@ test('private expense stays hidden from an unlisted member', async ({ page, requ
     await page.getByRole('button', { name: 'Add expense' }).click();
     await fillFlutterText(page.getByLabel('Amount'), '21.00');
     await fillFlutterText(page.getByLabel('Description'), description);
+    const recipients = page.getByLabel(/Recipient user IDs/);
     await chooseOption(page, page.getByRole('button', { name: /Visibility/ }), 'Private');
-    await fillFlutterText(page.getByLabel(/Recipient user IDs/), data.member.user.id);
+    await expect(page.getByRole('button', { name: /Visibility Private/ })).toBeVisible();
+    await fillFlutterText(recipients, data.member.user.id);
     await page.getByRole('button', { name: 'Save expense' }).click();
     await expectCard(page, description, true);
 
