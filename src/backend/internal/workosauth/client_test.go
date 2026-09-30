@@ -44,10 +44,11 @@ func TestAuthenticateWithCode(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"user": map[string]any{
-				"id":         "user_1",
-				"email":      "a@example.test",
-				"first_name": "Ada",
-				"last_name":  "Lovelace",
+				"id":             "user_1",
+				"email":          "a@example.test",
+				"email_verified": true,
+				"first_name":     "Ada",
+				"last_name":      "Lovelace",
 			},
 			"access_token": "tok",
 		})
@@ -67,6 +68,34 @@ func TestAuthenticateWithCode(t *testing.T) {
 	}
 	if result.User.Email != "a@example.test" || DisplayName(result.User) != "Ada Lovelace" {
 		t.Fatalf("result = %#v", result)
+	}
+	if !result.User.EmailVerified {
+		t.Fatal("expected verified email")
+	}
+}
+
+func TestAuthenticateWithCodeRejectsUnverifiedEmail(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"user": map[string]any{
+				"id":             "user_1",
+				"email":          "a@example.test",
+				"email_verified": false,
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := &Client{
+		APIKey:      "sk_test",
+		ClientID:    "client_123",
+		RedirectURI: "http://localhost/callback",
+		APIBase:     server.URL,
+		HTTPClient:  server.Client(),
+	}
+	_, err := client.AuthenticateWithCode(context.Background(), "abc", "", "")
+	if err == nil {
+		t.Fatal("expected unverified email to be rejected")
 	}
 }
 

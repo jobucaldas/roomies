@@ -16,11 +16,11 @@ const defaultAPIBase = "https://api.workos.com"
 
 // Client talks to WorkOS User Management for AuthKit.
 type Client struct {
-	APIKey     string
-	ClientID   string
+	APIKey      string
+	ClientID    string
 	RedirectURI string
-	HTTPClient *http.Client
-	APIBase    string
+	HTTPClient  *http.Client
+	APIBase     string
 }
 
 func (c *Client) Enabled() bool {
@@ -63,16 +63,17 @@ func (c *Client) AuthorizationURL(screenHint, state string) (string, error) {
 }
 
 type AuthenticateResult struct {
-	User        User   `json:"user"`
-	AccessToken string `json:"access_token"`
+	User         User   `json:"user"`
+	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 }
 
 type User struct {
-	ID        string `json:"id"`
-	Email     string `json:"email"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
+	ID            string `json:"id"`
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"email_verified"`
+	FirstName     string `json:"first_name"`
+	LastName      string `json:"last_name"`
 }
 
 type apiError struct {
@@ -141,6 +142,9 @@ func (c *Client) AuthenticateWithCode(ctx context.Context, code, ipAddress, user
 	}
 	if result.User.ID == "" || result.User.Email == "" {
 		return nil, fmt.Errorf("workos authentication returned an incomplete user")
+	}
+	if !result.User.EmailVerified {
+		return nil, fmt.Errorf("workos email is not verified")
 	}
 	return &result, nil
 }

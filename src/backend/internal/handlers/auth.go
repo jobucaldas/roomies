@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -30,12 +31,25 @@ func (h *AuthHandler) Config(w http.ResponseWriter, r *http.Request) {
 	if h.workos != nil {
 		redirectURI = h.workos.RedirectURI
 	}
-	// Password API stays available for CI/e2e fixtures; the Flutter UI hides it when AuthKit is on.
+	// Password endpoints stay available only when AuthKit is unset (CI clears WORKOS_*).
+	// Enabling AuthKit rejects them so that path cannot bypass hosted sign-in.
 	writeJSON(w, http.StatusOK, map[string]any{
 		"authkit":      enabled,
-		"password":     true,
+		"password":     !enabled,
 		"redirect_uri": redirectURI,
 	})
+}
+
+func (h *AuthHandler) passwordEnabled() bool {
+	return h.workos == nil || !h.workos.Enabled()
+}
+
+func (h *AuthHandler) rejectPasswordAuth(w http.ResponseWriter) bool {
+	if h.passwordEnabled() {
+		return false
+	}
+	writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "password authentication is disabled"})
+	return true
 }
 
 func (h *AuthHandler) WorkOSAuthorize(w http.ResponseWriter, r *http.Request) {
@@ -81,12 +95,16 @@ func (h *AuthHandler) WorkOSCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.workos.AuthenticateWithCode(r.Context(), req.Code, clientIP(r), r.UserAgent())
 	if err != nil {
-		writeJSON(w, http.StatusUnauthorized, models.ErrorResponse{Error: err.Error()})
+		writeJSON(w, http.StatusUnauthorized, models.ErrorResponse{Error: "authentication failed"})
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(result.User.Email))
 	name := workosauth.DisplayName(result.User)
 	user, err := h.userRepo.UpsertFromWorkOS(r.Context(), result.User.ID, email, name)
+	if errors.Is(err, repository.ErrLocalPasswordAccount) {
+		writeJSON(w, http.StatusConflict, models.ErrorResponse{Error: "an account with this email already exists"})
+		return
+	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to persist authenticated user"})
 		return
@@ -100,6 +118,9 @@ func (h *AuthHandler) WorkOSCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	if h.rejectPasswordAuth(w) {
+		return
+	}
 	var req models.RegisterRequest
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "invalid request body"})
@@ -162,6 +183,9 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	if h.rejectPasswordAuth(w) {
+		return
+	}
 	var req models.LoginRequest
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "invalid request body"})

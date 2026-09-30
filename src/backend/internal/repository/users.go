@@ -4,11 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/roomies/backend/internal/models"
 )
+
+var ErrLocalPasswordAccount = errors.New("email belongs to a local password account")
 
 type UserRepository struct {
 	db *sqlx.DB
@@ -85,6 +88,11 @@ func (r *UserRepository) UpsertFromWorkOS(ctx context.Context, workosUserID, ema
 	}
 
 	if user, err := r.GetByEmail(ctx, email); err == nil {
+		// Local passwords are not proof of email ownership. Linking would let
+		// whoever registered the address keep password access to the AuthKit user.
+		if strings.TrimSpace(user.PasswordHash) != "" {
+			return nil, ErrLocalPasswordAccount
+		}
 		if err := r.LinkWorkOSUser(ctx, user.ID, workosUserID, name); err != nil {
 			return nil, err
 		}

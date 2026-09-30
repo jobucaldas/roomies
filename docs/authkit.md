@@ -1,6 +1,6 @@
 # WorkOS AuthKit
 
-Roomies uses WorkOS AuthKit for hosted sign-in when `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` are set. Without those variables, the Flutter app keeps the local email/password form (used by CI).
+Roomies uses WorkOS AuthKit for hosted sign-in when `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` are set. Without those variables, the Flutter app keeps the local email/password form (used by CI). When they are set, `POST /api/auth/login` and `POST /api/auth/register` return 403, and AuthKit will not attach to an existing local password user.
 
 ## Staging (configured)
 
