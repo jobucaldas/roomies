@@ -6,9 +6,9 @@ export async function waitForLoginReady(page: Page) {
     state: 'visible',
     timeout: 90_000,
   });
-  // Flutter semantics + InputDecoration both expose "Email"; prefer the
-  // single textbox role so Playwright strict mode does not see two matches.
-  const emailField = page.getByRole('textbox', { name: 'Email' });
+  // Flutter also renders a disabled semantics input with the same name.
+  // The enabled textbox is the field the user can type into.
+  const emailField = page.getByRole('textbox', { name: 'Email', disabled: false });
   const authkit = page.getByRole('button', { name: 'Sign in with AuthKit' });
   await Promise.race([
     emailField.waitFor({ state: 'visible', timeout: 90_000 }),
@@ -46,7 +46,7 @@ export async function loginViaUiOrToken(
   const { emailField } = await waitForLoginReady(page);
   if (await emailField.isVisible()) {
     await emailField.fill(email);
-    await page.getByRole('textbox', { name: 'Password' }).fill(password);
+    await page.getByRole('textbox', { name: 'Password', disabled: false }).fill(password);
     await page.getByRole('button', { name: 'Login' }).click();
   } else {
     expect(token, 'AuthKit UI requires API token for e2e login').toBeTruthy();
