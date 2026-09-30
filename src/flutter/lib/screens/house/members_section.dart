@@ -123,7 +123,9 @@ class _MembersSectionState extends State<MembersSection> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return RoomiesTabPanel(
+      name: 'Members',
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const RoomiesHeading('Members', level: 2),
@@ -193,13 +195,16 @@ class _MembersSectionState extends State<MembersSection> {
         ],
         ...widget.members.map((member) {
           return RoomiesArticleCard(
+            semanticLabel: member.userName,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 RoomiesHeading(member.userName, level: 3),
                 Text('${member.userEmail} · ${member.role}'),
                 if (widget.admin)
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
                     children: [
                       DropdownButton<String>(
                         value: _pendingRoles[member.userId] ?? member.role,
@@ -214,16 +219,16 @@ class _MembersSectionState extends State<MembersSection> {
                           }
                         },
                       ),
-                      RoomiesPrimaryButton(
-                        label: 'Change role',
+                      TextButton(
                         onPressed: () => _changeRole(
                           member,
                           _pendingRoles[member.userId] ?? member.role,
                         ),
+                        child: const Text('Change role'),
                       ),
-                      RoomiesPrimaryButton(
-                        label: 'Remove',
+                      TextButton(
                         onPressed: () => _remove(member),
+                        child: const Text('Remove'),
                       ),
                     ],
                   ),
@@ -232,6 +237,7 @@ class _MembersSectionState extends State<MembersSection> {
           );
         }),
       ],
+      ),
     );
   }
 }

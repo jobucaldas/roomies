@@ -11,7 +11,9 @@ class BalancesSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return RoomiesTabPanel(
+      name: 'Balances',
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const RoomiesHeading('Balances', level: 2),
@@ -43,6 +45,7 @@ class BalancesSection extends StatelessWidget {
           ),
         ],
       ],
+      ),
     );
   }
 }

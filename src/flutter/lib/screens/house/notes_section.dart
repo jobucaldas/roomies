@@ -132,7 +132,9 @@ class _NotesSectionState extends State<NotesSection> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return RoomiesTabPanel(
+      name: 'Notes',
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const RoomiesHeading('Notes', level: 2),
@@ -189,6 +191,7 @@ class _NotesSectionState extends State<NotesSection> {
             );
           }),
       ],
+      ),
     );
   }
 }

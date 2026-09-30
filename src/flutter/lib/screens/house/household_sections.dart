@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/api_error.dart';
 import '../../core/roles.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
@@ -109,7 +110,9 @@ class _GroceriesSectionState extends State<GroceriesSection> {
   @override
   Widget build(BuildContext context) {
     final canWrite = _writable(widget.role);
-    return Column(
+    return RoomiesTabPanel(
+      name: 'Groceries',
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const RoomiesHeading('Groceries', level: 2),
@@ -151,6 +154,7 @@ class _GroceriesSectionState extends State<GroceriesSection> {
           );
         }),
       ],
+      ),
     );
   }
 }
@@ -199,18 +203,22 @@ class _ChoresSectionState extends State<ChoresSection> {
 
   Future<void> _create() async {
     final due = _dueLocal.text.length == 16 ? '${_dueLocal.text}:00' : _dueLocal.text;
-    await context.read<AppState>().api.createChore(widget.houseId, {
-      'title': _title.text.trim(),
-      'description': '',
-      'assignee_id': null,
-      'timezone': 'UTC',
-      'due_local': due,
-      'rrule': _defaultRrule(),
-      'exdates': <String>[],
-      'enabled': true,
-    });
-    setState(() => _status = 'Chore saved.');
-    await _load();
+    try {
+      await context.read<AppState>().api.createChore(widget.houseId, {
+        'title': _title.text.trim(),
+        'description': '',
+        'assignee_id': null,
+        'timezone': 'UTC',
+        'due_local': due,
+        'rrule': _defaultRrule(),
+        'exdates': <String>[],
+        'enabled': true,
+      });
+      setState(() => _status = 'Chore saved.');
+      await _load();
+    } on ApiError catch (error) {
+      setState(() => _status = error.message);
+    }
   }
 
   Future<void> _toggle(Chore chore) async {
@@ -241,7 +249,9 @@ class _ChoresSectionState extends State<ChoresSection> {
   @override
   Widget build(BuildContext context) {
     final canWrite = _writable(widget.role);
-    return Column(
+    return RoomiesTabPanel(
+      name: 'Chores',
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const RoomiesHeading('Chores', level: 2),
@@ -278,6 +288,7 @@ class _ChoresSectionState extends State<ChoresSection> {
               ),
             )),
       ],
+      ),
     );
   }
 }
@@ -356,7 +367,9 @@ class _CalendarSectionState extends State<CalendarSection> {
   @override
   Widget build(BuildContext context) {
     final canWrite = _writable(widget.role);
-    return Column(
+    return RoomiesTabPanel(
+      name: 'Calendar',
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const RoomiesHeading('Calendar', level: 2),
@@ -395,6 +408,7 @@ class _CalendarSectionState extends State<CalendarSection> {
               ),
             )),
       ],
+      ),
     );
   }
 }
@@ -476,7 +490,9 @@ class _ChatSectionState extends State<ChatSection> {
   @override
   Widget build(BuildContext context) {
     final canWrite = _writable(widget.role);
-    return Column(
+    return RoomiesTabPanel(
+      name: 'Chat',
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const RoomiesHeading('Chat', level: 2),
@@ -527,6 +543,7 @@ class _ChatSectionState extends State<ChatSection> {
           );
         }),
       ],
+      ),
     );
   }
 }

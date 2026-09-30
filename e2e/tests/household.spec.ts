@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { expect, test, type APIRequestContext, type Page, type TestInfo } from '@playwright/test';
-import { loginViaUiOrToken } from '../helpers/login';
+import { fillFlutterText, loginViaUiOrToken } from '../helpers/login';
 
 const api = process.env.ROOMIES_API_URL ?? 'http://localhost:8080/api';
 const web = process.env.ROOMIES_WEB_URL ?? 'http://localhost';
@@ -44,7 +44,13 @@ test.beforeEach(async ({ page }) => {
     if (response.status() >= 400) value.unexpectedResponses.push(`${sanitizedRequest(request.method(), response.url())}: ${response.status()}`);
     const path = assetPath(response.url());
     if (path) value.assetBodies.push((async () => {
-      try { value.assetHashes[path] = createHash('sha256').update(await response.body()).digest('hex'); } catch { /* response can be unavailable after navigation */ }
+      try {
+        const body = await Promise.race([
+          response.body(),
+          new Promise<Buffer>((_, reject) => setTimeout(() => reject(new Error('body timeout')), 5000)),
+        ]);
+        value.assetHashes[path] = createHash('sha256').update(body).digest('hex');
+      } catch { /* response can be unavailable after navigation */ }
     })());
   });
 });
@@ -110,9 +116,9 @@ async function household(page: Page, request: APIRequestContext) {
 }
 
 async function open(page: Page, tab: string, heading: string) {
-  await page.getByRole('tab', { name: tab }).click();
-  const panel = page.getByRole('tabpanel', { name: tab });
-  await expect(panel.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+  await page.getByRole('button', { name: tab, exact: true }).click();
+  const panel = page.getByRole('group', { name: heading, exact: true });
+  await expect(panel).toBeVisible();
   return panel;
 }
 
@@ -120,7 +126,7 @@ test('household groceries chores calendar and chat interactions', async ({ page,
   await household(page, request);
 
   const groceries = await open(page, 'Groceries', 'Groceries');
-  await groceries.getByLabel('Name').fill('Validation grocery');
+  await fillFlutterText(groceries.getByLabel('Name'), 'Validation grocery');
   await groceries.getByRole('button', { name: 'Add grocery' }).click();
   await expect(groceries.getByText('Grocery saved.')).toBeVisible();
   await groceries.getByRole('button', { name: 'Check' }).click();
@@ -129,8 +135,8 @@ test('household groceries chores calendar and chat interactions', async ({ page,
   await expect(groceries.getByText('Grocery deleted.')).toBeVisible();
 
   const chores = await open(page, 'Chores', 'Chores');
-  await chores.getByLabel('Title').fill('Validation chore');
-  await chores.getByLabel('Due local').fill('2030-01-07T09:00');
+  await fillFlutterText(chores.getByLabel('Title'), 'Validation chore');
+  await fillFlutterText(chores.getByLabel('Due local'), '2030-01-07T09:00');
   await chores.getByRole('button', { name: 'Create chore' }).click();
   await expect(chores.getByText('Chore saved.')).toBeVisible();
   await chores.getByRole('button', { name: 'Disable' }).click();
@@ -139,20 +145,20 @@ test('household groceries chores calendar and chat interactions', async ({ page,
   await expect(chores.getByText('Chore deleted.')).toBeVisible();
 
   const calendar = await open(page, 'Calendar', 'Calendar');
-  await calendar.getByLabel('Title').fill('Validation calendar event');
-  await calendar.getByLabel('Start local').fill('2030-01-07T09:00');
-  await calendar.getByLabel('End local').fill('2030-01-07T10:00');
+  await fillFlutterText(calendar.getByLabel('Title'), 'Validation calendar event');
+  await fillFlutterText(calendar.getByLabel('Start local'), '2030-01-07T09:00');
+  await fillFlutterText(calendar.getByLabel('End local'), '2030-01-07T10:00');
   await calendar.getByRole('button', { name: 'Create calendar event' }).click();
   await expect(calendar.getByText('Calendar event saved.')).toBeVisible();
   await calendar.getByRole('button', { name: 'Delete' }).click();
   await expect(calendar.getByText('Calendar event deleted.')).toBeVisible();
 
   const chat = await open(page, 'Chat', 'Chat');
-  await chat.getByLabel('Message').fill('Synthetic message');
+  await fillFlutterText(chat.getByLabel('Message'), 'Synthetic message');
   await chat.getByRole('button', { name: 'Send message' }).click();
   await expect(chat.getByText('Message sent.')).toBeVisible();
   await chat.getByRole('button', { name: 'Edit message' }).click();
-  await chat.getByLabel('Message').fill('Synthetic edited message');
+  await fillFlutterText(chat.getByLabel('Message'), 'Synthetic edited message');
   await chat.getByRole('button', { name: 'Save message' }).click();
   await expect(chat.getByText('Message edited.')).toBeVisible();
   await expect(chat.getByText('Synthetic edited message', { exact: true })).toBeVisible();

@@ -39,49 +39,12 @@ class RoomiesCard extends StatelessWidget {
   }
 }
 
-class RoomiesArticleCard extends StatelessWidget {
+class RoomiesArticleCard extends RoomiesCard {
   const RoomiesArticleCard({
     super.key,
-    required this.child,
-    this.semanticLabel,
+    required super.child,
+    super.semanticLabel,
   });
-
-  final Widget child;
-  final String? semanticLabel;
-
-  static const semanticsIdentifier = 'roomies-article-card';
-
-  @override
-  Widget build(BuildContext context) {
-    // Identifier lets the web a11y bridge wrap this node in <article class="card">
-    // so Playwright locators matching Dioxus article.card keep working.
-    return Semantics(
-      identifier: semanticsIdentifier,
-      container: true,
-      explicitChildNodes: true,
-      label: semanticLabel,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        width: double.infinity,
-        margin: const EdgeInsets.symmetric(vertical: 10),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: RoomiesColors.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: RoomiesColors.line),
-          boxShadow: [
-            BoxShadow(
-              color: RoomiesColors.ink.withValues(alpha: 0.05),
-              blurRadius: 24,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: child,
-      ),
-    );
-  }
 }
 
 class RoomiesError extends StatelessWidget {
@@ -333,22 +296,24 @@ class RoomiesLabeledField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Do not wrap with Semantics(textField: true): on Flutter web that creates
-    // a disabled <input aria-label="Label\nLabel"> proxy that Playwright's
-    // getByLabel() matches before the real enabled TextField.
-    return MergeSemantics(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ExcludeSemantics(
+          child: Text(
             label,
             style: Theme.of(context).textTheme.titleMedium,
           ),
-          const SizedBox(height: 6),
-          child,
-          const SizedBox(height: 10),
-        ],
-      ),
+        ),
+        const SizedBox(height: 6),
+        // One text field node. A parent textField semantics node is a second,
+        // disabled input and Playwright cannot tell them apart.
+        Semantics(
+          label: label,
+          child: child,
+        ),
+        const SizedBox(height: 10),
+      ],
     );
   }
 }
@@ -425,15 +390,11 @@ class RoomiesTabPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // explicitChildNodes keeps section headings addressable inside the panel
-    // so Playwright can resolve getByRole('tabpanel').getByRole('heading').
-    // Scroll so tab body content (member cards, forms) is not clipped out of
-    // the TabBarView viewport / semantics tree.
     return Semantics(
       container: true,
       explicitChildNodes: true,
       label: name,
-      child: SingleChildScrollView(child: child),
+      child: child,
     );
   }
 }

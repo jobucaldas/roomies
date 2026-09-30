@@ -185,8 +185,9 @@ class _ExpensesSectionState extends State<ExpensesSection> {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      liveRegion: true,
+      label: 'Expenses',
       container: true,
+      liveRegion: true,
       explicitChildNodes: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,6 +216,11 @@ class _ExpensesSectionState extends State<ExpensesSection> {
                       child: TextField(controller: _description),
                     ),
                     RoomiesLabeledField(
+                      label:
+                          'Custom splits (optional: user-id:12.34, user-id:5.00). Leave empty to split equally among active members.',
+                      child: TextField(controller: _customSplits),
+                    ),
+                    RoomiesLabeledField(
                       label: 'Category (optional)',
                       child: TextField(controller: _category),
                     ),
@@ -239,11 +245,6 @@ class _ExpensesSectionState extends State<ExpensesSection> {
                             'Recipient user IDs (comma separated; payer is always included)',
                         child: TextField(controller: _recipients),
                       ),
-                    RoomiesLabeledField(
-                      label:
-                          'Custom splits (optional: user-id:12.34, user-id:5.00). Leave empty to split equally among active members.',
-                      child: TextField(controller: _customSplits),
-                    ),
                     RoomiesPrimaryButton(
                       label: 'Save expense',
                       onPressed: _saveExpense,

@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { expect, test, type APIRequestContext, type Page, type TestInfo } from '@playwright/test';
-import { loginViaUiOrToken } from '../helpers/login';
+import { expect, test, type APIRequestContext, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { fillFlutterText, loginViaUiOrToken } from '../helpers/login';
 
 // Core tests deliberately disable Playwright screenshots and traces. The sanitized JSON record
 // below is sufficient for the CI gate and cannot retain expense, note, or session contents.
@@ -75,7 +75,11 @@ test.beforeEach(async ({ page }) => {
     if (!path) return;
     evidence.assetBodies.push((async () => {
       try {
-        evidence.assetHashes[path] = createHash('sha256').update(await response.body()).digest('hex');
+        const body = await Promise.race([
+          response.body(),
+          new Promise<Buffer>((_, reject) => setTimeout(() => reject(new Error('body timeout')), 5000)),
+        ]);
+        evidence.assetHashes[path] = createHash('sha256').update(body).digest('hex');
       } catch {
         // Navigation responses can be unavailable after a later navigation.
       }
@@ -174,14 +178,24 @@ async function logout(page: Page) {
   // House pages intentionally expose only a Back action; logout is on Dashboard.
   await page.goto(`${web}/dashboard`);
   await page.getByRole('button', { name: 'Logout' }).click();
-  await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Login', exact: true })).toBeVisible();
 }
 
 async function openTab(page: Page, tab: string, heading: string) {
-  await page.getByRole('tab', { name: tab }).click();
-  const panel = page.getByRole('tabpanel', { name: tab });
-  await expect(panel.getByRole('heading', { name: heading })).toBeVisible();
+  await page.getByRole('button', { name: tab, exact: true }).click();
+  const panel = page.getByRole('group', { name: heading, exact: true });
+  await expect(panel).toBeVisible();
   return panel;
+}
+
+function cardByHeading(root: Page | Locator, title: string) {
+  return root.getByRole('heading', { name: title, exact: true }).locator('xpath=ancestor::*[@role="group"][1]');
+}
+
+async function chooseOption(page: Page, opener: Locator, option: string) {
+  await opener.click();
+  const menu = page.getByRole('dialog', { name: 'Popup menu' });
+  await menu.getByRole('button', { name: option, exact: true }).click();
 }
 
 async function openHouse(page: Page, houseId: string) {
@@ -194,7 +208,10 @@ async function cardContains(page: Page, marker: string) {
     cards.some(card => card.textContent?.includes(value as string) ?? false)
   ), marker);
   if (articleMatch) return true;
-  return page.getByText(marker, { exact: false }).first().isVisible().catch(() => false);
+  const text = page.getByText(marker, { exact: false }).first();
+  if (await text.count() === 0) return false;
+  await text.scrollIntoViewIfNeeded().catch(() => undefined);
+  return text.isVisible().catch(() => false);
 }
 
 function hasWebClientBundle(assetHashes: Record<string, string>) {
@@ -225,10 +242,10 @@ test('private expense stays hidden from an unlisted member', async ({ page, requ
     await openHouse(page, data.houseId);
     await openTab(page, 'Expenses', 'Expenses');
     await page.getByRole('button', { name: 'Add expense' }).click();
-    await page.getByLabel('Amount').fill('21.00');
-    await page.getByLabel('Description').fill(description);
-    await page.getByLabel('Visibility').selectOption('private');
-    await page.getByLabel(/Recipient user IDs/).fill(data.member.user.id);
+    await fillFlutterText(page.getByLabel('Amount'), '21.00');
+    await fillFlutterText(page.getByLabel('Description'), description);
+    await chooseOption(page, page.getByRole('button', { name: /Visibility/ }), 'Private');
+    await fillFlutterText(page.getByLabel(/Recipient user IDs/), data.member.user.id);
     await page.getByRole('button', { name: 'Save expense' }).click();
     await expectCard(page, description, true);
 
@@ -284,9 +301,9 @@ test('shared expense editing, deletion, and settlement suggestions are scoped to
     await openHouse(page, data.houseId);
     await openTab(page, 'Expenses', 'Expenses');
     await page.getByRole('button', { name: 'Add expense' }).click();
-    await page.getByLabel('Amount').fill('10.00');
-    await page.getByLabel('Description').fill(description);
-    await page.getByLabel(/Custom splits/).fill(`${data.admin.user.id}:7.00, ${data.member.user.id}:3.00`);
+    await fillFlutterText(page.getByLabel('Amount'), '10.00');
+    await fillFlutterText(page.getByLabel('Description'), description);
+    await fillFlutterText(page.getByLabel(/Custom splits/), `${data.admin.user.id}:7.00, ${data.member.user.id}:3.00`);
     await page.getByRole('button', { name: 'Save expense' }).click();
     await expectCard(page, description, true);
     expenseId = await listExpenseId(request, data.admin, data.houseId, description);
@@ -304,26 +321,24 @@ test('shared expense editing, deletion, and settlement suggestions are scoped to
 
     await openTab(page, 'Balances', 'Balances');
     const settlement = `${data.member.name} pays ${data.admin.name} $3.00`;
-    await expect.poll(() => page.locator('p').evaluateAll((paragraphs, line) => (
-      paragraphs.some(paragraph => paragraph.textContent?.includes(line as string) ?? false)
-    ), settlement)).toBe(true);
+    await expect(page.getByText(settlement)).toBeVisible();
 
     await openTab(page, 'Expenses', 'Expenses');
-    const card = page.locator('article.card').filter({ hasText: description });
+    const card = cardByHeading(page, description);
     await card.getByRole('button', { name: 'Details / edit' }).click();
-    const editor = page.getByRole('dialog');
-    await expect(editor.getByRole('heading', { name: 'Expense details' })).toBeVisible();
-    await editor.getByLabel('Description').fill(updatedDescription);
+    const editor = page.getByRole('dialog', { name: 'Alert' });
+    await expect(editor.getByText('Expense details', { exact: true })).toBeVisible();
+    await fillFlutterText(editor.getByLabel('Description'), updatedDescription);
     await editor.getByRole('button', { name: 'Save changes' }).click();
-    await expect(editor).toHaveCount(0);
+    await expect(page.getByText('Expense details', { exact: true })).toHaveCount(0);
     await expectCard(page, updatedDescription, true);
 
     const deleteResponse = page.waitForResponse(response => (
       response.request().method() === 'DELETE' && response.url().includes('/expenses/')
     ));
-    const updatedCard = page.locator('article.card').filter({ hasText: updatedDescription });
+    const updatedCard = cardByHeading(page, updatedDescription);
     await updatedCard.getByRole('button', { name: 'Delete' }).click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Confirm delete' }).click();
+    await page.getByRole('button', { name: 'Confirm delete' }).click();
     expect((await deleteResponse).status()).toBe(200);
     await expectCard(page, updatedDescription, false);
 
@@ -347,24 +362,24 @@ test('member can create, edit, and delete a note', async ({ page, request }) => 
   await openHouse(page, data.houseId);
   await openTab(page, 'Notes', 'Notes');
   await expect(page.getByText('Loading notes…')).toHaveCount(0);
-  await page.getByLabel('Title').fill(title);
-  await page.getByLabel('Content').fill(content);
+  await fillFlutterText(page.getByLabel('Title'), title);
+  await fillFlutterText(page.getByLabel('Content'), content);
   await page.getByRole('button', { name: 'Save note' }).click();
   await expectCard(page, title, true);
 
-  const noteCard = page.locator('article.card').filter({ hasText: title });
+  const noteCard = cardByHeading(page, title);
   await noteCard.getByRole('button', { name: 'Edit' }).click();
-  const editor = page.getByRole('dialog');
-  await expect(editor.getByRole('heading', { name: 'Edit note' })).toBeVisible();
-  await editor.getByLabel('Title').fill(updatedTitle);
-  await editor.getByLabel('Content').fill(updatedContent);
+  const editor = page.getByRole('dialog', { name: 'Alert' });
+  await expect(editor.getByText('Edit note', { exact: true })).toBeVisible();
+  await fillFlutterText(editor.getByLabel('Title'), updatedTitle);
+  await fillFlutterText(editor.getByLabel('Content'), updatedContent);
   await editor.getByRole('button', { name: 'Save changes' }).click();
-  await expect(editor).toHaveCount(0);
+  await expect(page.getByText('Edit note', { exact: true })).toHaveCount(0);
   await expectCard(page, updatedTitle, true);
 
-  const updatedCard = page.locator('article.card').filter({ hasText: updatedTitle });
+  const updatedCard = cardByHeading(page, updatedTitle);
   await updatedCard.getByRole('button', { name: 'Delete' }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Confirm delete' }).click();
+  await page.getByRole('button', { name: 'Confirm delete' }).click();
   await expectCard(page, updatedTitle, false);
   const notes = await request.get(`${api}/houses/${data.houseId}/notes`, { headers: auth(data.member.token) });
   expect(notes.ok()).toBeTruthy();
@@ -378,9 +393,9 @@ test('admin role controls apply and monitor mutations stay unavailable', async (
   await login(page, data.admin.email, data.admin.token);
   await openHouse(page, data.houseId);
   const members = await openTab(page, 'Members', 'Members');
-  const memberCard = members.locator('article.card').filter({ hasText: data.member.name });
+  const memberCard = members.getByRole('group', { name: data.member.name, exact: true });
   await expect(memberCard).toHaveCount(1);
-  await memberCard.getByRole('combobox').selectOption('monitor');
+  await chooseOption(page, memberCard.getByRole('button', { name: 'Member', exact: true }), 'Monitor');
   await memberCard.getByRole('button', { name: 'Change role' }).click();
   await expect.poll(async () => {
     const response = await request.get(`${api}/houses/${data.houseId}/members`, { headers: auth(data.admin.token) });
@@ -388,15 +403,13 @@ test('admin role controls apply and monitor mutations stay unavailable', async (
     const current = await response.json() as Array<{ user_id: string; role: string }>;
     return current.find(value => value.user_id === data.member.user.id)?.role ?? '';
   }).toBe('monitor');
-  await expect.poll(() => memberCard.locator('p').evaluateAll((paragraphs) => (
-    paragraphs.some(paragraph => paragraph.textContent?.includes('monitor') ?? false)
-  ))).toBe(true);
+  await expect.poll(() => memberCard.evaluate(card => card.textContent?.includes('monitor') ?? false)).toBe(true);
 
   await logout(page);
   await login(page, data.member.email, data.member.token);
   await openHouse(page, data.houseId);
   const memberPanel = await openTab(page, 'Members', 'Members');
-  const loadedMonitorCard = memberPanel.locator('article.card').filter({ hasText: data.member.name });
+  const loadedMonitorCard = memberPanel.getByRole('group', { name: data.member.name, exact: true });
   await expect.poll(() => loadedMonitorCard.evaluate(card => (
     card.textContent?.includes('monitor') ?? false
   ))).toBe(true);

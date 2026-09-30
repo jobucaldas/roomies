@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -7,7 +6,6 @@ import '../../core/roles.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../../theme/roomies_theme.dart';
-import '../../widgets/house_tab_a11y.dart';
 import '../../widgets/roomies_ui.dart';
 import 'balances_section.dart';
 import 'expenses_section.dart';
@@ -51,10 +49,6 @@ class _HouseScreenState extends State<HouseScreen>
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
     _tabController.addListener(_onTabChanged);
-    if (kIsWeb) {
-      installHouseTabA11y(_tabs);
-      updateHouseTabA11ySelection(_tabController.index);
-    }
     _load();
   }
 
@@ -62,13 +56,12 @@ class _HouseScreenState extends State<HouseScreen>
   void dispose() {
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
-    if (kIsWeb) uninstallHouseTabA11y();
     super.dispose();
   }
 
   void _onTabChanged() {
     if (_tabController.indexIsChanging) return;
-    if (kIsWeb) updateHouseTabA11ySelection(_tabController.index);
+    setState(() {});
     if (_tabs[_tabController.index] == 'Balances') {
       _loadBalances();
     }
@@ -166,80 +159,66 @@ class _HouseScreenState extends State<HouseScreen>
                       Material(
                         color: RoomiesColors.surface.withValues(alpha: 0.72),
                         borderRadius: BorderRadius.circular(16),
-                        child: TabBar(
-                          controller: _tabController,
-                          isScrollable: true,
-                          tabs: [for (final tab in _tabs) Tab(text: tab)],
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (var i = 0; i < _tabs.length; i++)
+                                TextButton(
+                                  onPressed: () => _tabController.animateTo(i),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: _tabController.index == i
+                                        ? RoomiesColors.tealDeep
+                                        : RoomiesColors.inkMuted,
+                                  ),
+                                  child: Text(_tabs[i]),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 8),
                       Expanded(
                         child: TabBarView(
                           controller: _tabController,
+                          physics: const NeverScrollableScrollPhysics(),
                           children: [
-                            RoomiesTabPanel(
-                              name: 'Expenses',
-                              child: ExpensesSection(
-                                houseId: widget.houseId,
-                                role: role,
-                                userId: userId,
-                              ),
-                            ),
-                            RoomiesTabPanel(
-                              name: 'Notes',
-                              child: NotesSection(
-                                houseId: widget.houseId,
-                                role: role,
-                                userId: userId,
-                              ),
-                            ),
-                            RoomiesTabPanel(
-                              name: 'Groceries',
-                              child: GroceriesSection(
-                                houseId: widget.houseId,
-                                role: role,
-                                members: _members,
-                              ),
-                            ),
-                            RoomiesTabPanel(
-                              name: 'Chores',
-                              child: ChoresSection(
-                                  houseId: widget.houseId, role: role),
-                            ),
-                            RoomiesTabPanel(
-                              name: 'Calendar',
-                              child: CalendarSection(
-                                  houseId: widget.houseId, role: role),
-                            ),
-                            RoomiesTabPanel(
-                              name: 'Chat',
-                              child: ChatSection(
-                                houseId: widget.houseId,
-                                role: role,
-                                userId: userId,
-                              ),
-                            ),
-                            RoomiesTabPanel(
-                              name: 'Balances',
-                              child: BalancesSection(balances: _balances),
-                            ),
-                            RoomiesTabPanel(
-                              name: 'Notifications / Schedule',
-                              child: NotificationsSection(
-                                houseId: widget.houseId,
-                                role: role,
-                                userId: userId,
-                              ),
-                            ),
-                            RoomiesTabPanel(
-                              name: 'Members',
-                              child: MembersSection(
-                                houseId: widget.houseId,
-                                admin: admin,
-                                members: _members,
-                                onRefresh: _load,
-                              ),
-                            ),
+                            _panel(ExpensesSection(
+                              houseId: widget.houseId,
+                              role: role,
+                              userId: userId,
+                            )),
+                            _panel(NotesSection(
+                              houseId: widget.houseId,
+                              role: role,
+                              userId: userId,
+                            )),
+                            _panel(GroceriesSection(
+                              houseId: widget.houseId,
+                              role: role,
+                              members: _members,
+                            )),
+                            _panel(ChoresSection(
+                                houseId: widget.houseId, role: role)),
+                            _panel(CalendarSection(
+                                houseId: widget.houseId, role: role)),
+                            _panel(ChatSection(
+                              houseId: widget.houseId,
+                              role: role,
+                              userId: userId,
+                            )),
+                            _panel(BalancesSection(balances: _balances)),
+                            _panel(NotificationsSection(
+                              houseId: widget.houseId,
+                              role: role,
+                              userId: userId,
+                            )),
+                            _panel(MembersSection(
+                              houseId: widget.houseId,
+                              admin: admin,
+                              members: _members,
+                              onRefresh: _load,
+                            )),
                           ],
                         ),
                       ),
@@ -253,6 +232,13 @@ class _HouseScreenState extends State<HouseScreen>
       ),
     );
   }
+}
+
+Widget _panel(Widget child) {
+  return SingleChildScrollView(
+    padding: const EdgeInsets.only(bottom: 24),
+    child: child,
+  );
 }
 
 class _HouseEditor extends StatefulWidget {
