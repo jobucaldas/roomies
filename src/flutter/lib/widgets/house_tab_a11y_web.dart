@@ -19,11 +19,6 @@ void installHouseTabA11y(List<String> tabs) {
   _tabs = List<String>.from(tabs);
   _ensureObserver();
   _schedulePatch();
-  // #region agent log
-  web.console.log(
-    '[house-tab-a11y] install tabs=${_tabs.length}'.toJS,
-  );
-  // #endregion
 }
 
 void updateHouseTabA11ySelection(int index) {
@@ -84,8 +79,6 @@ void _patch() {
   if (_patching || _tabs.isEmpty) return;
   _patching = true;
   try {
-    var tabCount = 0;
-    var panelCount = 0;
     web.Element? tablist;
 
     final nodes = web.document.querySelectorAll('flt-semantics');
@@ -107,7 +100,6 @@ void _patch() {
           index == _selected ? 'true' : 'false',
         );
         tablist ??= htmlEl.parentElement;
-        tabCount++;
         continue;
       }
 
@@ -119,20 +111,12 @@ void _patch() {
       if ((role == 'group' || role == 'tabpanel') && _tabs.contains(label)) {
         _setAttr(htmlEl, 'role', 'tabpanel');
         _setAttr(htmlEl, 'aria-label', label);
-        panelCount++;
       }
     }
 
     if (tablist != null) {
       _setAttr(tablist as web.HTMLElement, 'role', 'tablist');
     }
-
-    // #region agent log
-    web.console.log(
-      '[house-tab-a11y] patch tabs=$tabCount panels=$panelCount selected=$_selected'
-          .toJS,
-    );
-    // #endregion
   } finally {
     _patching = false;
   }
