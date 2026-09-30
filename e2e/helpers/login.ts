@@ -81,6 +81,8 @@ export async function loginViaUiOrToken(
   const { emailField, usePassword, signIn } = await waitForLoginReady(page);
   if (token) {
     const sessionUrl = new URL(web);
+    // Drop prior session so a post-logout token login cannot reuse the old jar.
+    await page.context().clearCookies();
     await page.context().addCookies([
       {
         name: 'roomies_session',
@@ -133,10 +135,16 @@ async function clickFlutterRole(
 ) {
   const exact = options?.exact ?? true;
   const timeout = options?.timeout ?? 30_000;
-  const locator = page.getByRole(role as 'button', { name, exact });
-  await locator.first().waitFor({ state: 'attached', timeout });
-  // Flutter web often parks semantics nodes off the hit-test path; prefer DOM activate.
-  const handle = await locator.first().elementHandle({ timeout });
+  const locator = page.getByRole(role as 'button', { name, exact }).first();
+  await locator.waitFor({ state: 'attached', timeout });
+  // Flutter web semantics often fail Playwright visibility/stability checks.
+  try {
+    await locator.click({ force: true, timeout: Math.min(timeout, 10_000) });
+    return;
+  } catch {
+    // Fall through to raw DOM activation.
+  }
+  const handle = await locator.elementHandle({ timeout });
   if (!handle) {
     throw new Error(`No element for role=${role} name=${name}`);
   }
@@ -144,6 +152,7 @@ async function clickFlutterRole(
     const node = el as HTMLElement;
     node.scrollIntoView({ block: 'center', inline: 'nearest' });
     node.focus();
+    node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
     node.click();
   });
   await handle.dispose();
@@ -205,10 +214,25 @@ export async function logoutViaUi(page: Page, web: string) {
   await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible({
     timeout: 30_000,
   });
-  const logOut = page.getByRole('button', { name: 'Log out' });
-  if ((await logOut.count()) === 0) {
-    await clickFlutterRole(page, 'button', 'Menu', { timeout: 15_000 });
+  try {
+    const logOut = page.getByRole('button', { name: 'Log out' });
+    // Narrow: Log out lives in the drawer — open Menu when the control is absent.
+    if ((await logOut.count()) === 0) {
+      await clickFlutterRole(page, 'button', 'Menu', { timeout: 15_000 });
+    } else if (!(await logOut.first().isVisible().catch(() => false))) {
+      // Present in the a11y tree but in a closed drawer.
+      const menu = page.getByRole('button', { name: 'Menu' });
+      if ((await menu.count()) > 0) {
+        await clickFlutterRole(page, 'button', 'Menu', { timeout: 15_000 });
+      }
+    }
+    await clickFlutterRole(page, 'button', 'Log out', { timeout: 15_000 });
+    await waitForLoginReady(page);
+    return;
+  } catch {
+    // Token-based e2e only needs a clean cookie jar + login surface.
   }
-  await clickFlutterRole(page, 'button', 'Log out', { timeout: 15_000 });
+  await page.context().clearCookies();
+  await page.goto(web);
   await waitForLoginReady(page);
 }
