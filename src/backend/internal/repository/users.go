@@ -88,8 +88,7 @@ func (r *UserRepository) UpsertFromWorkOS(ctx context.Context, workosUserID, ema
 	}
 
 	if user, err := r.GetByEmail(ctx, email); err == nil {
-		// Local passwords are not proof of email ownership. Linking would let
-		// whoever registered the address keep password access to the AuthKit user.
+		// Do not link AuthKit identities onto accounts that already have a local password hash.
 		if strings.TrimSpace(user.PasswordHash) != "" {
 			return nil, ErrLocalPasswordAccount
 		}

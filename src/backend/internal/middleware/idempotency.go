@@ -107,10 +107,8 @@ func supportsIdempotency(method string) bool {
 	}
 }
 
-// redactInvitationTokenResponse preserves the invitation result for an idempotent
-// replay while ensuring its one-time bearer URL is never written to durable storage.
-// A malformed marked response is stored as an empty JSON object rather than risking
-// persistence of a secret.
+// redactInvitationTokenResponse drops manual_acceptance_url from idempotent replay
+// storage. Malformed bodies become "{}".
 func redactInvitationTokenResponse(body string) string {
 	var response map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(body), &response); err != nil {

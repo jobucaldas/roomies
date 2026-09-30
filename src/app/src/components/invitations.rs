@@ -40,8 +40,7 @@ pub fn InvitationPanel(
         spawn(async move {
             match api.create_invitation(&house_id, &email_value, &role).await {
                 Ok(_) => {
-                    // The one-time URL is intentionally not rendered or copied to
-                    // general UI; delivery is handled by the configured mail sink.
+                    // Do not surface the one-time URL in the UI; mail delivery handles it.
                     email.set(String::new());
                     status.set("Invitation sent. It expires according to house policy.".into());
                     on_refresh.call(());
