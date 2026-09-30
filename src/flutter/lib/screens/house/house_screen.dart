@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +7,7 @@ import '../../core/roles.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../../theme/roomies_theme.dart';
+import '../../widgets/house_tab_a11y.dart';
 import '../../widgets/roomies_ui.dart';
 import 'balances_section.dart';
 import 'expenses_section.dart';
@@ -49,6 +51,10 @@ class _HouseScreenState extends State<HouseScreen>
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
     _tabController.addListener(_onTabChanged);
+    if (kIsWeb) {
+      installHouseTabA11y(_tabs);
+      updateHouseTabA11ySelection(_tabController.index);
+    }
     _load();
   }
 
@@ -56,12 +62,14 @@ class _HouseScreenState extends State<HouseScreen>
   void dispose() {
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
+    if (kIsWeb) uninstallHouseTabA11y();
     super.dispose();
   }
 
   void _onTabChanged() {
-    if (!_tabController.indexIsChanging &&
-        _tabs[_tabController.index] == 'Balances') {
+    if (_tabController.indexIsChanging) return;
+    if (kIsWeb) updateHouseTabA11ySelection(_tabController.index);
+    if (_tabs[_tabController.index] == 'Balances') {
       _loadBalances();
     }
   }
@@ -169,41 +177,68 @@ class _HouseScreenState extends State<HouseScreen>
                         child: TabBarView(
                           controller: _tabController,
                           children: [
-                            ExpensesSection(
-                              houseId: widget.houseId,
-                              role: role,
-                              userId: userId,
+                            RoomiesTabPanel(
+                              name: 'Expenses',
+                              child: ExpensesSection(
+                                houseId: widget.houseId,
+                                role: role,
+                                userId: userId,
+                              ),
                             ),
-                            NotesSection(
-                              houseId: widget.houseId,
-                              role: role,
-                              userId: userId,
+                            RoomiesTabPanel(
+                              name: 'Notes',
+                              child: NotesSection(
+                                houseId: widget.houseId,
+                                role: role,
+                                userId: userId,
+                              ),
                             ),
-                            GroceriesSection(
-                              houseId: widget.houseId,
-                              role: role,
-                              members: _members,
+                            RoomiesTabPanel(
+                              name: 'Groceries',
+                              child: GroceriesSection(
+                                houseId: widget.houseId,
+                                role: role,
+                                members: _members,
+                              ),
                             ),
-                            ChoresSection(
-                                houseId: widget.houseId, role: role),
-                            CalendarSection(
-                                houseId: widget.houseId, role: role),
-                            ChatSection(
-                              houseId: widget.houseId,
-                              role: role,
-                              userId: userId,
+                            RoomiesTabPanel(
+                              name: 'Chores',
+                              child: ChoresSection(
+                                  houseId: widget.houseId, role: role),
                             ),
-                            BalancesSection(balances: _balances),
-                            NotificationsSection(
-                              houseId: widget.houseId,
-                              role: role,
-                              userId: userId,
+                            RoomiesTabPanel(
+                              name: 'Calendar',
+                              child: CalendarSection(
+                                  houseId: widget.houseId, role: role),
                             ),
-                            MembersSection(
-                              houseId: widget.houseId,
-                              admin: admin,
-                              members: _members,
-                              onRefresh: _load,
+                            RoomiesTabPanel(
+                              name: 'Chat',
+                              child: ChatSection(
+                                houseId: widget.houseId,
+                                role: role,
+                                userId: userId,
+                              ),
+                            ),
+                            RoomiesTabPanel(
+                              name: 'Balances',
+                              child: BalancesSection(balances: _balances),
+                            ),
+                            RoomiesTabPanel(
+                              name: 'Notifications / Schedule',
+                              child: NotificationsSection(
+                                houseId: widget.houseId,
+                                role: role,
+                                userId: userId,
+                              ),
+                            ),
+                            RoomiesTabPanel(
+                              name: 'Members',
+                              child: MembersSection(
+                                houseId: widget.houseId,
+                                admin: admin,
+                                members: _members,
+                                onRefresh: _load,
+                              ),
                             ),
                           ],
                         ),

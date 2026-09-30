@@ -186,6 +186,8 @@ class _ExpensesSectionState extends State<ExpensesSection> {
   Widget build(BuildContext context) {
     return Semantics(
       liveRegion: true,
+      container: true,
+      explicitChildNodes: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
