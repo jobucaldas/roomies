@@ -144,12 +144,20 @@ class ApiClient {
     );
   }
 
-  Future<String> workosAuthorizeUrl({String screenHint = 'sign-in'}) async {
+  Future<({String url, String state})> workosAuthorize({
+    String screenHint = 'sign-in',
+    required String codeChallenge,
+    String codeChallengeMethod = 'S256',
+  }) async {
     final gen = _generation;
     final response = await _http
         .get(
           Uri.parse('$baseUrl/auth/workos/authorize').replace(
-            queryParameters: {'screen_hint': screenHint},
+            queryParameters: {
+              'screen_hint': screenHint,
+              'code_challenge': codeChallenge,
+              'code_challenge_method': codeChallengeMethod,
+            },
           ),
           headers: _headers(),
         )
@@ -157,10 +165,14 @@ class ApiClient {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final url = body['url'] as String?;
-      if (url == null || url.isEmpty) {
-        throw ApiError.http(response.statusCode, 'missing authorization url');
+      final state = body['state'] as String?;
+      if (url == null || url.isEmpty || state == null || state.isEmpty) {
+        throw ApiError.http(
+          response.statusCode,
+          'missing authorization url or state',
+        );
       }
-      return url;
+      return (url: url, state: state);
     }
     if (response.statusCode == 401) {
       _handleUnauthorized(gen);
@@ -168,13 +180,21 @@ class ApiClient {
     throw ApiError.http(response.statusCode, response.body);
   }
 
-  Future<AuthResponse> completeWorkOSCallback(String code) async {
+  Future<AuthResponse> completeWorkOSCallback({
+    required String code,
+    required String state,
+    required String codeVerifier,
+  }) async {
     final gen = _generation;
     final result = await _send(
       () => _http.post(
         Uri.parse('$baseUrl/auth/workos/callback'),
         headers: _headers(),
-        body: jsonEncode({'code': code}),
+        body: jsonEncode({
+          'code': code,
+          'state': state,
+          'code_verifier': codeVerifier,
+        }),
       ),
       AuthResponse.fromJson,
       generation: gen,

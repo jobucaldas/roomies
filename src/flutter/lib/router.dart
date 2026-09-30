@@ -27,6 +27,7 @@ GoRouter createRouter(AppState appState) {
         path: '/callback',
         builder: (context, state) => AuthCallbackScreen(
           code: state.uri.queryParameters['code'],
+          state: state.uri.queryParameters['state'],
           error: state.uri.queryParameters['error'] ??
               state.uri.queryParameters['error_description'],
         ),

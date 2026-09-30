@@ -50,12 +50,17 @@ func NewHandler(deps Dependencies) http.Handler {
 		ClientID:    deps.Config.WorkOSClientID,
 		RedirectURI: deps.Config.WorkOSRedirect(),
 	}
-	authHandler := handlers.NewAuthHandler(deps.UserRepo, deps.Config.JWTSecret, workosClient)
+	authHandler := handlers.NewAuthHandlerWithTTL(
+		deps.UserRepo,
+		deps.Config.JWTSecret,
+		workosClient,
+		time.Duration(deps.Config.JWTAccessTTLHours)*time.Hour,
+	)
 	houseHandler := handlers.NewHouseHandler(deps.HouseRepo, deps.UserRepo, deps.ReliabilityRepo)
 	expenseHandler := handlers.NewExpenseHandler(deps.ExpenseRepo, deps.HouseRepo)
 	noteHandler := handlers.NewNoteHandler(deps.NoteRepo, deps.HouseRepo)
 	balanceHandler := handlers.NewBalanceHandler(deps.ExpenseRepo, deps.HouseRepo)
-	invitationHandler := handlers.NewInvitationHandler(deps.HouseRepo, deps.ReliabilityRepo, clk, deps.Config.PublicBaseURL, time.Duration(deps.Config.InvitationTTL)*time.Hour)
+	invitationHandler := handlers.NewInvitationHandlerWithUsers(deps.HouseRepo, deps.UserRepo, deps.ReliabilityRepo, clk, deps.Config.PublicBaseURL, time.Duration(deps.Config.InvitationTTL)*time.Hour)
 	eventsHandler := handlers.NewHouseEventsHandler(deps.HouseRepo, deps.ReliabilityRepo, 250*time.Millisecond)
 	notificationHandler := handlers.NewNotificationHandler(deps.NotificationRepo, deps.HouseRepo)
 	householdHandler := handlers.NewHouseholdHandler(deps.HouseholdRepo, deps.HouseRepo)
@@ -95,10 +100,11 @@ func NewHandler(deps Dependencies) http.Handler {
 
 	r.Route("/api/auth", func(r chi.Router) {
 		r.Get("/config", authHandler.Config)
-		r.Get("/workos/authorize", authHandler.WorkOSAuthorize)
-		r.Post("/workos/callback", authHandler.WorkOSCallback)
-		r.Post("/register", authHandler.Register)
-		r.Post("/login", authHandler.Login)
+		authLimiter := middleware.NewAuthRateLimiter(30, 15*time.Minute)
+		r.With(authLimiter.Middleware).Get("/workos/authorize", authHandler.WorkOSAuthorize)
+		r.With(authLimiter.Middleware).Post("/workos/callback", authHandler.WorkOSCallback)
+		r.With(authLimiter.Middleware).Post("/register", authHandler.Register)
+		r.With(authLimiter.Middleware).Post("/login", authHandler.Login)
 	})
 
 	r.Group(func(r chi.Router) {

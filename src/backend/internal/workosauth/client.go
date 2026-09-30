@@ -44,7 +44,7 @@ func (c *Client) apiBase() string {
 }
 
 // AuthorizationURL builds the AuthKit hosted sign-in/up URL.
-func (c *Client) AuthorizationURL(screenHint, state string) (string, error) {
+func (c *Client) AuthorizationURL(screenHint, state, codeChallenge, codeChallengeMethod string) (string, error) {
 	if !c.Enabled() {
 		return "", fmt.Errorf("workos authkit is not configured")
 	}
@@ -58,6 +58,13 @@ func (c *Client) AuthorizationURL(screenHint, state string) (string, error) {
 	}
 	if state != "" {
 		values.Set("state", state)
+	}
+	if codeChallenge != "" {
+		values.Set("code_challenge", codeChallenge)
+		if codeChallengeMethod == "" {
+			codeChallengeMethod = "S256"
+		}
+		values.Set("code_challenge_method", codeChallengeMethod)
 	}
 	return c.apiBase() + "/user_management/authorize?" + values.Encode(), nil
 }
@@ -82,7 +89,7 @@ type apiError struct {
 	Message          string `json:"message"`
 }
 
-func (c *Client) AuthenticateWithCode(ctx context.Context, code, ipAddress, userAgent string) (*AuthenticateResult, error) {
+func (c *Client) AuthenticateWithCode(ctx context.Context, code, codeVerifier, ipAddress, userAgent string) (*AuthenticateResult, error) {
 	if !c.Enabled() {
 		return nil, fmt.Errorf("workos authkit is not configured")
 	}
@@ -91,6 +98,9 @@ func (c *Client) AuthenticateWithCode(ctx context.Context, code, ipAddress, user
 		"client_secret": c.APIKey,
 		"grant_type":    "authorization_code",
 		"code":          code,
+	}
+	if codeVerifier != "" {
+		body["code_verifier"] = codeVerifier
 	}
 	if ipAddress != "" {
 		body["ip_address"] = ipAddress

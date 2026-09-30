@@ -42,6 +42,7 @@ type Config struct {
 	WorkOSAPIKey                string
 	WorkOSClientID              string
 	WorkOSRedirectURI           string
+	JWTAccessTTLHours           int
 }
 
 func Load() *Config {
@@ -75,6 +76,7 @@ func Load() *Config {
 		WorkOSAPIKey:                strings.TrimSpace(os.Getenv("WORKOS_API_KEY")),
 		WorkOSClientID:              strings.TrimSpace(os.Getenv("WORKOS_CLIENT_ID")),
 		WorkOSRedirectURI:           strings.TrimSpace(os.Getenv("WORKOS_REDIRECT_URI")),
+		JWTAccessTTLHours:           getEnvInt("JWT_ACCESS_TTL_HOURS", 8),
 	}
 }
 
@@ -132,6 +134,9 @@ func (c *Config) Validate() error {
 	}
 	if c.InvitationTTL <= 0 {
 		return errors.New("INVITATION_TTL_HOURS must be positive")
+	}
+	if c.JWTAccessTTLHours <= 0 {
+		return errors.New("JWT_ACCESS_TTL_HOURS must be positive")
 	}
 	if c.JobPollInterval <= 0 {
 		return errors.New("JOB_POLL_INTERVAL_SECONDS must be positive")

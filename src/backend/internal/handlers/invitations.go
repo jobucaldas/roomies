@@ -19,6 +19,7 @@ import (
 
 type InvitationHandler struct {
 	houseRepo       *repository.HouseRepository
+	userRepo        *repository.UserRepository
 	reliabilityRepo *repository.ReliabilityRepository
 	clock           roomiesclock.Clock
 	publicBaseURL   string
@@ -26,11 +27,16 @@ type InvitationHandler struct {
 }
 
 func NewInvitationHandler(houseRepo *repository.HouseRepository, reliabilityRepo *repository.ReliabilityRepository, clk roomiesclock.Clock, publicBaseURL string, invitationTTL time.Duration) *InvitationHandler {
+	return NewInvitationHandlerWithUsers(houseRepo, nil, reliabilityRepo, clk, publicBaseURL, invitationTTL)
+}
+
+func NewInvitationHandlerWithUsers(houseRepo *repository.HouseRepository, userRepo *repository.UserRepository, reliabilityRepo *repository.ReliabilityRepository, clk roomiesclock.Clock, publicBaseURL string, invitationTTL time.Duration) *InvitationHandler {
 	if clk == nil {
 		clk = roomiesclock.RealClock{}
 	}
 	return &InvitationHandler{
 		houseRepo:       houseRepo,
+		userRepo:        userRepo,
 		reliabilityRepo: reliabilityRepo,
 		clock:           clk,
 		publicBaseURL:   strings.TrimRight(publicBaseURL, "/"),
@@ -160,7 +166,21 @@ func (h *InvitationHandler) Accept(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "token is required"})
 		return
 	}
-	invite, err := h.reliabilityRepo.AcceptInvitation(r.Context(), req.Token, middleware.GetUserID(r.Context()), middleware.GetUserEmail(r.Context()))
+	userID := middleware.GetUserID(r.Context())
+	// Prefer the persisted account email over the JWT email claim so acceptance
+	// cannot be steered by a stale or attacker-controlled claim.
+	actorEmail := ""
+	if h.userRepo != nil {
+		user, err := h.userRepo.GetByID(r.Context(), userID)
+		if err != nil {
+			writeJSON(w, http.StatusUnauthorized, models.ErrorResponse{Error: "authenticated user not found"})
+			return
+		}
+		actorEmail = user.Email
+	} else {
+		actorEmail = middleware.GetUserEmail(r.Context())
+	}
+	invite, err := h.reliabilityRepo.AcceptInvitation(r.Context(), req.Token, userID, actorEmail)
 	if err == repository.ErrInvitationUnavailable {
 		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "invitation unavailable"})
 		return

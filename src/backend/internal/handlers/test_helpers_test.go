@@ -58,6 +58,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		CORSAllowedOrigins: []string{"http://localhost:8081"},
 		PublicBaseURL:      "https://roomies.test",
 		InvitationTTL:      168,
+		JWTAccessTTLHours:  8,
 		JobPollInterval:    1,
 		JobLeaseSeconds:    30,
 	}

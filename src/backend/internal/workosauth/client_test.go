@@ -14,7 +14,7 @@ func TestAuthorizationURL(t *testing.T) {
 		ClientID:    "client_123",
 		RedirectURI: "http://localhost/callback",
 	}
-	url, err := client.AuthorizationURL("sign-up", "state-1")
+	url, err := client.AuthorizationURL("sign-up", "state-1", "challenge-abc", "S256")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,6 +24,8 @@ func TestAuthorizationURL(t *testing.T) {
 		"provider=authkit",
 		"screen_hint=sign-up",
 		"state=state-1",
+		"code_challenge=challenge-abc",
+		"code_challenge_method=S256",
 		"redirect_uri=http%3A%2F%2Flocalhost%2Fcallback",
 	) {
 		t.Fatalf("unexpected authorization url: %s", url)
@@ -39,7 +41,7 @@ func TestAuthenticateWithCode(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
-		if body["grant_type"] != "authorization_code" || body["code"] != "abc" {
+		if body["grant_type"] != "authorization_code" || body["code"] != "abc" || body["code_verifier"] != "verifier-1" {
 			t.Fatalf("body = %#v", body)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -62,7 +64,7 @@ func TestAuthenticateWithCode(t *testing.T) {
 		APIBase:     server.URL,
 		HTTPClient:  server.Client(),
 	}
-	result, err := client.AuthenticateWithCode(context.Background(), "abc", "127.0.0.1", "test-agent")
+	result, err := client.AuthenticateWithCode(context.Background(), "abc", "verifier-1", "127.0.0.1", "test-agent")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +95,7 @@ func TestAuthenticateWithCodeRejectsUnverifiedEmail(t *testing.T) {
 		APIBase:     server.URL,
 		HTTPClient:  server.Client(),
 	}
-	_, err := client.AuthenticateWithCode(context.Background(), "abc", "", "")
+	_, err := client.AuthenticateWithCode(context.Background(), "abc", "verifier", "", "")
 	if err == nil {
 		t.Fatal("expected unverified email to be rejected")
 	}

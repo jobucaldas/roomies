@@ -3,7 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_error.dart';
+import '../auth/oauth_pending.dart';
 import '../auth/open_url.dart';
+import '../auth/pkce.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/roomies_theme.dart';
@@ -61,11 +63,16 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      final url = await context
-          .read<AppState>()
-          .api
-          .workosAuthorizeUrl(screenHint: screenHint);
-      openExternalUrl(url);
+      final pkce = generatePkcePair();
+      final authorize = await context.read<AppState>().api.workosAuthorize(
+            screenHint: screenHint,
+            codeChallenge: pkce.challenge,
+          );
+      await saveOAuthPending(
+        state: authorize.state,
+        codeVerifier: pkce.verifier,
+      );
+      openExternalUrl(authorize.url);
     } on ApiError catch (error) {
       setState(() => _error = error.message);
     } catch (error) {

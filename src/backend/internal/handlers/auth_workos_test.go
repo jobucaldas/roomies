@@ -31,11 +31,55 @@ func TestAuthConfigReportsAuthKitDisabledByDefault(t *testing.T) {
 	if body["password"] != true {
 		t.Fatalf("password = %#v", body["password"])
 	}
+	if body["access_token_ttl_s"] == nil {
+		t.Fatalf("missing access_token_ttl_s: %#v", body)
+	}
+}
+
+func TestWorkOSAuthorizeRequiresPKCE(t *testing.T) {
+	env := newTestEnv(t)
+	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, enabledWorkOS(t, "unused"))
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/workos/authorize?screen_hint=sign-in", nil)
+	w := httptest.NewRecorder()
+	handler.WorkOSAuthorize(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestWorkOSAuthorizeReturnsSignedState(t *testing.T) {
+	env := newTestEnv(t)
+	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, enabledWorkOS(t, "unused"))
+	pair, err := workosauth.GeneratePKCEPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/workos/authorize?screen_hint=sign-in&code_challenge="+pair.Challenge+"&code_challenge_method=S256", nil)
+	w := httptest.NewRecorder()
+	handler.WorkOSAuthorize(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["url"] == "" || body["state"] == "" {
+		t.Fatalf("body = %#v", body)
+	}
+	if err := workosauth.VerifyOAuthState(env.JWTSecret, body["state"], pair.Verifier, time.Now()); err != nil {
+		t.Fatalf("state verify: %v", err)
+	}
 }
 
 func TestWorkOSCallbackUpsertsUser(t *testing.T) {
 	env := newTestEnv(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body["code_verifier"] == "" {
+			t.Fatalf("missing code_verifier: %#v", body)
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"user": map[string]any{
 				"id":             "user_workos_1",
@@ -57,7 +101,7 @@ func TestWorkOSCallbackUpsertsUser(t *testing.T) {
 		HTTPClient:  server.Client(),
 	}
 	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, workos)
-	payload, _ := json.Marshal(map[string]string{"code": "abc"})
+	payload := signedCallbackPayload(t, env.JWTSecret, "abc")
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/workos/callback", bytes.NewReader(payload))
 	w := httptest.NewRecorder()
 	handler.WorkOSCallback(w, req)
@@ -74,6 +118,22 @@ func TestWorkOSCallbackUpsertsUser(t *testing.T) {
 	user := auth["user"].(map[string]any)
 	if user["email"] != "authkit@example.test" {
 		t.Fatalf("user = %#v", user)
+	}
+}
+
+func TestWorkOSCallbackRejectsInvalidState(t *testing.T) {
+	env := newTestEnv(t)
+	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, enabledWorkOS(t, "user_workos_1"))
+	payload, _ := json.Marshal(map[string]string{
+		"code":          "abc",
+		"state":         "not.a.valid.state",
+		"code_verifier": "verifier",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/workos/callback", bytes.NewReader(payload))
+	w := httptest.NewRecorder()
+	handler.WorkOSCallback(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
 }
 
@@ -123,7 +183,7 @@ func TestWorkOSCallbackDoesNotLinkLocalPasswordAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, enabledWorkOS(t, "user_workos_1"))
-	payload, _ := json.Marshal(map[string]string{"code": "abc"})
+	payload := signedCallbackPayload(t, env.JWTSecret, "abc")
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/workos/callback", bytes.NewReader(payload))
 	w := httptest.NewRecorder()
 	handler.WorkOSCallback(w, req)
@@ -137,6 +197,27 @@ func TestWorkOSCallbackDoesNotLinkLocalPasswordAccount(t *testing.T) {
 	if user.ID != existing.ID || user.WorkOSUserID != "" || user.PasswordHash != existing.PasswordHash {
 		t.Fatalf("local account was linked: %#v", user)
 	}
+}
+
+func signedCallbackPayload(t *testing.T, secret, code string) []byte {
+	t.Helper()
+	pair, err := workosauth.GeneratePKCEPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := workosauth.SignOAuthState(secret, pair.Challenge, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(map[string]string{
+		"code":          code,
+		"state":         state,
+		"code_verifier": pair.Verifier,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return payload
 }
 
 func enabledWorkOS(t *testing.T, userID string) *workosauth.Client {

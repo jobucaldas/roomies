@@ -3,13 +3,20 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_error.dart';
+import '../auth/oauth_pending.dart';
 import '../state/app_state.dart';
 import '../widgets/roomies_ui.dart';
 
 class AuthCallbackScreen extends StatefulWidget {
-  const AuthCallbackScreen({super.key, this.code, this.error});
+  const AuthCallbackScreen({
+    super.key,
+    this.code,
+    this.state,
+    this.error,
+  });
 
   final String? code;
+  final String? state;
   final String? error;
 
   @override
@@ -44,23 +51,46 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
     }
     final app = context.read<AppState>();
     final navigator = GoRouter.of(context);
+    final pending = await loadOAuthPending();
+    final expectedState = pending.state?.trim() ?? '';
+    final codeVerifier = pending.codeVerifier?.trim() ?? '';
+    final returnedState = widget.state?.trim() ?? '';
+    if (expectedState.isEmpty ||
+        codeVerifier.isEmpty ||
+        returnedState.isEmpty ||
+        returnedState != expectedState) {
+      await clearOAuthPending();
+      if (!mounted) return;
+      setState(() {
+        _failed = true;
+        _status = 'Sign-in failed: invalid or missing OAuth state.';
+      });
+      return;
+    }
     try {
-      final auth = await app.api.completeWorkOSCallback(code);
+      final auth = await app.api.completeWorkOSCallback(
+        code: code,
+        state: returnedState,
+        codeVerifier: codeVerifier,
+      );
+      await clearOAuthPending();
       await app.setUser(auth.user);
       if (!mounted) return;
-      final pending = await app.api.loadPendingInvitation();
-      if (pending != null && pending.isNotEmpty) {
+      final invitation = await app.api.loadPendingInvitation();
+      if (invitation != null && invitation.isNotEmpty) {
         navigator.go('/accept-invitation');
       } else {
         navigator.go('/dashboard');
       }
     } on ApiError catch (error) {
+      await clearOAuthPending();
       if (!mounted) return;
       setState(() {
         _failed = true;
         _status = 'Sign-in failed: ${error.message}';
       });
     } catch (error) {
+      await clearOAuthPending();
       if (!mounted) return;
       setState(() {
         _failed = true;
