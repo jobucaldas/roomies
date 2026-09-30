@@ -149,10 +149,15 @@ class _ShellTopBar extends StatelessWidget {
               const SizedBox(width: 10),
             ],
             Expanded(
-              child: Text(
-                title!,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium,
+              // House / page title must be a heading for a11y + household-browser
+              // (Playwright getByRole('heading', { name: houseName })).
+              child: Semantics(
+                header: true,
+                child: Text(
+                  title!,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ),
             ),
           ] else
