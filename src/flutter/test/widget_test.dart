@@ -11,6 +11,6 @@ void main() {
     );
     appState.sessionReady = false;
     await tester.pumpWidget(RoomiesApp(appState: appState));
-    expect(find.text('Restoring session…'), findsOneWidget);
+    expect(find.text('Restoring…'), findsOneWidget);
   });
 }

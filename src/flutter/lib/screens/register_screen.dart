@@ -6,6 +6,7 @@ import '../api/api_error.dart';
 import '../auth/open_url.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
+import '../theme/roomies_theme.dart';
 import '../widgets/roomies_ui.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -112,73 +113,76 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final s = app.strings;
     final authkit = _config?.authkit == true;
     return RoomiesPage(
-      maxWidth: 480,
+      maxWidth: 400,
       centered: true,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: RoomiesColors.inkMuted,
+                visualDensity: VisualDensity.compact,
+              ),
               onPressed: app.toggleLanguageQuick,
               child: Text(s.toggleLanguage),
             ),
           ),
+          const SizedBox(height: 24),
           RoomiesBrandMark(tagline: s.brandTagline),
-          const SizedBox(height: 28),
-          RoomiesCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                RoomiesHeading(s.register, level: 2),
-                if (_error != null) RoomiesError(_error!),
-                if (_configLoading || (authkit && _loading))
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: Text(s.redirecting)),
-                  )
-                else if (authkit) ...[
-                  Text(s.signInSubtitleAuthKit),
-                  const SizedBox(height: 12),
-                  RoomiesPrimaryButton(
-                    label: s.continueWorkOS,
-                    onPressed: _loading ? null : _startAuthKit,
-                    enabled: !_loading,
-                  ),
-                  TextButton(
-                    onPressed: () => context.go('/'),
-                    child: Text(s.haveAccountLogin),
-                  ),
-                ] else ...[
-                  TextField(
-                    controller: _name,
-                    decoration: InputDecoration(hintText: s.name),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _email,
-                    decoration: InputDecoration(hintText: s.email),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _password,
-                    decoration: InputDecoration(hintText: s.password),
-                    obscureText: true,
-                  ),
-                  const SizedBox(height: 8),
-                  RoomiesPrimaryButton(
-                    label: _loading ? s.registering : s.register,
-                    onPressed: _loading ? null : _submit,
-                    enabled: !_loading,
-                  ),
-                  TextButton(
-                    onPressed: () => context.go('/'),
-                    child: Text(s.haveAccountLogin),
-                  ),
-                ],
-              ],
+          const SizedBox(height: 40),
+          if (_error != null) RoomiesError(_error!),
+          if (_configLoading || (authkit && _loading))
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
+            )
+          else if (authkit) ...[
+            SizedBox(
+              height: 48,
+              child: FilledButton(
+                onPressed: _loading ? null : _startAuthKit,
+                child: Text(s.createAccount),
+              ),
             ),
-          ),
+            Center(
+              child: TextButton(
+                onPressed: () => context.go('/'),
+                child: Text(s.haveAccountLogin),
+              ),
+            ),
+          ] else ...[
+            TextField(
+              controller: _name,
+              decoration: InputDecoration(hintText: s.name),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _email,
+              decoration: InputDecoration(hintText: s.email),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _password,
+              decoration: InputDecoration(hintText: s.password),
+              obscureText: true,
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 48,
+              child: FilledButton(
+                onPressed: _loading ? null : _submit,
+                child: Text(_loading ? s.registering : s.createAccount),
+              ),
+            ),
+            Center(
+              child: TextButton(
+                onPressed: () => context.go('/'),
+                child: Text(s.haveAccountLogin),
+              ),
+            ),
+          ],
         ],
       ),
     );

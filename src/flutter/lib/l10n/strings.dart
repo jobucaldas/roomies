@@ -1,8 +1,8 @@
-/// Bilingual UI strings (English + Brazilian Portuguese), matching sibling 217.
+/// Bilingual UI strings (English + Brazilian Portuguese).
+/// Prefer short labels — screens should scan without reading paragraphs.
 class RoomiesStrings {
   const RoomiesStrings(this.localeCode);
 
-  /// `en` or `pt`.
   final String localeCode;
 
   bool get isPortuguese => localeCode == 'pt';
@@ -18,110 +18,103 @@ class RoomiesStrings {
       ? 'Casas compartilhadas, contas e tarefas mais claras.'
       : 'Shared homes, clearer money and chores.';
   String get privacyLine => isPortuguese
-      ? 'Privado por padrão · tudo no escopo da casa'
-      : 'Private by default · house-scoped everything';
+      ? 'Privado por padrão'
+      : 'Private by default';
 
-  String get continueWorkOS =>
-      isPortuguese ? 'Continuar com WorkOS' : 'Continue with WorkOS';
-  String get continueWorkOSHint => isPortuguese
-      ? 'Inclui Google e outras opções no AuthKit hospedado.'
-      : 'Includes Google and other options on hosted AuthKit.';
+  String get signIn => isPortuguese ? 'Entrar' : 'Sign in';
   String get redirecting =>
       isPortuguese ? 'Redirecionando…' : 'Redirecting…';
-  String get signInSubtitleAuthKit => isPortuguese
-      ? 'Entre com WorkOS AuthKit para continuar.'
-      : 'Sign in with WorkOS AuthKit to continue.';
-  String get signInSubtitlePassword => isPortuguese
-      ? 'Entre no espaço compartilhado da sua casa.'
-      : 'Sign in to your shared house workspace.';
-  String get login => isPortuguese ? 'Entrar' : 'Login';
-  String get loggingIn => isPortuguese ? 'Entrando…' : 'Logging in…';
-  String get register => isPortuguese ? 'Criar conta' : 'Register';
+  String get createAccount =>
+      isPortuguese ? 'Criar conta' : 'Create account';
+  String get useEmailPassword => isPortuguese
+      ? 'Usar email e senha'
+      : 'Use email and password';
+  String get hideEmailPassword =>
+      isPortuguese ? 'Ocultar' : 'Hide';
+  String get login => signIn;
+  String get loggingIn => isPortuguese ? 'Entrando…' : 'Signing in…';
+  String get register => createAccount;
   String get registering => isPortuguese ? 'Criando…' : 'Creating…';
-  String get noAccountSignUp => isPortuguese
-      ? 'Não tem conta? Cadastre-se'
-      : "Don't have an account? Sign up";
-  String get noAccountRegister => isPortuguese
-      ? 'Não tem conta? Registrar'
-      : "Don't have an account? Register";
+  String get noAccountSignUp => createAccount;
+  String get noAccountRegister => createAccount;
   String get haveAccountLogin => isPortuguese
       ? 'Já tem conta? Entrar'
-      : 'Already have an account? Login';
+      : 'Already have an account? Sign in';
   String get email => 'Email';
   String get password => isPortuguese ? 'Senha' : 'Password';
   String get name => isPortuguese ? 'Nome' : 'Name';
 
   String get dashboard => 'Dashboard';
   String welcomeBack(String name) => isPortuguese
-      ? 'Bem-vindo de volta, $name.'
-      : 'Welcome back, $name.';
+      ? 'Olá, $name'
+      : 'Hi, $name';
   String get welcomeGuest =>
-      isPortuguese ? 'Bem-vindo ao Roomies!' : 'Welcome to Roomies!';
+      isPortuguese ? 'Bem-vindo' : 'Welcome';
   String get createNewHouse =>
-      isPortuguese ? 'Criar nova casa' : 'Create New House';
-  String get createHouseHint => isPortuguese
-      ? 'Comece uma casa para despesas, tarefas e notas compartilhadas.'
-      : 'Start a house for expenses, chores, and shared notes.';
+      isPortuguese ? 'Nova casa' : 'New house';
   String get houseName => isPortuguese ? 'Nome da casa' : 'House name';
   String get createHouse =>
-      isPortuguese ? 'Criar casa' : 'Create House';
+      isPortuguese ? 'Criar' : 'Create';
   String get yourHouses =>
-      isPortuguese ? 'Suas casas' : 'Your Houses';
+      isPortuguese ? 'Suas casas' : 'Your houses';
   String get noHousesYet => isPortuguese
-      ? 'Nenhuma casa ainda. Crie uma acima!'
-      : 'No houses yet. Create one above!';
-  String get viewHouse => isPortuguese ? 'Ver casa' : 'View House';
+      ? 'Crie a primeira casa para começar.'
+      : 'Create your first house to get started.';
+  String get viewHouse => isPortuguese ? 'Abrir' : 'Open';
   String get defaultBadge =>
       isPortuguese ? 'Padrão' : 'Default';
   String get setAsDefault =>
-      isPortuguese ? 'Definir como padrão' : 'Set as default';
+      isPortuguese ? 'Tornar padrão' : 'Make default';
+  String houseSetAsDefault(String name) => isPortuguese
+      ? '$name é a casa padrão'
+      : '$name is now your default';
 
   String get settings =>
       isPortuguese ? 'Configurações' : 'Settings';
   String get language => isPortuguese ? 'Idioma' : 'Language';
   String get languageSystem => isPortuguese
-      ? 'Idioma do dispositivo'
-      : 'Device language';
+      ? 'Dispositivo'
+      : 'Device';
   String get languageEnglish => 'English';
-  String get languagePortuguese => 'Português (Brasil)';
+  String get languagePortuguese => 'Português';
   String get defaultHouse =>
       isPortuguese ? 'Casa padrão' : 'Default house';
   String get defaultHouseHint => isPortuguese
-      ? 'Sessões futuras abrem esta casa após o login.'
-      : 'Later sessions open this house after sign-in.';
+      ? 'Abre nesta casa nas próximas sessões.'
+      : 'Opens this house next time you sign in.';
   String get noDefaultHouse => isPortuguese
-      ? 'Nenhuma (abrir Dashboard)'
-      : 'None (open Dashboard)';
+      ? 'Nenhuma (Dashboard)'
+      : 'None (Dashboard)';
   String get switchHouse =>
-      isPortuguese ? 'Trocar de casa' : 'Switch house';
+      isPortuguese ? 'Ir para' : 'Go to';
   String get houses => isPortuguese ? 'Casas' : 'Houses';
-  String get logout => isPortuguese ? 'Sair' : 'Logout';
+  String get logout => isPortuguese ? 'Sair' : 'Log out';
   String get back => isPortuguese ? 'Voltar' : 'Back';
   String get backToLogin =>
-      isPortuguese ? 'Voltar ao login' : 'Back to login';
+      isPortuguese ? 'Voltar' : 'Back';
   String get loading => isPortuguese ? 'Carregando…' : 'Loading…';
   String get restoringSession =>
-      isPortuguese ? 'Restaurando sessão…' : 'Restoring session…';
+      isPortuguese ? 'Restaurando…' : 'Restoring…';
   String get signingIn => isPortuguese ? 'Entrando' : 'Signing in';
   String get completingSignIn =>
-      isPortuguese ? 'Concluindo entrada…' : 'Completing sign-in…';
+      isPortuguese ? 'Concluindo…' : 'Finishing…';
   String signInFailed(String detail) => isPortuguese
       ? 'Falha ao entrar: $detail'
       : 'Sign-in failed: $detail';
   String get missingAuthCode => isPortuguese
-      ? 'código de autorização ausente.'
-      : 'missing authorization code.';
+      ? 'código ausente.'
+      : 'missing code.';
   String get redirectingToLogin => isPortuguese
-      ? 'Redirecionando para o login…'
-      : 'Redirecting to login…';
-  String get navigation => isPortuguese ? 'Navegação' : 'Navigation';
-  String get openMenu => isPortuguese ? 'Abrir menu' : 'Open menu';
-  String get closeMenu => isPortuguese ? 'Fechar menu' : 'Close menu';
+      ? 'Redirecionando…'
+      : 'Redirecting…';
+  String get navigation => isPortuguese ? 'Menu' : 'Menu';
+  String get openMenu => isPortuguese ? 'Menu' : 'Menu';
+  String get closeMenu => isPortuguese ? 'Fechar' : 'Close';
   String get save => isPortuguese ? 'Salvar' : 'Save';
   String get saved => isPortuguese ? 'Salvo' : 'Saved';
   String get retry => isPortuguese ? 'Tentar de novo' : 'Retry';
   String get toggleLanguage =>
-      isPortuguese ? 'English' : 'Português';
+      isPortuguese ? 'EN' : 'PT';
 
   String get tabExpenses => isPortuguese ? 'Despesas' : 'Expenses';
   String get tabNotes => isPortuguese ? 'Notas' : 'Notes';
@@ -134,7 +127,7 @@ class RoomiesStrings {
   String get tabBalances =>
       isPortuguese ? 'Saldos' : 'Balances';
   String get tabNotifications =>
-      isPortuguese ? 'Notificações / Agenda' : 'Notifications / Schedule';
+      isPortuguese ? 'Agenda' : 'Schedule';
   String get tabMembers =>
       isPortuguese ? 'Membros' : 'Members';
 
