@@ -12,6 +12,8 @@ header {
 handle /api/* {
 	reverse_proxy backend:8080 {
 		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {header.X-Forwarded-Proto}
+		header_up X-Forwarded-Host {host}
 	}
 }
 
