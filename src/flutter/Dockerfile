@@ -9,7 +9,8 @@ RUN flutter pub get
 COPY src/flutter/ ./
 COPY src/app/public/roomies-sw.js ./web/roomies-sw.js
 
-RUN flutter build web --release \
+# Bundle CanvasKit in the image so CSP can keep script-src/connect-src off www.gstatic.com.
+RUN flutter build web --release --no-web-resources-cdn \
   --dart-define=ROOMIES_API_URL=${ROOMIES_API_URL}
 
 FROM docker.io/alpine:3.20

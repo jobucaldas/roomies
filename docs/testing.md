@@ -5,7 +5,7 @@
 - PostgreSQL: `cd src/backend && DATABASE_URL=postgres://roomies:roomies@localhost:5432/roomies?sslmode=disable JWT_SECRET=dev-secret go test ./... -v`
 
 ## Frontend
-- Production web client (Flutter): `cd src/flutter && flutter analyze && flutter test && flutter build web --release --dart-define=ROOMIES_API_URL=/api`
+- Production web client (Flutter): `cd src/flutter && flutter analyze && flutter test && flutter build web --release --no-web-resources-cdn --dart-define=ROOMIES_API_URL=/api`
 - Rust reference client (retained until native targets migrate): `cargo test -p roomies-app --no-default-features --features web`
 - Rust web release bundle: `nix develop .#web --command sh -c 'cd src/app && dx build --release --debug-symbols=false'`
 - Desktop: `cargo check -p roomies-app --no-default-features --features desktop`

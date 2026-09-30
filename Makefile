@@ -18,7 +18,7 @@ build:
 	$(COMPOSE) build
 
 build-frontend:
-	cd src/flutter && flutter build web --release --dart-define=ROOMIES_API_URL=/api
+	cd src/flutter && flutter build web --release --no-web-resources-cdn --dart-define=ROOMIES_API_URL=/api
 
 build-flutter-web: build-frontend
 
