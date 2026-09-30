@@ -168,6 +168,10 @@ jobs:
             echo "INVITATION_DELIVERY_KEY=${invitation_key}"
             echo "NOTIFICATION_DELIVERY_KEY_ID=household-notifications-ephemeral"
             echo "NOTIFICATION_DELIVERY_KEY=${notification_key}"
+            # Force password login in e2e even if the runner has WorkOS secrets/vars.
+            echo "WORKOS_API_KEY="
+            echo "WORKOS_CLIENT_ID="
+            echo "WORKOS_REDIRECT_URI="
           } >> "$GITHUB_ENV"
       - name: Build and start household stack
         run: |

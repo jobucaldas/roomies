@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { expect, test, type APIRequestContext, type Page, type TestInfo } from '@playwright/test';
+import { loginViaUiOrToken } from '../helpers/login';
 
 const api = process.env.ROOMIES_API_URL ?? 'http://localhost:8080/api';
 const web = process.env.ROOMIES_WEB_URL ?? 'http://localhost';
@@ -90,23 +91,12 @@ async function house(request: APIRequestContext) {
 }
 
 async function login(page: Page, email: string, token?: string) {
-  await page.goto(web);
-  const emailField = page.getByPlaceholder('Email');
-  const authkit = page.getByRole('button', { name: 'Sign in with AuthKit' });
-  await Promise.race([
-    emailField.waitFor({ state: 'visible', timeout: 60_000 }),
-    authkit.waitFor({ state: 'visible', timeout: 60_000 }),
-  ]);
-  if (await emailField.isVisible()) {
-    await emailField.fill(email);
-    await page.getByPlaceholder('Password').fill('synthetic-password-123');
-    await page.getByRole('button', { name: 'Login' }).click();
-  } else {
-    expect(token, 'AuthKit UI requires API token for e2e login').toBeTruthy();
-    await page.evaluate((value) => localStorage.setItem('flutter.roomies.session.token', value as string), token);
-    await page.goto(`${web}/dashboard`);
-  }
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await loginViaUiOrToken(page, {
+    web,
+    email,
+    password: 'synthetic-password-123',
+    token,
+  });
 }
 
 async function notifications(page: Page, id: string) {

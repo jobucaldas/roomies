@@ -169,17 +169,16 @@ class RoomiesPage extends StatelessWidget {
               horizontal: centered ? 24 : 20,
               vertical: centered ? 48 : 24,
             ),
+            // Translate-only entrance: avoid opacity:0 which Playwright treats
+            // as not visible while Flutter web is still settling.
             child: TweenAnimationBuilder<double>(
               tween: Tween(begin: 0, end: 1),
-              duration: const Duration(milliseconds: 420),
+              duration: const Duration(milliseconds: 320),
               curve: Curves.easeOutCubic,
               builder: (context, value, animatedChild) {
-                return Opacity(
-                  opacity: value,
-                  child: Transform.translate(
-                    offset: Offset(0, (1 - value) * 12),
-                    child: animatedChild,
-                  ),
+                return Transform.translate(
+                  offset: Offset(0, (1 - value) * 10),
+                  child: animatedChild,
                 );
               },
               child: child,

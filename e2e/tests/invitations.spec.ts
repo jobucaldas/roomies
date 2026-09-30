@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { expect, test as base, type APIRequestContext, type Page, type TestInfo } from '@playwright/test';
+import { loginViaUiOrToken } from '../helpers/login';
 
 const test = base;
 
@@ -141,22 +142,15 @@ async function fixture(request: APIRequestContext): Promise<Fixture> {
 }
 
 async function login(page: Page, email: string, token?: string) {
-  const emailField = page.getByPlaceholder('Email');
-  const authkit = page.getByRole('button', { name: 'Sign in with AuthKit' });
-  await Promise.race([
-    emailField.waitFor({ state: 'visible', timeout: 60_000 }),
-    authkit.waitFor({ state: 'visible', timeout: 60_000 }),
-  ]);
-  await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible();
-  if (await emailField.isVisible()) {
-    await emailField.fill(email);
-    await page.getByPlaceholder('Password').fill('synthetic-password-123');
-    await page.getByRole('button', { name: 'Login' }).click();
-  } else {
-    expect(token, 'AuthKit UI requires API token for e2e login').toBeTruthy();
-    await page.evaluate((value) => localStorage.setItem('flutter.roomies.session.token', value as string), token);
-    await page.reload();
-  }
+  await loginViaUiOrToken(page, {
+    web: process.env.ROOMIES_WEB_URL ?? 'http://localhost',
+    email,
+    password: 'synthetic-password-123',
+    token,
+    navigate: false,
+    authkitFallback: 'reload',
+    expectDashboard: false,
+  });
 }
 
 test('admin invite is delivered and intended user joins once', async ({ page, request }) => {

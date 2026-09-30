@@ -148,16 +148,32 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ] else ...[
-                  TextField(
-                    controller: _email,
-                    decoration: const InputDecoration(hintText: 'Email'),
-                    keyboardType: TextInputType.emailAddress,
+                  Semantics(
+                    label: 'Email',
+                    textField: true,
+                    child: TextField(
+                      controller: _email,
+                      decoration: const InputDecoration(
+                        hintText: 'Email',
+                        labelText: 'Email',
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                      autofillHints: const [AutofillHints.email],
+                    ),
                   ),
                   const SizedBox(height: 10),
-                  TextField(
-                    controller: _password,
-                    decoration: const InputDecoration(hintText: 'Password'),
-                    obscureText: true,
+                  Semantics(
+                    label: 'Password',
+                    textField: true,
+                    child: TextField(
+                      controller: _password,
+                      decoration: const InputDecoration(
+                        hintText: 'Password',
+                        labelText: 'Password',
+                      ),
+                      obscureText: true,
+                      autofillHints: const [AutofillHints.password],
+                    ),
                   ),
                   const SizedBox(height: 8),
                   RoomiesPrimaryButton(

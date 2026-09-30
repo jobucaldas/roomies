@@ -3,6 +3,9 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
+  // Flutter web bootstrap + auth config can exceed the default 30s.
+  timeout: 90_000,
+  expect: { timeout: 15_000 },
   reporter: [['list'], ['html', { outputFolder: 'artifacts/report', open: 'never' }]],
   outputDir: 'artifacts/test-results',
   use: {

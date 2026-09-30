@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { expect, test, type APIRequestContext, type Page, type TestInfo } from '@playwright/test';
+import { loginViaUiOrToken } from '../helpers/login';
 
 // Core tests deliberately disable Playwright screenshots and traces. The sanitized JSON record
 // below is sufficient for the CI gate and cannot retain expense, note, or session contents.
@@ -166,24 +167,7 @@ async function fixture(request: APIRequestContext, withMonitor = false): Promise
 }
 
 async function login(page: Page, email: string, token?: string) {
-  await page.goto(web);
-  const emailField = page.getByPlaceholder('Email');
-  const authkit = page.getByRole('button', { name: 'Sign in with AuthKit' });
-  await Promise.race([
-    emailField.waitFor({ state: 'visible', timeout: 60_000 }),
-    authkit.waitFor({ state: 'visible', timeout: 60_000 }),
-  ]);
-  await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible();
-  if (await emailField.isVisible()) {
-    await emailField.fill(email);
-    await page.getByPlaceholder('Password').fill(password);
-    await page.getByRole('button', { name: 'Login' }).click();
-  } else {
-    expect(token, 'AuthKit UI requires API token for e2e login').toBeTruthy();
-    await page.evaluate((value) => localStorage.setItem('flutter.roomies.session.token', value as string), token);
-    await page.goto(`${web}/dashboard`);
-  }
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await loginViaUiOrToken(page, { web, email, password, token });
 }
 
 async function logout(page: Page) {

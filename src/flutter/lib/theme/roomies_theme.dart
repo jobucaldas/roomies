@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 /// Roomies visual system — calm teal household, not a generic dashboard template.
+///
+/// Fonts are loaded via `web/index.html` (Fraunces + Source Sans 3). Avoid
+/// runtime `google_fonts` fetches so Flutter web boot stays offline-friendly
+/// for Playwright/CI.
 abstract final class RoomiesColors {
   static const ink = Color(0xFF14212B);
   static const inkMuted = Color(0xFF5A6B76);
@@ -16,6 +19,9 @@ abstract final class RoomiesColors {
   static const dangerSoft = Color(0xFFFCE8E6);
   static const success = Color(0xFF1B7A4A);
 }
+
+const _displayFamily = 'Fraunces';
+const _bodyFamily = 'Source Sans 3';
 
 ThemeData buildRoomiesTheme() {
   final colorScheme = ColorScheme(
@@ -47,57 +53,70 @@ ThemeData buildRoomiesTheme() {
     surfaceTint: RoomiesColors.teal,
   );
 
-  final display = GoogleFonts.frauncesTextTheme();
-  final body = GoogleFonts.sourceSans3TextTheme();
+  final textTheme = ThemeData(useMaterial3: true).textTheme.apply(
+        fontFamily: _bodyFamily,
+        displayColor: RoomiesColors.ink,
+        bodyColor: RoomiesColors.ink,
+      );
 
-  final textTheme = body.copyWith(
-    displayLarge: display.displayLarge?.copyWith(
+  final themed = textTheme.copyWith(
+    displayLarge: textTheme.displayLarge?.copyWith(
+      fontFamily: _displayFamily,
       color: RoomiesColors.ink,
       fontWeight: FontWeight.w600,
       letterSpacing: -0.5,
     ),
-    displayMedium: display.displayMedium?.copyWith(
+    displayMedium: textTheme.displayMedium?.copyWith(
+      fontFamily: _displayFamily,
       color: RoomiesColors.ink,
       fontWeight: FontWeight.w600,
     ),
-    headlineLarge: display.headlineLarge?.copyWith(
+    headlineLarge: textTheme.headlineLarge?.copyWith(
+      fontFamily: _displayFamily,
       color: RoomiesColors.tealDeep,
       fontWeight: FontWeight.w600,
       fontSize: 40,
       height: 1.05,
       letterSpacing: -0.8,
     ),
-    headlineMedium: display.headlineMedium?.copyWith(
+    headlineMedium: textTheme.headlineMedium?.copyWith(
+      fontFamily: _displayFamily,
       color: RoomiesColors.ink,
       fontWeight: FontWeight.w600,
       fontSize: 28,
       height: 1.15,
     ),
-    headlineSmall: display.headlineSmall?.copyWith(
+    headlineSmall: textTheme.headlineSmall?.copyWith(
+      fontFamily: _displayFamily,
       color: RoomiesColors.ink,
       fontWeight: FontWeight.w600,
       fontSize: 22,
     ),
-    titleLarge: body.titleLarge?.copyWith(
+    titleLarge: textTheme.titleLarge?.copyWith(
+      fontFamily: _bodyFamily,
       color: RoomiesColors.ink,
       fontWeight: FontWeight.w600,
       fontSize: 20,
     ),
-    titleMedium: body.titleMedium?.copyWith(
+    titleMedium: textTheme.titleMedium?.copyWith(
+      fontFamily: _bodyFamily,
       color: RoomiesColors.ink,
       fontWeight: FontWeight.w600,
     ),
-    bodyLarge: body.bodyLarge?.copyWith(
+    bodyLarge: textTheme.bodyLarge?.copyWith(
+      fontFamily: _bodyFamily,
       color: RoomiesColors.ink,
       fontSize: 16,
       height: 1.45,
     ),
-    bodyMedium: body.bodyMedium?.copyWith(
+    bodyMedium: textTheme.bodyMedium?.copyWith(
+      fontFamily: _bodyFamily,
       color: RoomiesColors.inkMuted,
       fontSize: 15,
       height: 1.45,
     ),
-    labelLarge: body.labelLarge?.copyWith(
+    labelLarge: textTheme.labelLarge?.copyWith(
+      fontFamily: _bodyFamily,
       fontWeight: FontWeight.w600,
       letterSpacing: 0.2,
     ),
@@ -107,12 +126,13 @@ ThemeData buildRoomiesTheme() {
     useMaterial3: true,
     colorScheme: colorScheme,
     scaffoldBackgroundColor: RoomiesColors.canvas,
-    textTheme: textTheme,
+    textTheme: themed,
+    fontFamily: _bodyFamily,
     appBarTheme: AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation: 0,
       foregroundColor: RoomiesColors.ink,
-      titleTextStyle: textTheme.titleLarge,
+      titleTextStyle: themed.titleLarge,
     ),
     cardTheme: CardThemeData(
       color: RoomiesColors.surface,
@@ -126,7 +146,7 @@ ThemeData buildRoomiesTheme() {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: Colors.white,
-      hintStyle: textTheme.bodyMedium,
+      hintStyle: themed.bodyMedium,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -149,7 +169,7 @@ ThemeData buildRoomiesTheme() {
         disabledForegroundColor: RoomiesColors.inkMuted,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle: textTheme.labelLarge,
+        textStyle: themed.labelLarge,
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
@@ -165,7 +185,7 @@ ThemeData buildRoomiesTheme() {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: RoomiesColors.tealDeep,
-        textStyle: textTheme.labelLarge,
+        textStyle: themed.labelLarge,
       ),
     ),
     tabBarTheme: TabBarThemeData(
@@ -173,13 +193,13 @@ ThemeData buildRoomiesTheme() {
       unselectedLabelColor: RoomiesColors.inkMuted,
       indicatorColor: RoomiesColors.teal,
       dividerColor: RoomiesColors.line,
-      labelStyle: textTheme.labelLarge,
-      unselectedLabelStyle: textTheme.labelLarge,
+      labelStyle: themed.labelLarge,
+      unselectedLabelStyle: themed.labelLarge,
     ),
     dividerTheme: const DividerThemeData(color: RoomiesColors.line),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: RoomiesColors.ink,
-      contentTextStyle: textTheme.bodyMedium?.copyWith(color: Colors.white),
+      contentTextStyle: themed.bodyMedium?.copyWith(color: Colors.white),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
