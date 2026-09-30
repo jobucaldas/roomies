@@ -1,16 +1,30 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-/** Wait until Flutter web exposes password login or AuthKit CTA. */
+/** Wait until Flutter web exposes password (collapsed or open) or AuthKit CTA. */
 export async function waitForLoginReady(page: Page) {
   const emailField = page.getByRole('textbox', { name: 'Email', disabled: false });
-  const authkit = page.getByRole('button', { name: 'Sign in with AuthKit' });
-  const loginButton = page.getByRole('button', { name: 'Login', exact: true });
+  const usePassword = page.getByRole('button', { name: 'Use email and password' });
+  // AuthKit-on primary CTA and password-form submit both use "Sign in".
+  const signIn = page.getByRole('button', { name: 'Sign in', exact: true });
   await Promise.race([
     emailField.waitFor({ state: 'visible', timeout: 90_000 }),
-    authkit.waitFor({ state: 'visible', timeout: 90_000 }),
-    loginButton.waitFor({ state: 'visible', timeout: 90_000 }),
+    usePassword.waitFor({ state: 'visible', timeout: 90_000 }),
+    signIn.waitFor({ state: 'visible', timeout: 90_000 }),
   ]);
-  return { emailField, authkit };
+  return { emailField, usePassword, signIn };
+}
+
+/** Reveal the CI/local password fields when AuthKit is unset. */
+export async function expandPasswordLogin(page: Page) {
+  const emailField = page.getByRole('textbox', { name: 'Email', disabled: false });
+  if (await emailField.isVisible().catch(() => false)) {
+    return emailField;
+  }
+  const usePassword = page.getByRole('button', { name: 'Use email and password' });
+  await usePassword.waitFor({ state: 'visible', timeout: 15_000 });
+  await usePassword.click();
+  await emailField.waitFor({ state: 'visible', timeout: 15_000 });
+  return emailField;
 }
 
 async function fillEnabledTextbox(page: Page, name: string, value: string) {
@@ -64,7 +78,7 @@ export async function loginViaUiOrToken(
   if (navigate) {
     await page.goto(web);
   }
-  const { emailField } = await waitForLoginReady(page);
+  const { emailField, usePassword, signIn } = await waitForLoginReady(page);
   if (token) {
     const sessionUrl = new URL(web);
     await page.context().addCookies([
@@ -90,14 +104,33 @@ export async function loginViaUiOrToken(
     } else {
       await page.goto(`${web}/dashboard`);
     }
-  } else if (await emailField.isVisible()) {
+  } else if (
+    (await usePassword.isVisible().catch(() => false)) ||
+    (await emailField.isVisible().catch(() => false))
+  ) {
+    // AuthKit unset: password path starts collapsed behind "Use email and password".
+    await expandPasswordLogin(page);
     await fillEnabledTextbox(page, 'Email', email);
     await fillEnabledTextbox(page, 'Password', password);
-    await page.getByRole('button', { name: 'Login', exact: true }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  } else if (await signIn.isVisible().catch(() => false)) {
+    expect(token, 'AuthKit UI requires API token for e2e login').toBeTruthy();
   } else {
     expect(token, 'AuthKit UI requires API token for e2e login').toBeTruthy();
   }
   if (expectDashboard) {
     await expect(page).toHaveURL(/\/dashboard$/);
   }
+}
+
+/** Sign out from AppShell (sidebar on wide, drawer on narrow). */
+export async function logoutViaUi(page: Page, web: string) {
+  await page.goto(`${web}/dashboard`);
+  const logOut = page.getByRole('button', { name: 'Log out' });
+  if (!(await logOut.isVisible().catch(() => false))) {
+    await page.getByRole('button', { name: 'Menu' }).click();
+    await logOut.waitFor({ state: 'visible', timeout: 15_000 });
+  }
+  await logOut.click();
+  await waitForLoginReady(page);
 }

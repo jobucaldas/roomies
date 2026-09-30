@@ -288,52 +288,58 @@ class _NavTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected ? RoomiesColors.tealSoft : Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: selected ? RoomiesColors.tealSoft : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 20,
-                color: selected ? RoomiesColors.tealDeep : RoomiesColors.inkMuted,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: selected
-                            ? RoomiesColors.tealDeep
-                            : RoomiesColors.ink,
-                        fontWeight:
-                            selected ? FontWeight.w700 : FontWeight.w500,
-                      ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
+                  color:
+                      selected ? RoomiesColors.tealDeep : RoomiesColors.inkMuted,
                 ),
-              ),
-              if (badge != null)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: RoomiesColors.mist,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
+                const SizedBox(width: 10),
+                Expanded(
                   child: Text(
-                    badge!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: RoomiesColors.tealDeep,
-                          fontWeight: FontWeight.w600,
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: selected
+                              ? RoomiesColors.tealDeep
+                              : RoomiesColors.ink,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500,
                         ),
                   ),
                 ),
-            ],
+                if (badge != null)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: RoomiesColors.mist,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      badge!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: RoomiesColors.tealDeep,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
