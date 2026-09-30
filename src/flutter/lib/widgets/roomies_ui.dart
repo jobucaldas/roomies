@@ -225,12 +225,18 @@ class RoomiesHeading extends StatelessWidget {
 }
 
 class RoomiesBrandMark extends StatelessWidget {
-  const RoomiesBrandMark({super.key, this.compact = false});
+  const RoomiesBrandMark({
+    super.key,
+    this.compact = false,
+    this.tagline,
+  });
 
   final bool compact;
+  final String? tagline;
 
   @override
   Widget build(BuildContext context) {
+    final line = tagline ?? 'Shared homes, clearer money and chores.';
     return Semantics(
       header: true,
       child: Column(
@@ -245,7 +251,7 @@ class RoomiesBrandMark extends StatelessWidget {
           if (!compact) ...[
             const SizedBox(height: 8),
             Text(
-              'Shared homes, clearer money and chores.',
+              line,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: RoomiesColors.inkMuted,
                   ),

@@ -50,7 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _config = AuthConfig(authkit: false, password: true);
         _configLoading = false;
-        _error = 'Could not load auth settings: $error';
+        _error = error.toString();
       });
     }
   }
@@ -90,6 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (pending != null && pending.isNotEmpty) {
         navigator.go('/accept-invitation');
       } else {
+        // Fresh auth always lands on Dashboard first.
         navigator.go('/dashboard');
       }
     } on ApiError catch (error) {
@@ -103,6 +104,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final app = context.watch<AppState>();
+    final s = app.strings;
     final authkit = _config?.authkit == true;
     return RoomiesPage(
       maxWidth: 480,
@@ -110,29 +113,51 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const RoomiesBrandMark(),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: app.toggleLanguageQuick,
+              child: Text(s.toggleLanguage),
+            ),
+          ),
+          RoomiesBrandMark(tagline: s.brandTagline),
           const SizedBox(height: 28),
           RoomiesCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const RoomiesHeading('Login', level: 2),
+                RoomiesHeading(s.login, level: 2),
                 Text(
-                  authkit
-                      ? 'Sign in with WorkOS AuthKit to continue.'
-                      : 'Sign in to your shared house workspace.',
+                  authkit ? s.signInSubtitleAuthKit : s.signInSubtitlePassword,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
+                if (authkit) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    s.continueWorkOSHint,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: RoomiesColors.inkMuted,
+                        ),
+                  ),
+                ],
                 const SizedBox(height: 18),
                 if (_error != null) RoomiesError(_error!),
                 if (_configLoading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: CircularProgressIndicator()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 12),
+                          Text(s.loading),
+                        ],
+                      ),
+                    ),
                   )
                 else if (authkit) ...[
                   RoomiesPrimaryButton(
-                    label: _loading ? 'Redirecting…' : 'Sign in with AuthKit',
+                    label: _loading ? s.redirecting : s.continueWorkOS,
                     onPressed: _loading
                         ? null
                         : () => _startAuthKit(screenHint: 'sign-in'),
@@ -144,15 +169,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: _loading
                           ? null
                           : () => _startAuthKit(screenHint: 'sign-up'),
-                      child: const Text("Don't have an account? Sign up"),
+                      child: Text(s.noAccountSignUp),
                     ),
                   ),
                 ] else ...[
                   TextField(
                     controller: _email,
-                    decoration: const InputDecoration(
-                      hintText: 'Email',
-                      labelText: 'Email',
+                    decoration: InputDecoration(
+                      hintText: s.email,
+                      labelText: s.email,
                     ),
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
@@ -160,22 +185,22 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 10),
                   TextField(
                     controller: _password,
-                    decoration: const InputDecoration(
-                      hintText: 'Password',
-                      labelText: 'Password',
+                    decoration: InputDecoration(
+                      hintText: s.password,
+                      labelText: s.password,
                     ),
                     obscureText: true,
                     autofillHints: const [AutofillHints.password],
                   ),
                   const SizedBox(height: 8),
                   RoomiesPrimaryButton(
-                    label: _loading ? 'Logging in...' : 'Login',
+                    label: _loading ? s.loggingIn : s.login,
                     onPressed: _loading ? null : _submitPassword,
                     enabled: !_loading,
                   ),
                   TextButton(
                     onPressed: () => context.go('/register'),
-                    child: const Text("Don't have an account? Register"),
+                    child: Text(s.noAccountRegister),
                   ),
                 ],
               ],
@@ -183,7 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           const SizedBox(height: 18),
           Text(
-            'Private by default · house-scoped everything',
+            s.privacyLine,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: RoomiesColors.inkMuted,
                 ),
