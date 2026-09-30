@@ -19,10 +19,10 @@ void main() {
     expect(RoomiesStrings.resolveDeviceLocale(null), 'en');
   });
 
-  test('Portuguese strings cover AuthKit CTA', () {
+  test('Portuguese strings cover hosted AuthKit CTA', () {
     final pt = RoomiesStrings('pt');
-    expect(pt.continueWorkOS, 'Continuar com WorkOS');
-    expect(pt.dashboard, 'Dashboard');
+    expect(pt.signIn, 'Entrar');
+    expect(pt.createAccount, 'Criar conta');
     expect(pt.settings, 'Configurações');
   });
 
@@ -36,7 +36,7 @@ void main() {
     expect(app.localeCode, 'en');
     await app.setLocaleOverride('pt');
     expect(app.localeCode, 'pt');
-    expect(app.strings.continueWorkOS, 'Continuar com WorkOS');
+    expect(app.strings.signIn, 'Entrar');
     await app.setLocaleOverride(null);
     expect(app.localeCode, 'en');
   });
@@ -57,7 +57,6 @@ void main() {
     app.restoredExistingSession = true;
     app.defaultHouseId = 'h1';
     app.houses = [];
-    // Without membership list yet, still route to the stored default.
     expect(app.restoredHomePath(), '/house/h1');
   });
 }
