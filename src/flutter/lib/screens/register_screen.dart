@@ -54,7 +54,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() {
         _config = AuthConfig(authkit: false, password: true);
         _configLoading = false;
-        _error = 'Could not load auth settings: $error';
+        _error = error.toString();
       });
     }
   }
@@ -108,6 +108,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final app = context.watch<AppState>();
+    final s = app.strings;
     final authkit = _config?.authkit == true;
     return RoomiesPage(
       maxWidth: 480,
@@ -115,56 +117,63 @@ class _RegisterScreenState extends State<RegisterScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const RoomiesBrandMark(),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: app.toggleLanguageQuick,
+              child: Text(s.toggleLanguage),
+            ),
+          ),
+          RoomiesBrandMark(tagline: s.brandTagline),
           const SizedBox(height: 28),
           RoomiesCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const RoomiesHeading('Register', level: 2),
+                RoomiesHeading(s.register, level: 2),
                 if (_error != null) RoomiesError(_error!),
                 if (_configLoading || (authkit && _loading))
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: Text('Redirecting to AuthKit…')),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: Text(s.redirecting)),
                   )
                 else if (authkit) ...[
-                  const Text('Create your account with WorkOS AuthKit.'),
+                  Text(s.signInSubtitleAuthKit),
                   const SizedBox(height: 12),
                   RoomiesPrimaryButton(
-                    label: 'Sign up with AuthKit',
+                    label: s.continueWorkOS,
                     onPressed: _loading ? null : _startAuthKit,
                     enabled: !_loading,
                   ),
                   TextButton(
                     onPressed: () => context.go('/'),
-                    child: const Text('Already have an account? Login'),
+                    child: Text(s.haveAccountLogin),
                   ),
                 ] else ...[
                   TextField(
                     controller: _name,
-                    decoration: const InputDecoration(hintText: 'Name'),
+                    decoration: InputDecoration(hintText: s.name),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _email,
-                    decoration: const InputDecoration(hintText: 'Email'),
+                    decoration: InputDecoration(hintText: s.email),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _password,
-                    decoration: const InputDecoration(hintText: 'Password'),
+                    decoration: InputDecoration(hintText: s.password),
                     obscureText: true,
                   ),
                   const SizedBox(height: 8),
                   RoomiesPrimaryButton(
-                    label: _loading ? 'Creating account...' : 'Register',
+                    label: _loading ? s.registering : s.register,
                     onPressed: _loading ? null : _submit,
                     enabled: !_loading,
                   ),
                   TextButton(
                     onPressed: () => context.go('/'),
-                    child: const Text('Already have an account? Login'),
+                    child: Text(s.haveAccountLogin),
                   ),
                 ],
               ],
