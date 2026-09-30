@@ -427,11 +427,13 @@ class RoomiesTabPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     // explicitChildNodes keeps section headings addressable inside the panel
     // so Playwright can resolve getByRole('tabpanel').getByRole('heading').
+    // Scroll so tab body content (member cards, forms) is not clipped out of
+    // the TabBarView viewport / semantics tree.
     return Semantics(
       container: true,
       explicitChildNodes: true,
       label: name,
-      child: child,
+      child: SingleChildScrollView(child: child),
     );
   }
 }
