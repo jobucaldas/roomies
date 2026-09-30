@@ -51,10 +51,25 @@ export async function loginViaUiOrToken(
     await page.getByRole('button', { name: 'Login' }).click();
   } else {
     expect(token, 'AuthKit UI requires API token for e2e login').toBeTruthy();
-    await page.evaluate(
-      (value) => localStorage.setItem('flutter.roomies.session.token', value as string),
-      token,
-    );
+    const sessionUrl = new URL(web);
+    await page.context().addCookies([
+      {
+        name: 'roomies_session',
+        value: token as string,
+        url: sessionUrl.origin,
+        httpOnly: true,
+        sameSite: 'Lax',
+        secure: sessionUrl.protocol === 'https:',
+      },
+      {
+        name: 'roomies_session_hint',
+        value: '1',
+        url: sessionUrl.origin,
+        httpOnly: false,
+        sameSite: 'Lax',
+        secure: sessionUrl.protocol === 'https:',
+      },
+    ]);
     if (authkitFallback === 'reload') {
       await page.reload();
     } else {

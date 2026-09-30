@@ -13,8 +13,24 @@ class AppState extends ChangeNotifier {
   bool sessionReady = false;
 
   Future<void> restoreSession() async {
+    await api.clearLegacyWebSession();
     await api.loadPersistedToken();
-    if (api.hasSavedToken) {
+    if (api.hasSessionHint) {
+      try {
+        user = await api.me();
+        api.adoptCookieSession();
+      } on ApiError catch (error) {
+        if (error.status == 401) {
+          await api.logout();
+        } else {
+          api.invalidateSession();
+        }
+        user = null;
+      } catch (_) {
+        api.invalidateSession();
+        user = null;
+      }
+    } else if (api.hasSavedToken) {
       try {
         user = await api.me();
       } on ApiError catch (error) {

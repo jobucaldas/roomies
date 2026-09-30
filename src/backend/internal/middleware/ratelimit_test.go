@@ -1,35 +1,16 @@
 package middleware
 
-import (
-	"net/http"
-	"net/http/httptest"
-	"testing"
-	"time"
-)
+import "testing"
 
-func TestAuthRateLimiterBlocksAfterLimit(t *testing.T) {
-	limiter := NewAuthRateLimiter(3, time.Minute)
-	now := time.Unix(1_700_000_000, 0)
-	limiter.now = func() time.Time { return now }
-
-	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	for i := 0; i < 3; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
-		req.RemoteAddr = "203.0.113.10:1234"
-		w := httptest.NewRecorder()
-		handler.ServeHTTP(w, req)
-		if w.Code != http.StatusOK {
-			t.Fatalf("attempt %d status = %d", i+1, w.Code)
-		}
+func TestWindowLimiterBlocksAfterLimit(t *testing.T) {
+	limiter := NewWindowLimiter(0)
+	if !limiter.Allow("login|203.0.113.10", 2) || !limiter.Allow("login|203.0.113.10", 2) {
+		t.Fatal("expected first two hits to be allowed")
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
-	req.RemoteAddr = "203.0.113.10:1234"
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	if w.Code != http.StatusTooManyRequests {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	if limiter.Allow("login|203.0.113.10", 2) {
+		t.Fatal("expected third hit to be blocked")
+	}
+	if !limiter.Allow("login|203.0.113.11", 2) {
+		t.Fatal("expected a different key to have its own budget")
 	}
 }

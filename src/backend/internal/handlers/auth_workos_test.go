@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -31,55 +32,11 @@ func TestAuthConfigReportsAuthKitDisabledByDefault(t *testing.T) {
 	if body["password"] != true {
 		t.Fatalf("password = %#v", body["password"])
 	}
-	if body["access_token_ttl_s"] == nil {
-		t.Fatalf("missing access_token_ttl_s: %#v", body)
-	}
-}
-
-func TestWorkOSAuthorizeRequiresPKCE(t *testing.T) {
-	env := newTestEnv(t)
-	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, enabledWorkOS(t, "unused"))
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/workos/authorize?screen_hint=sign-in", nil)
-	w := httptest.NewRecorder()
-	handler.WorkOSAuthorize(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-}
-
-func TestWorkOSAuthorizeReturnsSignedState(t *testing.T) {
-	env := newTestEnv(t)
-	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, enabledWorkOS(t, "unused"))
-	pair, err := workosauth.GeneratePKCEPair()
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/workos/authorize?screen_hint=sign-in&code_challenge="+pair.Challenge+"&code_challenge_method=S256", nil)
-	w := httptest.NewRecorder()
-	handler.WorkOSAuthorize(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	var body map[string]string
-	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	if body["url"] == "" || body["state"] == "" {
-		t.Fatalf("body = %#v", body)
-	}
-	if err := workosauth.VerifyOAuthState(env.JWTSecret, body["state"], pair.Verifier, time.Now()); err != nil {
-		t.Fatalf("state verify: %v", err)
-	}
 }
 
 func TestWorkOSCallbackUpsertsUser(t *testing.T) {
 	env := newTestEnv(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]string
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		if body["code_verifier"] == "" {
-			t.Fatalf("missing code_verifier: %#v", body)
-		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"user": map[string]any{
 				"id":             "user_workos_1",
@@ -101,8 +58,7 @@ func TestWorkOSCallbackUpsertsUser(t *testing.T) {
 		HTTPClient:  server.Client(),
 	}
 	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, workos)
-	payload := signedCallbackPayload(t, env.JWTSecret, "abc")
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/workos/callback", bytes.NewReader(payload))
+	req := oauthCallbackRequest(t, handler, "abc")
 	w := httptest.NewRecorder()
 	handler.WorkOSCallback(w, req)
 	if w.Code != http.StatusOK {
@@ -118,22 +74,6 @@ func TestWorkOSCallbackUpsertsUser(t *testing.T) {
 	user := auth["user"].(map[string]any)
 	if user["email"] != "authkit@example.test" {
 		t.Fatalf("user = %#v", user)
-	}
-}
-
-func TestWorkOSCallbackRejectsInvalidState(t *testing.T) {
-	env := newTestEnv(t)
-	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, enabledWorkOS(t, "user_workos_1"))
-	payload, _ := json.Marshal(map[string]string{
-		"code":          "abc",
-		"state":         "not.a.valid.state",
-		"code_verifier": "verifier",
-	})
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/workos/callback", bytes.NewReader(payload))
-	w := httptest.NewRecorder()
-	handler.WorkOSCallback(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
 }
 
@@ -183,8 +123,7 @@ func TestWorkOSCallbackDoesNotLinkLocalPasswordAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, enabledWorkOS(t, "user_workos_1"))
-	payload := signedCallbackPayload(t, env.JWTSecret, "abc")
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/workos/callback", bytes.NewReader(payload))
+	req := oauthCallbackRequest(t, handler, "abc")
 	w := httptest.NewRecorder()
 	handler.WorkOSCallback(w, req)
 	if w.Code != http.StatusConflict {
@@ -199,30 +138,120 @@ func TestWorkOSCallbackDoesNotLinkLocalPasswordAccount(t *testing.T) {
 	}
 }
 
-func signedCallbackPayload(t *testing.T, secret, code string) []byte {
+func TestWorkOSCallbackRejectsUnboundState(t *testing.T) {
+	env := newTestEnv(t)
+	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, enabledWorkOS(t, "user_workos_1"))
+	req := oauthCallbackRequest(t, handler, "abc")
+	payload, _ := json.Marshal(map[string]string{"code": "abc", "state": "forged-state"})
+	forged := httptest.NewRequest(http.MethodPost, "/api/auth/workos/callback", bytes.NewReader(payload))
+	for _, cookie := range req.Cookies() {
+		forged.AddCookie(cookie)
+	}
+	w := httptest.NewRecorder()
+	handler.WorkOSCallback(w, forged)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestWebRegisterUsesHttpOnlyCookieWithoutBearer(t *testing.T) {
+	env := newTestEnv(t)
+	body := []byte(`{"name":"Ada","email":"ada-web@example.test","password":"password123"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Roomies-Client", "web")
+	w := httptest.NewRecorder()
+	env.Router.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := resp["token"]; ok {
+		t.Fatalf("web client received a bearer token: %#v", resp)
+	}
+	var session, hint *http.Cookie
+	for _, cookie := range w.Result().Cookies() {
+		switch cookie.Name {
+		case "roomies_session":
+			session = cookie
+		case "roomies_session_hint":
+			hint = cookie
+		}
+	}
+	if session == nil || !session.HttpOnly || !session.Secure {
+		t.Fatalf("session cookie = %#v", session)
+	}
+	if hint == nil || hint.HttpOnly || hint.Value != "1" {
+		t.Fatalf("hint cookie = %#v", hint)
+	}
+	me := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	me.AddCookie(session)
+	meRes := httptest.NewRecorder()
+	env.Router.ServeHTTP(meRes, me)
+	if meRes.Code != http.StatusOK {
+		t.Fatalf("cookie session status = %d body = %s", meRes.Code, meRes.Body.String())
+	}
+}
+
+func TestLoginIsRateLimited(t *testing.T) {
+	env := newTestEnv(t)
+	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, nil)
+	handler.SetRateLimit(2)
+	for attempt := 0; attempt < 2; attempt++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader([]byte(`{"email":"missing@example.test","password":"password123"}`)))
+		w := httptest.NewRecorder()
+		handler.Login(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d status = %d body = %s", attempt, w.Code, w.Body.String())
+		}
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader([]byte(`{"email":"missing@example.test","password":"password123"}`)))
+	w := httptest.NewRecorder()
+	handler.Login(w, req)
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+}
+
+func oauthCallbackRequest(t *testing.T, handler *handlers.AuthHandler, code string) *http.Request {
 	t.Helper()
-	pair, err := workosauth.GeneratePKCEPair()
+	authReq := httptest.NewRequest(http.MethodGet, "/api/auth/workos/authorize?screen_hint=sign-in", nil)
+	authRes := httptest.NewRecorder()
+	handler.WorkOSAuthorize(authRes, authReq)
+	if authRes.Code != http.StatusOK {
+		t.Fatalf("authorize status = %d body = %s", authRes.Code, authRes.Body.String())
+	}
+	var body map[string]string
+	if err := json.Unmarshal(authRes.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := url.Parse(body["url"])
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := workosauth.SignOAuthState(secret, pair.Challenge, time.Now())
-	if err != nil {
-		t.Fatal(err)
+	if parsed.Query().Get("code_challenge_method") != "S256" || parsed.Query().Get("code_challenge") == "" || parsed.Query().Get("state") == "" {
+		t.Fatalf("authorization url = %s", body["url"])
 	}
-	payload, err := json.Marshal(map[string]string{
-		"code":          code,
-		"state":         state,
-		"code_verifier": pair.Verifier,
-	})
-	if err != nil {
-		t.Fatal(err)
+	payload, _ := json.Marshal(map[string]string{"code": code, "state": parsed.Query().Get("state")})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/workos/callback", bytes.NewReader(payload))
+	for _, cookie := range authRes.Result().Cookies() {
+		req.AddCookie(cookie)
 	}
-	return payload
+	return req
 }
 
 func enabledWorkOS(t *testing.T, userID string) *workosauth.Client {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var incoming map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
+			t.Errorf("decode workos body: %v", err)
+		} else if incoming["code_verifier"] == "" {
+			t.Errorf("code_verifier was not sent")
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"user": map[string]any{
 				"id":             userID,

@@ -4,8 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/models.dart';
+import '../services/session_hint_stub.dart'
+    if (dart.library.js_interop) '../services/session_hint_web.dart'
+    as session_hint;
 import '../services/session_storage.dart';
 import 'api_error.dart';
+import 'http_client_factory_stub.dart'
+    if (dart.library.js_interop) 'http_client_factory_web.dart';
 
 String resolveApiBaseUrl({
   String? configured,
@@ -31,7 +36,7 @@ class ApiClient {
     String? baseUrl,
     String? webOrigin,
   })  : _storage = storage ?? SessionStorage(),
-        _http = httpClient ?? http.Client(),
+        _http = httpClient ?? createPlatformClient(),
         baseUrl = resolveApiBaseUrl(
           configured: baseUrl ??
               const String.fromEnvironment('ROOMIES_API_URL', defaultValue: ''),
@@ -43,21 +48,48 @@ class ApiClient {
   final String baseUrl;
 
   String? _token;
+  bool _cookieSession = false;
   bool _valid = false;
   int _generation = 0;
 
   bool get hasSavedToken => _token != null && _token!.isNotEmpty;
 
-  bool get isAuthenticated => _token != null && _valid;
+  bool get hasSessionHint => session_hint.hasSessionHint();
+
+  bool get isAuthenticated => _valid && (_cookieSession || hasSavedToken);
+
+  /// Web sessions live in an HttpOnly cookie. Drop any JWT left in
+  /// localStorage by older builds so page script cannot read it.
+  Future<void> clearLegacyWebSession() async {
+    if (!kIsWeb) return;
+    await _storage.clearToken();
+  }
 
   Future<void> loadPersistedToken() async {
+    if (kIsWeb) {
+      _token = null;
+      _valid = false;
+      return;
+    }
     _token = await _storage.loadToken();
     _valid = _token != null;
   }
 
+  void adoptCookieSession() {
+    _generation++;
+    _token = null;
+    _cookieSession = true;
+    _valid = true;
+  }
+
   Future<void> _setToken(String token) async {
+    if (kIsWeb || token.isEmpty) {
+      adoptCookieSession();
+      return;
+    }
     await _storage.saveToken(token);
     _generation++;
+    _cookieSession = false;
     _token = token;
     _valid = true;
   }
@@ -67,8 +99,19 @@ class ApiClient {
   }
 
   Future<void> logout() async {
+    final gen = _generation;
+    try {
+      await _empty(
+        () =>
+            _http.post(Uri.parse('$baseUrl/auth/logout'), headers: _headers()),
+        generation: gen,
+      );
+    } catch (_) {
+      // Clearing the local session still logs the tab out if the network call fails.
+    }
     _generation++;
     _token = null;
+    _cookieSession = false;
     _valid = false;
     await _storage.clearToken();
   }
@@ -78,13 +121,17 @@ class ApiClient {
     if (generation != _generation) return;
     _generation++;
     _token = null;
+    _cookieSession = false;
     _valid = false;
     _storage.clearToken();
   }
 
   Map<String, String> _headers() {
     final headers = <String, String>{'Content-Type': 'application/json'};
-    if (_valid && _token != null) {
+    if (kIsWeb) {
+      headers['X-Roomies-Client'] = 'web';
+    }
+    if (_valid && !_cookieSession && _token != null) {
       headers['Authorization'] = 'Bearer $_token';
     }
     return headers;
@@ -144,20 +191,12 @@ class ApiClient {
     );
   }
 
-  Future<({String url, String state})> workosAuthorize({
-    String screenHint = 'sign-in',
-    required String codeChallenge,
-    String codeChallengeMethod = 'S256',
-  }) async {
+  Future<String> workosAuthorizeUrl({String screenHint = 'sign-in'}) async {
     final gen = _generation;
     final response = await _http
         .get(
           Uri.parse('$baseUrl/auth/workos/authorize').replace(
-            queryParameters: {
-              'screen_hint': screenHint,
-              'code_challenge': codeChallenge,
-              'code_challenge_method': codeChallengeMethod,
-            },
+            queryParameters: {'screen_hint': screenHint},
           ),
           headers: _headers(),
         )
@@ -165,14 +204,10 @@ class ApiClient {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final url = body['url'] as String?;
-      final state = body['state'] as String?;
-      if (url == null || url.isEmpty || state == null || state.isEmpty) {
-        throw ApiError.http(
-          response.statusCode,
-          'missing authorization url or state',
-        );
+      if (url == null || url.isEmpty) {
+        throw ApiError.http(response.statusCode, 'missing authorization url');
       }
-      return (url: url, state: state);
+      return url;
     }
     if (response.statusCode == 401) {
       _handleUnauthorized(gen);
@@ -180,21 +215,13 @@ class ApiClient {
     throw ApiError.http(response.statusCode, response.body);
   }
 
-  Future<AuthResponse> completeWorkOSCallback({
-    required String code,
-    required String state,
-    required String codeVerifier,
-  }) async {
+  Future<AuthResponse> completeWorkOSCallback(String code, String state) async {
     final gen = _generation;
     final result = await _send(
       () => _http.post(
         Uri.parse('$baseUrl/auth/workos/callback'),
         headers: _headers(),
-        body: jsonEncode({
-          'code': code,
-          'state': state,
-          'code_verifier': codeVerifier,
-        }),
+        body: jsonEncode({'code': code, 'state': state}),
       ),
       AuthResponse.fromJson,
       generation: gen,
@@ -203,7 +230,8 @@ class ApiClient {
     return result;
   }
 
-  Future<AuthResponse> register(String name, String email, String password) async {
+  Future<AuthResponse> register(
+      String name, String email, String password) async {
     final gen = _generation;
     final result = await _send(
       () => _http.post(
@@ -253,7 +281,9 @@ class ApiClient {
     }
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final list = jsonDecode(response.body) as List<dynamic>;
-      return list.map((e) => House.fromJson(e as Map<String, dynamic>)).toList();
+      return list
+          .map((e) => House.fromJson(e as Map<String, dynamic>))
+          .toList();
     }
     throw ApiError.http(response.statusCode, response.body);
   }
@@ -366,8 +396,7 @@ class ApiClient {
   Future<List<HouseInvitation>> listInvitations(String houseId) async {
     final gen = _generation;
     final response = await _http
-        .get(Uri.parse('$baseUrl/houses/$houseId/invites'),
-            headers: _headers())
+        .get(Uri.parse('$baseUrl/houses/$houseId/invites'), headers: _headers())
         .catchError((Object e) => throw ApiError.transport(e.toString()));
     if (response.statusCode == 401) {
       _handleUnauthorized(gen);
@@ -419,7 +448,9 @@ class ApiClient {
     }
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final list = jsonDecode(response.body) as List<dynamic>;
-      return list.map((e) => Expense.fromJson(e as Map<String, dynamic>)).toList();
+      return list
+          .map((e) => Expense.fromJson(e as Map<String, dynamic>))
+          .toList();
     }
     throw ApiError.http(response.statusCode, response.body);
   }
@@ -593,7 +624,8 @@ class ApiClient {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final list = jsonDecode(response.body) as List<dynamic>;
       return list
-          .map((e) => NotificationSubscription.fromJson(e as Map<String, dynamic>))
+          .map((e) =>
+              NotificationSubscription.fromJson(e as Map<String, dynamic>))
           .toList();
     }
     throw ApiError.http(response.statusCode, response.body);
@@ -703,7 +735,8 @@ class ApiClient {
     throw ApiError.http(response.statusCode, response.body);
   }
 
-  Future<GroceryItem> createGrocery(String houseId, Map<String, dynamic> body) async {
+  Future<GroceryItem> createGrocery(
+      String houseId, Map<String, dynamic> body) async {
     final gen = _generation;
     return _send(
       () => _http.post(
@@ -758,8 +791,7 @@ class ApiClient {
   Future<List<Chore>> getChores(String houseId) async {
     final gen = _generation;
     final response = await _http
-        .get(Uri.parse('$baseUrl/houses/$houseId/chores'),
-            headers: _headers())
+        .get(Uri.parse('$baseUrl/houses/$houseId/chores'), headers: _headers())
         .catchError((Object e) => throw ApiError.transport(e.toString()));
     if (response.statusCode == 401) {
       _handleUnauthorized(gen);
@@ -767,7 +799,9 @@ class ApiClient {
     }
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final list = jsonDecode(response.body) as List<dynamic>;
-      return list.map((e) => Chore.fromJson(e as Map<String, dynamic>)).toList();
+      return list
+          .map((e) => Chore.fromJson(e as Map<String, dynamic>))
+          .toList();
     }
     throw ApiError.http(response.statusCode, response.body);
   }
@@ -870,7 +904,8 @@ class ApiClient {
     );
   }
 
-  Future<void> deleteCalendarEvent(String houseId, String id, int version) async {
+  Future<void> deleteCalendarEvent(
+      String houseId, String id, int version) async {
     final gen = _generation;
     await _empty(
       () => _http.delete(
@@ -907,8 +942,7 @@ class ApiClient {
     );
   }
 
-  Future<ChatMessage> updateChat(
-      String houseId, String id, String body) async {
+  Future<ChatMessage> updateChat(String houseId, String id, String body) async {
     final gen = _generation;
     return _send(
       () => _http.put(

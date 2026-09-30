@@ -14,7 +14,7 @@ func TestAuthorizationURL(t *testing.T) {
 		ClientID:    "client_123",
 		RedirectURI: "http://localhost/callback",
 	}
-	url, err := client.AuthorizationURL("sign-up", "state-1", "challenge-abc", "S256")
+	url, err := client.AuthorizationURL("sign-up", "state-1", "challenge-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +24,7 @@ func TestAuthorizationURL(t *testing.T) {
 		"provider=authkit",
 		"screen_hint=sign-up",
 		"state=state-1",
-		"code_challenge=challenge-abc",
+		"code_challenge=challenge-1",
 		"code_challenge_method=S256",
 		"redirect_uri=http%3A%2F%2Flocalhost%2Fcallback",
 	) {
@@ -95,7 +95,7 @@ func TestAuthenticateWithCodeRejectsUnverifiedEmail(t *testing.T) {
 		APIBase:     server.URL,
 		HTTPClient:  server.Client(),
 	}
-	_, err := client.AuthenticateWithCode(context.Background(), "abc", "verifier", "", "")
+	_, err := client.AuthenticateWithCode(context.Background(), "abc", "verifier-1", "", "")
 	if err == nil {
 		t.Fatal("expected unverified email to be rejected")
 	}

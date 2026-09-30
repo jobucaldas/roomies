@@ -44,7 +44,8 @@ func (c *Client) apiBase() string {
 }
 
 // AuthorizationURL builds the AuthKit hosted sign-in/up URL.
-func (c *Client) AuthorizationURL(screenHint, state, codeChallenge, codeChallengeMethod string) (string, error) {
+// codeChallenge is the S256 PKCE challenge; state is the unguessable CSRF token.
+func (c *Client) AuthorizationURL(screenHint, state, codeChallenge string) (string, error) {
 	if !c.Enabled() {
 		return "", fmt.Errorf("workos authkit is not configured")
 	}
@@ -61,10 +62,7 @@ func (c *Client) AuthorizationURL(screenHint, state, codeChallenge, codeChalleng
 	}
 	if codeChallenge != "" {
 		values.Set("code_challenge", codeChallenge)
-		if codeChallengeMethod == "" {
-			codeChallengeMethod = "S256"
-		}
-		values.Set("code_challenge_method", codeChallengeMethod)
+		values.Set("code_challenge_method", "S256")
 	}
 	return c.apiBase() + "/user_management/authorize?" + values.Encode(), nil
 }

@@ -50,28 +50,34 @@ func NewHandler(deps Dependencies) http.Handler {
 		ClientID:    deps.Config.WorkOSClientID,
 		RedirectURI: deps.Config.WorkOSRedirect(),
 	}
-	authHandler := handlers.NewAuthHandlerWithTTL(
-		deps.UserRepo,
-		deps.Config.JWTSecret,
-		workosClient,
-		time.Duration(deps.Config.JWTAccessTTLHours)*time.Hour,
-	)
+	authHandler := handlers.NewAuthHandler(deps.UserRepo, deps.Config.JWTSecret, workosClient)
+	authHandler.SetPublicBaseURL(deps.Config.PublicBaseURL)
+	authHandler.SetSessionTTL(time.Duration(deps.Config.JWTAccessTTLHours) * time.Hour)
 	houseHandler := handlers.NewHouseHandler(deps.HouseRepo, deps.UserRepo, deps.ReliabilityRepo)
 	expenseHandler := handlers.NewExpenseHandler(deps.ExpenseRepo, deps.HouseRepo)
 	noteHandler := handlers.NewNoteHandler(deps.NoteRepo, deps.HouseRepo)
 	balanceHandler := handlers.NewBalanceHandler(deps.ExpenseRepo, deps.HouseRepo)
-	invitationHandler := handlers.NewInvitationHandlerWithUsers(deps.HouseRepo, deps.UserRepo, deps.ReliabilityRepo, clk, deps.Config.PublicBaseURL, time.Duration(deps.Config.InvitationTTL)*time.Hour)
+	invitationHandler := handlers.NewInvitationHandler(deps.HouseRepo, deps.UserRepo, deps.ReliabilityRepo, clk, deps.Config.PublicBaseURL, time.Duration(deps.Config.InvitationTTL)*time.Hour)
 	eventsHandler := handlers.NewHouseEventsHandler(deps.HouseRepo, deps.ReliabilityRepo, 250*time.Millisecond)
 	notificationHandler := handlers.NewNotificationHandler(deps.NotificationRepo, deps.HouseRepo)
 	householdHandler := handlers.NewHouseholdHandler(deps.HouseholdRepo, deps.HouseRepo)
 
 	r := chi.NewRouter()
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: deps.Config.CORSAllowedOrigins,
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{"Authorization", "Content-Type", "Idempotency-Key", "Last-Event-ID"},
-		MaxAge:         300,
+		AllowedOrigins:   deps.Config.CORSAllowedOrigins,
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Authorization", "Content-Type", "Idempotency-Key", "Last-Event-ID", "X-Roomies-Client"},
+		AllowCredentials: true,
+		MaxAge:           300,
 	}))
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("Referrer-Policy", "no-referrer")
+			w.Header().Set("X-Frame-Options", "DENY")
+			next.ServeHTTP(w, r)
+		})
+	})
 	r.Use(chimiddleware.RequestID)
 	r.Use(middleware.StructuredRequestLogger(logger))
 	r.Use(chimiddleware.Recoverer)
@@ -100,11 +106,11 @@ func NewHandler(deps Dependencies) http.Handler {
 
 	r.Route("/api/auth", func(r chi.Router) {
 		r.Get("/config", authHandler.Config)
-		authLimiter := middleware.NewAuthRateLimiter(30, 15*time.Minute)
-		r.With(authLimiter.Middleware).Get("/workos/authorize", authHandler.WorkOSAuthorize)
-		r.With(authLimiter.Middleware).Post("/workos/callback", authHandler.WorkOSCallback)
-		r.With(authLimiter.Middleware).Post("/register", authHandler.Register)
-		r.With(authLimiter.Middleware).Post("/login", authHandler.Login)
+		r.Get("/workos/authorize", authHandler.WorkOSAuthorize)
+		r.Post("/workos/callback", authHandler.WorkOSCallback)
+		r.Post("/register", authHandler.Register)
+		r.Post("/login", authHandler.Login)
+		r.Post("/logout", authHandler.Logout)
 	})
 
 	r.Group(func(r chi.Router) {

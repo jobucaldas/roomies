@@ -15,6 +15,14 @@ type contextKey string
 const userIDKey contextKey = "user_id"
 const userEmailKey contextKey = "user_email"
 
+const (
+	// SessionCookieName is the HttpOnly session JWT. JavaScript cannot read it.
+	SessionCookieName = "roomies_session"
+	// SessionHintCookieName is a non-secret flag so the web app can decide
+	// whether to call /api/auth/me without probing on every anonymous visit.
+	SessionHintCookieName = "roomies_session_hint"
+)
+
 func GetUserID(ctx context.Context) string {
 	v, _ := ctx.Value(userIDKey).(string)
 	return v
@@ -25,27 +33,41 @@ func GetUserEmail(ctx context.Context) string {
 	return v
 }
 
+// sessionToken prefers an Authorization bearer so API clients and tests keep
+// working, and otherwise reads the HttpOnly session cookie used by Flutter web.
+func sessionToken(r *http.Request) (string, bool) {
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	if auth != "" {
+		parts := strings.SplitN(auth, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
+			return "", false
+		}
+		raw := strings.TrimSpace(parts[1])
+		return raw, raw != ""
+	}
+	cookie, err := r.Cookie(SessionCookieName)
+	if err != nil {
+		return "", false
+	}
+	raw := strings.TrimSpace(cookie.Value)
+	return raw, raw != ""
+}
+
 func JWTAuth(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			auth := r.Header.Get("Authorization")
-			if auth == "" {
+			raw, ok := sessionToken(r)
+			if !ok {
 				writeError(w, http.StatusUnauthorized, "missing authorization header")
 				return
 			}
 
-			parts := strings.SplitN(auth, " ", 2)
-			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-				writeError(w, http.StatusUnauthorized, "invalid authorization format")
-				return
-			}
-
-			token, err := jwt.Parse(parts[1], func(t *jwt.Token) (interface{}, error) {
-				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			token, err := jwt.Parse(raw, func(t *jwt.Token) (interface{}, error) {
+				if t.Method != jwt.SigningMethodHS256 {
 					return nil, jwt.ErrSignatureInvalid
 				}
 				return []byte(secret), nil
-			})
+			}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 
 			if err != nil || !token.Valid {
 				writeError(w, http.StatusUnauthorized, "invalid or expired token")

@@ -263,6 +263,27 @@ func TestHouseEventsSSEClosesAfterMemberRemoval(t *testing.T) {
 	}
 }
 
+func TestAcceptInvitationUsesCurrentDatabaseEmail(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.Cleanup()
+	adminToken := registerUser(t, env.Router, "Admin", "invite-admin@example.test", "password123")
+	inviteeToken := registerUser(t, env.Router, "Invitee", "invitee@example.test", "password123")
+	houseID := createHouse(t, env.Router, adminToken, "Invite House")
+	stale := createInvitation(t, env.Router, adminToken, houseID, models.CreateInvitationRequest{Email: "invitee@example.test", Role: "member"}, "invite-stale")
+	if _, err := env.DB.Exec(`UPDATE users SET email = $1 WHERE email = $2`, "renamed@example.test", "invitee@example.test"); err != nil {
+		t.Fatal(err)
+	}
+	rejected := acceptInvitation(t, env.Router, inviteeToken, manualInvitationToken(t, stale.ManualAcceptanceURL))
+	if rejected.Code != http.StatusNotFound {
+		t.Fatalf("stale jwt email accepted invite: %d %s", rejected.Code, rejected.Body.String())
+	}
+	fresh := createInvitation(t, env.Router, adminToken, houseID, models.CreateInvitationRequest{Email: "renamed@example.test", Role: "member"}, "invite-fresh")
+	accepted := acceptInvitation(t, env.Router, inviteeToken, manualInvitationToken(t, fresh.ManualAcceptanceURL))
+	if accepted.Code != http.StatusOK {
+		t.Fatalf("current email rejected: %d %s", accepted.Code, accepted.Body.String())
+	}
+}
+
 func createInvitation(t *testing.T, router http.Handler, token, houseID string, body models.CreateInvitationRequest, idempotencyKey string) models.HouseInvitation {
 	t.Helper()
 	res := httptest.NewRecorder()

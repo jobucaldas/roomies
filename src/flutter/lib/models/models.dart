@@ -228,7 +228,8 @@ class BalanceResponse {
   final List<BalanceEntry> balances;
   final List<BalanceSettlement> settlements;
 
-  factory BalanceResponse.fromJson(Map<String, dynamic> json) => BalanceResponse(
+  factory BalanceResponse.fromJson(Map<String, dynamic> json) =>
+      BalanceResponse(
         balances: (json['balances'] as List<dynamic>? ?? [])
             .map((e) => BalanceEntry.fromJson(e as Map<String, dynamic>))
             .toList(),
@@ -245,7 +246,7 @@ class AuthResponse {
   final User user;
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) => AuthResponse(
-        token: json['token'] as String,
+        token: json['token'] as String? ?? '',
         user: User.fromJson(json['user'] as Map<String, dynamic>),
       );
 }
@@ -255,19 +256,16 @@ class AuthConfig {
     required this.authkit,
     required this.password,
     this.redirectUri = '',
-    this.accessTokenTtlSeconds = 28800,
   });
 
   final bool authkit;
   final bool password;
   final String redirectUri;
-  final int accessTokenTtlSeconds;
 
   factory AuthConfig.fromJson(Map<String, dynamic> json) => AuthConfig(
         authkit: json['authkit'] as bool? ?? false,
         password: json['password'] as bool? ?? true,
         redirectUri: json['redirect_uri'] as String? ?? '',
-        accessTokenTtlSeconds: json['access_token_ttl_s'] as int? ?? 28800,
       );
 }
 

@@ -1,9 +1,15 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"errors"
+	"net"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"strings"
 	"time"
 
@@ -15,24 +21,60 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const defaultAccessTokenTTL = 8 * time.Hour
+const (
+	defaultSessionTTL    = 8 * time.Hour
+	oauthTransactionTTL  = 10 * time.Minute
+	oauthStateCookie     = "roomies_oauth_state"
+	oauthVerifierCookie  = "roomies_oauth_verifier"
+	defaultLoginLimit    = 40
+	defaultRegisterLimit = 90
+	defaultCallbackLimit = 15
+)
 
 type AuthHandler struct {
-	userRepo       *repository.UserRepository
-	jwtSecret      string
-	accessTokenTTL time.Duration
-	workos         *workosauth.Client
+	userRepo      *repository.UserRepository
+	jwtSecret     string
+	workos        *workosauth.Client
+	publicBaseURL string
+	limiter       *middleware.WindowLimiter
+	loginLimit    int
+	registerLimit int
+	callbackLimit int
+	sessionTTL    time.Duration
 }
 
 func NewAuthHandler(userRepo *repository.UserRepository, jwtSecret string, workos *workosauth.Client) *AuthHandler {
-	return NewAuthHandlerWithTTL(userRepo, jwtSecret, workos, defaultAccessTokenTTL)
+	return &AuthHandler{
+		userRepo:      userRepo,
+		jwtSecret:     jwtSecret,
+		workos:        workos,
+		limiter:       middleware.NewWindowLimiter(time.Minute),
+		loginLimit:    defaultLoginLimit,
+		registerLimit: defaultRegisterLimit,
+		callbackLimit: defaultCallbackLimit,
+		sessionTTL:    defaultSessionTTL,
+	}
 }
 
-func NewAuthHandlerWithTTL(userRepo *repository.UserRepository, jwtSecret string, workos *workosauth.Client, accessTokenTTL time.Duration) *AuthHandler {
-	if accessTokenTTL <= 0 {
-		accessTokenTTL = defaultAccessTokenTTL
+// SetSessionTTL sets the access-token and session-cookie lifetime.
+func (h *AuthHandler) SetSessionTTL(ttl time.Duration) {
+	if ttl > 0 {
+		h.sessionTTL = ttl
 	}
-	return &AuthHandler{userRepo: userRepo, jwtSecret: jwtSecret, accessTokenTTL: accessTokenTTL, workos: workos}
+}
+
+// SetPublicBaseURL controls the Secure flag on session cookies. HTTPS origins
+// always mark cookies Secure, including when TLS terminates at the proxy.
+func (h *AuthHandler) SetPublicBaseURL(base string) {
+	h.publicBaseURL = strings.TrimRight(strings.TrimSpace(base), "/")
+}
+
+// SetRateLimit overrides the per-IP budget for login, register, and the AuthKit
+// code exchange. Tests use a tiny limit; production keeps the defaults.
+func (h *AuthHandler) SetRateLimit(limit int) {
+	h.loginLimit = limit
+	h.registerLimit = limit
+	h.callbackLimit = limit
 }
 
 func (h *AuthHandler) Config(w http.ResponseWriter, r *http.Request) {
@@ -44,10 +86,9 @@ func (h *AuthHandler) Config(w http.ResponseWriter, r *http.Request) {
 	// Password endpoints stay available only when AuthKit is unset (CI clears WORKOS_*).
 	// Enabling AuthKit rejects them so that path cannot bypass hosted sign-in.
 	writeJSON(w, http.StatusOK, map[string]any{
-		"authkit":           enabled,
-		"password":          !enabled,
-		"redirect_uri":      redirectURI,
-		"access_token_ttl_s": int(h.accessTokenTTL.Seconds()),
+		"authkit":      enabled,
+		"password":     !enabled,
+		"redirect_uri": redirectURI,
 	})
 }
 
@@ -75,41 +116,33 @@ func (h *AuthHandler) WorkOSAuthorize(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "screen_hint must be sign-in or sign-up"})
 		return
 	}
-	codeChallenge := strings.TrimSpace(r.URL.Query().Get("code_challenge"))
-	codeChallengeMethod := strings.TrimSpace(r.URL.Query().Get("code_challenge_method"))
-	if codeChallenge == "" {
-		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "code_challenge is required"})
-		return
-	}
-	if codeChallengeMethod == "" {
-		codeChallengeMethod = "S256"
-	}
-	if codeChallengeMethod != "S256" {
-		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "code_challenge_method must be S256"})
-		return
-	}
-	state, err := workosauth.SignOAuthState(h.jwtSecret, codeChallenge, time.Now())
+	state, verifier, challenge, err := newOAuthTransaction()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to create oauth state"})
+		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to start sign-in"})
 		return
 	}
-	authorizationURL, err := h.workos.AuthorizationURL(screenHint, state, codeChallenge, codeChallengeMethod)
+	authorizationURL, err := h.workos.AuthorizationURL(screenHint, state, challenge)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: err.Error()})
+		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to start sign-in"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"url": authorizationURL, "state": state})
+	secure := h.secureCookie(r)
+	setCookie(w, oauthStateCookie, state, int(oauthTransactionTTL.Seconds()), true, secure)
+	setCookie(w, oauthVerifierCookie, verifier, int(oauthTransactionTTL.Seconds()), true, secure)
+	writeJSON(w, http.StatusOK, map[string]string{"url": authorizationURL})
 }
 
 type workOSCallbackRequest struct {
-	Code         string `json:"code"`
-	State        string `json:"state"`
-	CodeVerifier string `json:"code_verifier"`
+	Code  string `json:"code"`
+	State string `json:"state"`
 }
 
 func (h *AuthHandler) WorkOSCallback(w http.ResponseWriter, r *http.Request) {
 	if h.workos == nil || !h.workos.Enabled() {
 		writeJSON(w, http.StatusServiceUnavailable, models.ErrorResponse{Error: "WorkOS AuthKit is not configured"})
+		return
+	}
+	if !h.allow(w, r, "workos_callback", h.callbackLimit) {
 		return
 	}
 	var req workOSCallbackRequest
@@ -119,16 +152,17 @@ func (h *AuthHandler) WorkOSCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Code = strings.TrimSpace(req.Code)
 	req.State = strings.TrimSpace(req.State)
-	req.CodeVerifier = strings.TrimSpace(req.CodeVerifier)
-	if req.Code == "" || req.State == "" || req.CodeVerifier == "" {
-		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "code, state, and code_verifier are required"})
+	stateCookie, stateErr := r.Cookie(oauthStateCookie)
+	verifierCookie, verifierErr := r.Cookie(oauthVerifierCookie)
+	secure := h.secureCookie(r)
+	clearCookie(w, oauthStateCookie, true, secure)
+	clearCookie(w, oauthVerifierCookie, true, secure)
+	if req.Code == "" || req.State == "" || stateErr != nil || verifierErr != nil ||
+		!fixedEqual(req.State, stateCookie.Value) || strings.TrimSpace(verifierCookie.Value) == "" {
+		writeJSON(w, http.StatusUnauthorized, models.ErrorResponse{Error: "authentication failed"})
 		return
 	}
-	if err := workosauth.VerifyOAuthState(h.jwtSecret, req.State, req.CodeVerifier, time.Now()); err != nil {
-		writeJSON(w, http.StatusUnauthorized, models.ErrorResponse{Error: "invalid oauth state"})
-		return
-	}
-	result, err := h.workos.AuthenticateWithCode(r.Context(), req.Code, req.CodeVerifier, clientIP(r), r.UserAgent())
+	result, err := h.workos.AuthenticateWithCode(r.Context(), req.Code, verifierCookie.Value, clientIP(r), r.UserAgent())
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, models.ErrorResponse{Error: "authentication failed"})
 		return
@@ -144,15 +178,13 @@ func (h *AuthHandler) WorkOSCallback(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to persist authenticated user"})
 		return
 	}
-	token, err := h.generateToken(user)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to generate token"})
-		return
-	}
-	writeJSON(w, http.StatusOK, models.AuthResponse{Token: token, User: *user})
+	h.finishAuth(w, r, user, http.StatusOK)
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	if !h.allow(w, r, "register", h.registerLimit) {
+		return
+	}
 	if h.rejectPasswordAuth(w) {
 		return
 	}
@@ -208,16 +240,13 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.generateToken(user)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to generate token"})
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, models.AuthResponse{Token: token, User: *user})
+	h.finishAuth(w, r, user, http.StatusCreated)
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	if !h.allow(w, r, "login", h.loginLimit) {
+		return
+	}
 	if h.rejectPasswordAuth(w) {
 		return
 	}
@@ -244,13 +273,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.generateToken(user)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to generate token"})
-		return
-	}
+	h.finishAuth(w, r, user, http.StatusOK)
+}
 
-	writeJSON(w, http.StatusOK, models.AuthResponse{Token: token, User: *user})
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	secure := h.secureCookie(r)
+	clearCookie(w, middleware.SessionCookieName, true, secure)
+	clearCookie(w, middleware.SessionHintCookieName, false, secure)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
@@ -264,24 +294,123 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) generateToken(user *models.User) (string, error) {
-	now := time.Now()
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
 		"email":   user.Email,
-		"exp":     now.Add(h.accessTokenTTL).Unix(),
-		"iat":     now.Unix(),
+		"exp":     time.Now().Add(h.sessionTTL).Unix(),
+		"iat":     time.Now().Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(h.jwtSecret))
+}
+
+func (h *AuthHandler) finishAuth(w http.ResponseWriter, r *http.Request, user *models.User, status int) {
+	token, err := h.generateToken(user)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to generate token"})
+		return
+	}
+	secure := h.secureCookie(r)
+	maxAge := int(h.sessionTTL.Seconds())
+	setCookie(w, middleware.SessionCookieName, token, maxAge, true, secure)
+	setCookie(w, middleware.SessionHintCookieName, "1", maxAge, false, secure)
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Roomies-Client")), "web") {
+		writeJSON(w, status, struct {
+			User models.User `json:"user"`
+		}{User: *user})
+		return
+	}
+	writeJSON(w, status, models.AuthResponse{Token: token, User: *user})
+}
+
+func (h *AuthHandler) allow(w http.ResponseWriter, r *http.Request, route string, limit int) bool {
+	if h.limiter == nil || h.limiter.Allow(route+"|"+rateLimitIP(r), limit) {
+		return true
+	}
+	w.Header().Set("Retry-After", "60")
+	writeJSON(w, http.StatusTooManyRequests, models.ErrorResponse{Error: "too many requests"})
+	return false
+}
+
+func (h *AuthHandler) secureCookie(r *http.Request) bool {
+	if r != nil && r.TLS != nil {
+		return true
+	}
+	if r != nil && strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https") {
+		return true
+	}
+	parsed, err := url.Parse(h.publicBaseURL)
+	return err == nil && parsed.Scheme == "https"
+}
+
+func newOAuthTransaction() (state, verifier, challenge string, err error) {
+	state, err = randomURLToken()
+	if err != nil {
+		return "", "", "", err
+	}
+	verifier, err = randomURLToken()
+	if err != nil {
+		return "", "", "", err
+	}
+	sum := sha256.Sum256([]byte(verifier))
+	challenge = base64.RawURLEncoding.EncodeToString(sum[:])
+	return state, verifier, challenge, nil
+}
+
+func randomURLToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func fixedEqual(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+func setCookie(w http.ResponseWriter, name, value string, maxAge int, httpOnly, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     "/",
+		MaxAge:   maxAge,
+		HttpOnly: httpOnly,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func clearCookie(w http.ResponseWriter, name string, httpOnly, secure bool) {
+	setCookie(w, name, "", -1, httpOnly, secure)
 }
 
 func clientIP(r *http.Request) string {
 	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); forwarded != "" {
 		return forwarded
 	}
-	host := r.RemoteAddr
-	if i := strings.LastIndex(host, ":"); i >= 0 {
-		return host[:i]
+	return remoteIP(r)
+}
+
+// rateLimitIP uses the last X-Forwarded-For hop. Caddy replaces that header
+// with the connecting client, so a browser cannot pick its own bucket.
+func rateLimitIP(r *http.Request) string {
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		parts := strings.Split(forwarded, ",")
+		if ip := strings.TrimSpace(parts[len(parts)-1]); ip != "" {
+			return ip
+		}
+	}
+	return remoteIP(r)
+}
+
+func remoteIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || host == "" {
+		return r.RemoteAddr
 	}
 	return host
 }

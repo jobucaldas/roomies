@@ -26,11 +26,7 @@ type InvitationHandler struct {
 	invitationTTL   time.Duration
 }
 
-func NewInvitationHandler(houseRepo *repository.HouseRepository, reliabilityRepo *repository.ReliabilityRepository, clk roomiesclock.Clock, publicBaseURL string, invitationTTL time.Duration) *InvitationHandler {
-	return NewInvitationHandlerWithUsers(houseRepo, nil, reliabilityRepo, clk, publicBaseURL, invitationTTL)
-}
-
-func NewInvitationHandlerWithUsers(houseRepo *repository.HouseRepository, userRepo *repository.UserRepository, reliabilityRepo *repository.ReliabilityRepository, clk roomiesclock.Clock, publicBaseURL string, invitationTTL time.Duration) *InvitationHandler {
+func NewInvitationHandler(houseRepo *repository.HouseRepository, userRepo *repository.UserRepository, reliabilityRepo *repository.ReliabilityRepository, clk roomiesclock.Clock, publicBaseURL string, invitationTTL time.Duration) *InvitationHandler {
 	if clk == nil {
 		clk = roomiesclock.RealClock{}
 	}
@@ -167,20 +163,14 @@ func (h *InvitationHandler) Accept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := middleware.GetUserID(r.Context())
-	// Prefer the persisted account email over the JWT email claim so acceptance
-	// cannot be steered by a stale or attacker-controlled claim.
-	actorEmail := ""
-	if h.userRepo != nil {
-		user, err := h.userRepo.GetByID(r.Context(), userID)
-		if err != nil {
-			writeJSON(w, http.StatusUnauthorized, models.ErrorResponse{Error: "authenticated user not found"})
-			return
-		}
-		actorEmail = user.Email
-	} else {
-		actorEmail = middleware.GetUserEmail(r.Context())
+	user, err := h.userRepo.GetByID(r.Context(), userID)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, models.ErrorResponse{Error: "user not found"})
+		return
 	}
-	invite, err := h.reliabilityRepo.AcceptInvitation(r.Context(), req.Token, userID, actorEmail)
+	// Invite binding uses the current users.email row, not the email claim
+	// baked into the session token.
+	invite, err := h.reliabilityRepo.AcceptInvitation(r.Context(), req.Token, userID, user.Email)
 	if err == repository.ErrInvitationUnavailable {
 		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "invitation unavailable"})
 		return
