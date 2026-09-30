@@ -1,4 +1,15 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
+
+/**
+ * Playwright's fill() updates the DOM semantics node, but Flutter web
+ * TextEditingController (especially obscureText) can lag until the field blurs.
+ * Tab commits the value before Login/Register submit.
+ */
+async function fillFlutterTextbox(locator: Locator, value: string) {
+  await locator.click();
+  await locator.fill(value);
+  await locator.press('Tab');
+}
 
 /** Wait until Flutter web exposes password login or AuthKit CTA. */
 export async function waitForLoginReady(page: Page) {
@@ -45,8 +56,11 @@ export async function loginViaUiOrToken(
   }
   const { emailField } = await waitForLoginReady(page);
   if (await emailField.isVisible()) {
-    await emailField.fill(email);
-    await page.getByRole('textbox', { name: 'Password', disabled: false }).fill(password);
+    await fillFlutterTextbox(emailField, email);
+    await fillFlutterTextbox(
+      page.getByRole('textbox', { name: 'Password', disabled: false }),
+      password,
+    );
     await page.getByRole('button', { name: 'Login' }).click();
   } else {
     expect(token, 'AuthKit UI requires API token for e2e login').toBeTruthy();
