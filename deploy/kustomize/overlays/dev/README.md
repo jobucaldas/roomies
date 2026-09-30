@@ -20,5 +20,6 @@ CI/dev target for the private home-lab cluster. Do **not** apply
 kubectl kustomize deploy/kustomize/overlays/dev
 ```
 
-CI pins image tags to `sha-<git-sha>` before apply. See
-`.github/workflows/deploy-dev.yml`.
+CI pins image tags to `sha-<git-sha>` before apply. Deploy is
+**manual only** (`workflow_dispatch` on Deploy Dev) until cluster
+bootstrap above is confirmed — see `.github/workflows/deploy-dev.yml`.

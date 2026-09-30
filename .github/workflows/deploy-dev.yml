@@ -11,10 +11,11 @@ name: Deploy Dev
 #                         https://kube.tailbe71e1.ts.net:6443
 #                         (NS-scoped SA preferred; not in sibling Tailscale workflows)
 
+# Manual only: secrets are present, but cluster bootstrap (roomies-secrets,
+# Postgres, ghcr pull secret, tunnel) is still out of band — auto-deploy on
+# every main push would be unsafe until that is confirmed.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 concurrency:
   group: deploy-dev
@@ -26,7 +27,6 @@ permissions:
 jobs:
   publish:
     name: Build and push images
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
