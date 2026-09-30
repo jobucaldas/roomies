@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Roomies household management">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="roomies">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Roomies</title>
+  <meta name="referrer" content="no-referrer">
+  <link rel="manifest" href="manifest.json">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      background:
+        radial-gradient(circle at 12% 18%, rgba(13, 115, 119, 0.18), transparent 42%),
+        radial-gradient(circle at 88% 12%, rgba(9, 84, 86, 0.12), transparent 36%),
+        linear-gradient(160deg, #cbe3e1 0%, #e7eef0 42%, #f3f6f7 100%);
+      font-family: "Source Sans 3", "Segoe UI", sans-serif;
+    }
+    .roomies-boot {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      color: #14212b;
+      letter-spacing: -0.03em;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 2rem;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="roomies-boot">Roomies</div>
+  <script>
+    async function roomiesSubscribePush(vapid, label) {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        throw new Error('Browser push is unsupported.');
+      }
+      const registration = await navigator.serviceWorker.register('/roomies-sw.js', { scope: '/' });
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        throw new Error('Notification permission was denied.');
+      }
+      const key = Uint8Array.from(
+        atob(vapid.replace(/-/g, '+').replace(/_/g, '/')),
+        (c) => c.charCodeAt(0),
+      );
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: key,
+      });
+      const json = subscription.toJSON();
+      return {
+        endpoint: json.endpoint,
+        p256dh: json.keys.p256dh,
+        auth: json.keys.auth,
+        label: label,
+      };
+    }
+    async function roomiesUnsubscribePush() {
+      if (!('serviceWorker' in navigator)) {
+        return;
+      }
+      const registration = await navigator.serviceWorker.getRegistration('/');
+      const subscription = registration && (await registration.pushManager.getSubscription());
+      if (subscription) {
+        await subscription.unsubscribe();
+      }
+    }
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

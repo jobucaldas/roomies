@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: roomies
+
+resources:
+  - ../../base
+
+images:
+  - name: roomies-backend
+    newName: ghcr.io/roomies/roomies-backend
+    newTag: latest
+  - name: roomies-frontend
+    newName: ghcr.io/roomies/roomies-frontend
+    newTag: latest
+
+configMapGenerator:
+  - name: roomies-backend-config
+    literals:
+      - APP_ENV=production
+      - PORT=8080
+      - WORKER_HEALTH_PORT=8081
+      - CORS_ALLOWED_ORIGINS=https://roomies.example.com
+      - ROOMIES_PUBLIC_BASE_URL=https://roomies.example.com
+      - INVITATION_TTL_HOURS=168
+      - JOB_POLL_INTERVAL_SECONDS=2
+      - JOB_LEASE_SECONDS=30
+      - WEB_PUSH_SUBJECT=mailto:no-reply@roomies.example.com
+      # FCM_PROJECT_ID may be added here; use workload identity for credentials.
+      - TIMEZONE=UTC
+
+generatorOptions:
+  disableNameSuffixHash: true

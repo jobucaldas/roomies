@@ -1,19 +1,19 @@
 {
-    "name": "Flutter Development Container",
-    "build": {
-        "dockerfile": "Dockerfile"
-    },
-    "runArgs": [
-        "--privileged",
-        "-v",
-        "/dev/bus/usb:/dev/bus/usb"
-    ],
-    "forwardPorts": [8081, 5037],
-    "remoteUser": "root",
+    "name": "Roomies Development",
+    "dockerComposeFile": "docker-compose.yml",
+    "service": "dev",
+    "workspaceFolder": "/workspace",
+    "forwardPorts": [58080, 58081, 55432],
     "customizations": {
         "vscode": {
             "extensions": [
-                "Dart-Code.flutter"
+                "golang.Go",
+                "rust-lang.rust-analyzer",
+                "tamasfe.even-better-toml",
+                "bradlc.vscode-tailwindcss",
+                "eamodio.gitlens",
+                "ms-vscode.makefile-tools",
+                "bierner.markdown-mermaid"
             ]
         }
     }
