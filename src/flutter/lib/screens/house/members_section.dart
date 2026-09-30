@@ -131,6 +131,7 @@ class _MembersSectionState extends State<MembersSection> {
           Semantics(
             label: 'Email invitations',
             container: true,
+            explicitChildNodes: true,
             child: RoomiesCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

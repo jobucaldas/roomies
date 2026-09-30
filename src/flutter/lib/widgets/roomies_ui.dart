@@ -13,6 +13,7 @@ class RoomiesCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       container: true,
+      explicitChildNodes: true,
       label: semanticLabel,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
@@ -38,12 +39,49 @@ class RoomiesCard extends StatelessWidget {
   }
 }
 
-class RoomiesArticleCard extends RoomiesCard {
+class RoomiesArticleCard extends StatelessWidget {
   const RoomiesArticleCard({
     super.key,
-    required super.child,
-    super.semanticLabel,
+    required this.child,
+    this.semanticLabel,
   });
+
+  final Widget child;
+  final String? semanticLabel;
+
+  static const semanticsIdentifier = 'roomies-article-card';
+
+  @override
+  Widget build(BuildContext context) {
+    // Identifier lets the web a11y bridge wrap this node in <article class="card">
+    // so Playwright locators matching Dioxus article.card keep working.
+    return Semantics(
+      identifier: semanticsIdentifier,
+      container: true,
+      explicitChildNodes: true,
+      label: semanticLabel,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: RoomiesColors.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: RoomiesColors.line),
+          boxShadow: [
+            BoxShadow(
+              color: RoomiesColors.ink.withValues(alpha: 0.05),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: child,
+      ),
+    );
+  }
 }
 
 class RoomiesError extends StatelessWidget {
@@ -295,9 +333,10 @@ class RoomiesLabeledField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      label: label,
-      textField: child is TextField || child is TextFormField,
+    // Do not wrap with Semantics(textField: true): on Flutter web that creates
+    // a disabled <input aria-label="Label\nLabel"> proxy that Playwright's
+    // getByLabel() matches before the real enabled TextField.
+    return MergeSemantics(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
