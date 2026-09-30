@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { expect, test, type APIRequestContext, type Locator, type Page, type TestInfo } from '@playwright/test';
-import { fillFlutterText, loginViaUiOrToken, logoutViaUi } from '../helpers/login';
+import { fillFlutterText, loginViaUiOrToken, logoutViaUi, openHouseViaUi } from '../helpers/login';
 
 // Core tests deliberately disable Playwright screenshots and traces. The sanitized JSON record
 // below is sufficient for the CI gate and cannot retain expense, note, or session contents.
@@ -197,8 +197,11 @@ async function chooseOption(page: Page, opener: Locator, option: string) {
 }
 
 async function openHouse(page: Page, houseId: string) {
-  await page.goto(`${web}/house/${houseId}`);
-  await expect(page.getByRole('heading', { name: 'Core Validation House' })).toBeVisible();
+  await openHouseViaUi(page, {
+    web,
+    houseId,
+    houseName: 'Core Validation House',
+  });
 }
 
 async function cardContains(page: Page, marker: string) {
