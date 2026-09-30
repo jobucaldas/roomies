@@ -9,7 +9,10 @@ RUN flutter pub get
 COPY src/flutter/ ./
 COPY src/app/public/roomies-sw.js ./web/roomies-sw.js
 
+# CanvasKit stays on the app origin so the Caddy CSP can keep script-src and
+# connect-src on 'self' (the default build fetches it from www.gstatic.com).
 RUN flutter build web --release \
+  --no-web-resources-cdn \
   --dart-define=ROOMIES_API_URL=${ROOMIES_API_URL}
 
 FROM docker.io/alpine:3.20
