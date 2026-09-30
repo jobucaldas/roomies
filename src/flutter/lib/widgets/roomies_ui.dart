@@ -386,8 +386,11 @@ class RoomiesTabPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // explicitChildNodes keeps section headings addressable inside the panel
+    // so Playwright can resolve getByRole('tabpanel').getByRole('heading').
     return Semantics(
       container: true,
+      explicitChildNodes: true,
       label: name,
       child: child,
     );
