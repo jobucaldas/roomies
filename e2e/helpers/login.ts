@@ -124,7 +124,32 @@ export async function loginViaUiOrToken(
 }
 
 
-/** Open a house from Dashboard/shell after login (fresh sessions land on Dashboard). */
+/** Click a Flutter semantics control that Playwright may not consider "visible". */
+async function clickFlutterRole(
+  page: Page,
+  role: string,
+  name: string,
+  options?: { exact?: boolean; timeout?: number },
+) {
+  const exact = options?.exact ?? true;
+  const timeout = options?.timeout ?? 30_000;
+  const locator = page.getByRole(role as 'button', { name, exact });
+  await locator.first().waitFor({ state: 'attached', timeout });
+  // Flutter web often parks semantics nodes off the hit-test path; prefer DOM activate.
+  const handle = await locator.first().elementHandle({ timeout });
+  if (!handle) {
+    throw new Error(`No element for role=${role} name=${name}`);
+  }
+  await handle.evaluate((el) => {
+    const node = el as HTMLElement;
+    node.scrollIntoView({ block: 'center', inline: 'nearest' });
+    node.focus();
+    node.click();
+  });
+  await handle.dispose();
+}
+
+/** Open a seeded house after login (Dashboard-first UX). Prefer direct route when id known. */
 export async function openHouseViaUi(
   page: Page,
   options: {
@@ -134,38 +159,41 @@ export async function openHouseViaUi(
   },
 ) {
   const { web, houseName, houseId } = options;
+
+  if (houseId) {
+    await page.goto(`${web}/house/${houseId}`);
+    await expect(page).toHaveURL(new RegExp(`/house/${houseId}$`));
+    await expect(page.getByRole('heading', { name: houseName, exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    return;
+  }
+
   if (!/\/dashboard\/?$/.test(new URL(page.url()).pathname)) {
     await page.goto(`${web}/dashboard`);
   }
   await expect(page).toHaveURL(/\/dashboard\/?$/);
-
-  // Wait for Dashboard chrome so house list / shell nav are mounted.
   await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible({
     timeout: 30_000,
   });
 
-  // Shell nav (sidebar / drawer) exposes each house as a button.
   const shellHouse = page.getByRole('button', { name: houseName, exact: true });
-  if ((await shellHouse.count()) === 0) {
+  try {
+    await shellHouse.first().waitFor({ state: 'attached', timeout: 5_000 });
+  } catch {
     const menu = page.getByRole('button', { name: 'Menu' });
-    if (await menu.isVisible().catch(() => false)) {
-      await menu.click();
+    if ((await menu.count()) > 0) {
+      await clickFlutterRole(page, 'button', 'Menu', { timeout: 10_000 });
     }
   }
+
   if ((await shellHouse.count()) > 0) {
-    await shellHouse.first().click();
+    await clickFlutterRole(page, 'button', houseName, { timeout: 30_000 });
   } else {
-    // Dashboard house row semantics: "Open <name>".
-    const openRow = page.getByRole('button', { name: `Open ${houseName}`, exact: true });
-    await openRow.waitFor({ state: 'visible', timeout: 30_000 });
-    await openRow.click();
+    await clickFlutterRole(page, 'button', `Open ${houseName}`, { timeout: 30_000 });
   }
 
-  if (houseId) {
-    await expect(page).toHaveURL(new RegExp(`/house/${houseId}$`));
-  } else {
-    await expect(page).toHaveURL(/\/house\/[^/]+$/);
-  }
+  await expect(page).toHaveURL(/\/house\/[^/]+$/);
   await expect(page.getByRole('heading', { name: houseName, exact: true })).toBeVisible({
     timeout: 30_000,
   });
@@ -174,11 +202,13 @@ export async function openHouseViaUi(
 /** Sign out from AppShell (sidebar on wide, drawer on narrow). */
 export async function logoutViaUi(page: Page, web: string) {
   await page.goto(`${web}/dashboard`);
+  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
   const logOut = page.getByRole('button', { name: 'Log out' });
-  if (!(await logOut.isVisible().catch(() => false))) {
-    await page.getByRole('button', { name: 'Menu' }).click();
-    await logOut.waitFor({ state: 'visible', timeout: 15_000 });
+  if ((await logOut.count()) === 0) {
+    await clickFlutterRole(page, 'button', 'Menu', { timeout: 15_000 });
   }
-  await logOut.click();
+  await clickFlutterRole(page, 'button', 'Log out', { timeout: 15_000 });
   await waitForLoginReady(page);
 }
