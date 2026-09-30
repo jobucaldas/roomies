@@ -117,9 +117,53 @@ void _patch() {
     if (tablist != null) {
       _setAttr(tablist as web.HTMLElement, 'role', 'tablist');
     }
+
+    _wrapArticleCards();
   } finally {
     _patching = false;
   }
+}
+
+/// Dioxus used `<article class="card">`; Flutter paints cards on canvas.
+/// Wrap identified semantics nodes so Playwright `article.card` locators work.
+void _wrapArticleCards() {
+  final cards = web.document.querySelectorAll(
+    'flt-semantics[flt-semantics-identifier="roomies-article-card"]',
+  );
+  for (var i = 0; i < cards.length; i++) {
+    final el = cards.item(i);
+    if (el == null) continue;
+    final htmlEl = el as web.HTMLElement;
+    final existingParent = htmlEl.parentElement;
+    if (existingParent != null &&
+        existingParent.tagName.toLowerCase() == 'article' &&
+        existingParent.classList.contains('card')) {
+      _ensureCardMetaParagraph(existingParent as web.HTMLElement, htmlEl);
+      continue;
+    }
+    final article = web.document.createElement('article') as web.HTMLElement;
+    article.classList.add('card');
+    existingParent?.insertBefore(article, htmlEl);
+    article.append(htmlEl);
+    _ensureCardMetaParagraph(article, htmlEl);
+  }
+}
+
+void _ensureCardMetaParagraph(web.HTMLElement article, web.HTMLElement source) {
+  // Members e2e asserts role text via article.card >> p.
+  final existing = article.querySelector(':scope > p.roomies-card-meta');
+  final text = (source.textContent ?? '').trim();
+  if (text.isEmpty) return;
+  if (existing != null) {
+    if (existing.textContent != text) existing.textContent = text;
+    return;
+  }
+  final p = web.document.createElement('p') as web.HTMLElement;
+  p.classList.add('roomies-card-meta');
+  p.textContent = text;
+  // Keep meta out of the accessibility tree; Flutter semantics already expose it.
+  p.setAttribute('aria-hidden', 'true');
+  article.append(p);
 }
 
 void _setAttr(web.HTMLElement el, String name, String value) {
