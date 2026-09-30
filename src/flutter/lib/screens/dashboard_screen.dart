@@ -248,7 +248,11 @@ class _HouseRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    return Semantics(
+      button: true,
+      label: '$viewLabel ${house.name}',
+      excludeSemantics: true,
+      child: Material(
       color: RoomiesColors.surface,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
@@ -315,6 +319,7 @@ class _HouseRow extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

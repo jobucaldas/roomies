@@ -123,6 +123,54 @@ export async function loginViaUiOrToken(
   }
 }
 
+
+/** Open a house from Dashboard/shell after login (fresh sessions land on Dashboard). */
+export async function openHouseViaUi(
+  page: Page,
+  options: {
+    web: string;
+    houseName: string;
+    houseId?: string;
+  },
+) {
+  const { web, houseName, houseId } = options;
+  if (!/\/dashboard\/?$/.test(new URL(page.url()).pathname)) {
+    await page.goto(`${web}/dashboard`);
+  }
+  await expect(page).toHaveURL(/\/dashboard\/?$/);
+
+  // Wait for Dashboard chrome so house list / shell nav are mounted.
+  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  // Shell nav (sidebar / drawer) exposes each house as a button.
+  const shellHouse = page.getByRole('button', { name: houseName, exact: true });
+  if ((await shellHouse.count()) === 0) {
+    const menu = page.getByRole('button', { name: 'Menu' });
+    if (await menu.isVisible().catch(() => false)) {
+      await menu.click();
+    }
+  }
+  if ((await shellHouse.count()) > 0) {
+    await shellHouse.first().click();
+  } else {
+    // Dashboard house row semantics: "Open <name>".
+    const openRow = page.getByRole('button', { name: `Open ${houseName}`, exact: true });
+    await openRow.waitFor({ state: 'visible', timeout: 30_000 });
+    await openRow.click();
+  }
+
+  if (houseId) {
+    await expect(page).toHaveURL(new RegExp(`/house/${houseId}$`));
+  } else {
+    await expect(page).toHaveURL(/\/house\/[^/]+$/);
+  }
+  await expect(page.getByRole('heading', { name: houseName, exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+}
+
 /** Sign out from AppShell (sidebar on wide, drawer on narrow). */
 export async function logoutViaUi(page: Page, web: string) {
   await page.goto(`${web}/dashboard`);

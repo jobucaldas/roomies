@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { expect, test, type APIRequestContext, type Page, type TestInfo } from '@playwright/test';
-import { fillFlutterText, loginViaUiOrToken } from '../helpers/login';
+import { fillFlutterText, loginViaUiOrToken, openHouseViaUi } from '../helpers/login';
 
 const api = process.env.ROOMIES_API_URL ?? 'http://localhost:8080/api';
 const web = process.env.ROOMIES_WEB_URL ?? 'http://localhost';
@@ -111,8 +111,11 @@ async function household(page: Page, request: APIRequestContext) {
   expect(response.ok()).toBeTruthy();
   const { id } = await response.json() as { id: string };
   await login(page, user.email, user.token);
-  await page.goto(`${web}/house/${id}`);
-  await expect(page.getByRole('heading', { name: 'Household validation' })).toBeVisible();
+  await openHouseViaUi(page, {
+    web,
+    houseId: id,
+    houseName: 'Household validation',
+  });
 }
 
 async function open(page: Page, tab: string, heading: string) {
