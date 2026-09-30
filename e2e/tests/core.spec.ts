@@ -175,7 +175,7 @@ async function login(page: Page, email: string, token?: string) {
 }
 
 async function logout(page: Page) {
-  // House pages intentionally expose only a Back action; logout is on Dashboard.
+  // Logout lives on the Dashboard route.
   await page.goto(`${web}/dashboard`);
   await page.getByRole('button', { name: 'Logout' }).click();
   await expect(page.getByRole('button', { name: 'Login', exact: true })).toBeVisible();

@@ -70,7 +70,7 @@ func (h *AuthHandler) SetPublicBaseURL(base string) {
 }
 
 // SetRateLimit overrides the per-IP budget for login, register, and the AuthKit
-// code exchange. Tests use a tiny limit; production keeps the defaults.
+// code exchange.
 func (h *AuthHandler) SetRateLimit(limit int) {
 	h.loginLimit = limit
 	h.registerLimit = limit
@@ -83,8 +83,7 @@ func (h *AuthHandler) Config(w http.ResponseWriter, r *http.Request) {
 	if h.workos != nil {
 		redirectURI = h.workos.RedirectURI
 	}
-	// Password endpoints stay available only when AuthKit is unset (CI clears WORKOS_*).
-	// Enabling AuthKit rejects them so that path cannot bypass hosted sign-in.
+	// Password endpoints are available only when AuthKit is unset.
 	writeJSON(w, http.StatusOK, map[string]any{
 		"authkit":      enabled,
 		"password":     !enabled,

@@ -89,7 +89,7 @@ func NewHandler(deps Dependencies) http.Handler {
 	})
 	r.Get("/api/notifications/vapid-public-key", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		// The public VAPID key is intentionally discoverable; the private key never leaves configuration.
+		// Public VAPID key endpoint; the private key stays in configuration.
 		_ = json.NewEncoder(w).Encode(map[string]string{"public_key": deps.Config.WebPushPublicKey})
 	})
 

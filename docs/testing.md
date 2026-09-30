@@ -6,16 +6,16 @@
 
 ## Frontend
 - Production web client (Flutter): `cd src/flutter && flutter analyze && flutter test && flutter build web --release --no-web-resources-cdn --dart-define=ROOMIES_API_URL=/api`
-- Rust reference client (retained until native targets migrate): `cargo test -p roomies-app --no-default-features --features web`
+- Rust reference client: `cargo test -p roomies-app --no-default-features --features web`
 - Rust web release bundle: `nix develop .#web --command sh -c 'cd src/app && dx build --release --debug-symbols=false'`
 - Desktop: `cargo check -p roomies-app --no-default-features --features desktop`
 - Android ARM64 check: `nix develop .#android --command cargo check -p roomies-app --no-default-features --features mobile --target aarch64-linux-android`
-- Android APK (optimized Rust payload, development signing): `nix develop .#android --command make android`
+- Android APK (development signing): `nix develop .#android --command make android`
 
-The web release command is a source/build gate for the generated HTML, JavaScript, and WASM assets. It does not provide browser or native runtime acceptance and does not deploy to production. The pinned web shell supplies Rust 1.89.0 with `wasm32-unknown-unknown`, Dioxus CLI 0.7.10, wasm-bindgen CLI 0.2.127, and Binaryen's `wasm-opt`; it does not use rustup or download tools at shell startup. Generated output is ignored under `target/`.
+Generated Rust web output is ignored under `target/`.
 
 ## Invitation onboarding browser flow
-The reusable Playwright harness uses synthetic accounts and Mailpit; it never prints or renders bearer tokens. Start the existing stack with SMTP pointed at the disposable sink, then run:
+The Playwright harness uses synthetic accounts and Mailpit; it does not print or render bearer tokens. Start the stack with SMTP pointed at the disposable sink, then run:
 
 ```sh
 podman compose -f e2e/docker-compose.mailpit.yml up -d
@@ -26,22 +26,22 @@ podman compose -f docker-compose.yml down -v
 podman compose -f e2e/docker-compose.mailpit.yml down -v
 ```
 
-Screenshots and Playwright reports are written under `e2e/artifacts/` (ignored). The suite covers intended-user acceptance after auth redirect, wrong-account/revoked denial, idempotent duplicate acceptance, monitor authorization, and desktop/narrow layouts. Expiry and retryable-transient-failure invariants remain covered by the backend invitation contract tests.
+Screenshots and Playwright reports are written under `e2e/artifacts/` (gitignored). The suite covers acceptance after auth redirect, wrong-account/revoked denial, idempotent duplicate acceptance, monitor authorization, and desktop/narrow layouts. Expiry and retryable-transient-failure cases stay covered by backend invitation contract tests.
 
 ## CI-gated core and household browser regression
-The `household-browser` GitHub Actions job runs the desktop and narrow projects for `e2e/tests/core.spec.ts` and `e2e/tests/household.spec.ts` against one disposable Compose PostgreSQL/backend/worker/frontend/Caddy/Mailpit stack. It builds the production web client through `src/flutter/Dockerfile` and uses the checked-out SHA for `GIT_COMMIT`. Reproduce it on Linux from the repository root:
+The `household-browser` GitHub Actions job runs the desktop and narrow projects for `e2e/tests/core.spec.ts` and `e2e/tests/household.spec.ts` against one disposable Compose PostgreSQL/backend/worker/frontend/Caddy/Mailpit stack. It builds the production web client through `src/flutter/Dockerfile`. Reproduce locally:
 
 ```sh
 make test-e2e-household
 ```
 
-The target generates synthetic secrets, installs Chromium with Playwright's supported dependency path, runs both specs in one stack, and always removes its Compose project and volumes. Core tests disable screenshots and traces; on CI failure, only the sanitized evidence JSON is retained for seven days. Reports, traces, screenshots, and test-result directories are deliberately excluded because they can contain private browser data. The gate covers core household web flows and the existing household domains; it is not Linux desktop or Android runtime acceptance, real-provider delivery validation, or full-browser-suite acceptance.
+The target generates synthetic secrets, installs Chromium via Playwright, runs both specs, and removes its Compose project and volumes. Core tests disable screenshots and traces; on CI failure, only sanitized evidence JSON is retained. Reports, traces, screenshots, and test-result directories are not uploaded.
 
 ## Core household UI
-The core browser flow covers expense creation with shared/private visibility, non-recipient API/UI denial, payer-or-admin edit/delete, notes create/edit/delete, balance settlement suggestions, and admin/member/monitor role restrictions. Private and note contents are used only in-memory by the synthetic run; core evidence contains counts and served-asset hashes only.
+Browser coverage includes expense creation with shared/private visibility, non-recipient denial, payer-or-admin edit/delete, notes create/edit/delete, balance settlement suggestions, and role restrictions. Core evidence records counts and served-asset hashes only.
 
 ## Household domains UI
-The house Groceries, Chores, Calendar, and Chat tabs use the normal online API only. Run the web unit and lint checks in an isolated Nix target directory to avoid reusing host Rust artifacts:
+Groceries, Chores, Calendar, and Chat use the online API. Run web unit and lint checks in an isolated Nix target directory:
 
 ```sh
 CARGO_TARGET_DIR=/tmp/roomies-household-ui-target-$$ \
@@ -50,7 +50,7 @@ CARGO_TARGET_DIR=/tmp/roomies-household-ui-target-$$ \
   nix develop .#web --command cargo clippy --manifest-path src/app/Cargo.toml --no-default-features --features web -- -D warnings
 ```
 
-Chore completion deliberately requires an exact UTC RFC3339 occurrence, while creation and edits retain the server-validated local time, IANA timezone, RRULE, and EXDATE fields. Chat refresh and older-page loading are explicit; chat bodies are not cached or queued by the client.
+Chore completion requires an exact UTC RFC3339 occurrence. Chat refresh and older-page loading are explicit; chat bodies are not cached or queued by the client.
 
 ## Compose / release smoke
 - `make check-compose`
@@ -63,8 +63,8 @@ Chore completion deliberately requires an exact UTC RFC3339 occurrence, while cr
 - `nix develop .#android --command make android`
 - `nix develop .#container --command podman-compose -f docker-compose.yml config`
 
-## Current environment gap
-Desktop checks require GTK/WebKit development libraries. Use the `desktop` shell or install those packages locally before running the desktop check.
+## Environment notes
+Desktop checks require GTK/WebKit development libraries. Use the `desktop` shell or install those packages locally.
 
 ## Notification preferences and schedules
-The web notification panel exercises self-owned preferences and house-scoped scheduled events through the normal online API. Creators and admins can prefill, edit, cancel, and save event recurrence forms; monitors remain view-only. Browser push is requested only after the **Enable browser push** button is clicked; a supported browser needs a server configured with `WEB_PUSH_PUBLIC_KEY`. The root-scoped `roomies-sw.js` displays generic notification text and does not persist subscription capabilities outside the browser PushSubscription. To reproduce a release build where host tooling lacks the matching wasm-bindgen CLI, use the cached Dioxus 0.7.10 builder image specified in the notification validation record.
+The web notification panel covers self-owned preferences and house-scoped scheduled events. Creators and admins can prefill, edit, cancel, and save event recurrence forms; monitors are view-only. Browser push is requested only after **Enable browser push**; a supported browser needs `WEB_PUSH_PUBLIC_KEY`. The root-scoped `roomies-sw.js` shows generic notification text.

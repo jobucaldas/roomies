@@ -17,8 +17,7 @@ type BrowserEvidence = {
 const evidenceByPage = new WeakMap<Page, BrowserEvidence>();
 const slug = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-// There are currently no intentionally aborted application requests. Keep this explicit so
-// adding an exception requires naming the exact request and its reason in review.
+// Allowlist hook for aborted requests that should not fail the suite.
 function intentionallyAborted(_url: string, _error: string | undefined): boolean { return false; }
 
 async function writeBrowserEvidence(page: Page, testInfo: TestInfo) {
@@ -67,8 +66,7 @@ test.beforeEach(async ({ page }) => {
   evidenceByPage.set(page, evidence);
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
-    // The enumeration-safe wrong-account response is intentionally 404. Chromium
-    // mirrors that expected API denial to the console even though the app handles it.
+    // Expected 404 denial can appear as a Chromium console error; ignore that case.
     if (
       evidence.expectedInvitationNotFound
       && message.text().includes('Failed to load resource: the server responded with a status of 404')

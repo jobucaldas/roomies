@@ -1,7 +1,14 @@
-# Roomies patch provenance
+# Roomies patch notes
 
-Source: `android-native-keyring-store` 1.0.0 as published on crates.io, checksum `48c6349ddff23194f8fdce2ea8849380f5a4868c1648965b70e801e104cba9b3`.
+Source: `android-native-keyring-store` 1.0.0 (crates.io checksum `48c6349ddff23194f8fdce2ea8849380f5a4868c1648965b70e801e104cba9b3`).
 
-Roomies carries this narrow patch because 1.0.0 calls JNI `exception_describe`, which writes Java/provider details directly to logcat, and ignores a false result from synchronous `SharedPreferences.commit`. The patch clears pending exceptions and maps an otherwise-successful JNI call to the provider's existing `JavaExceptionThrow` error without describing it. It also removes provider-detail logging, makes named-store `Debug` output opaque so `keyring-core` diagnostics cannot reveal identifiers/configuration, and maps failed named-vault commits to a new generic provider error. No cryptography, Keystore, vault format, or credential naming is changed.
+## Changes
+- Clear pending JNI exceptions instead of calling `exception_describe`.
+- Treat a false `SharedPreferences.commit` result as `JavaExceptionThrow`.
+- Remove provider-detail logging.
+- Make named-store `Debug` output opaque.
+- Map failed named-vault commits to a generic provider error.
 
-Remove this override once an upstream release provides equivalent non-logging exception handling and has been verified against Roomies' Android build.
+Cryptography, Keystore usage, vault format, and credential naming are unchanged.
+
+Remove this override when an upstream release provides equivalent exception handling and has been verified against the Roomies Android build.
