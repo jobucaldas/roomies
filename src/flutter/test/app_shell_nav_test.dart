@@ -10,7 +10,7 @@ import 'package:roomies/widgets/app_shell.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  AppState _app() {
+  AppState makeApp() {
     final appState = AppState(
       ApiClient(baseUrl: 'http://example/api'),
       deviceLocale: 'en',
@@ -40,7 +40,7 @@ void main() {
 
   testWidgets('wide shell shows action nav, not house list as primary',
       (tester) async {
-    final appState = _app();
+    final appState = makeApp();
     final router = GoRouter(
       initialLocation: '/dashboard',
       routes: [
@@ -89,7 +89,7 @@ void main() {
 
   testWidgets('narrow shell exposes same actions via hamburger drawer',
       (tester) async {
-    final appState = _app();
+    final appState = makeApp();
     final router = GoRouter(
       initialLocation: '/dashboard',
       routes: [
