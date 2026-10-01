@@ -7,7 +7,6 @@ COPY src/flutter/pubspec.yaml src/flutter/pubspec.lock ./
 RUN flutter pub get
 
 COPY src/flutter/ ./
-COPY src/app/public/roomies-sw.js ./web/roomies-sw.js
 
 # CanvasKit stays on the app origin so the Caddy CSP can keep script-src and
 # connect-src off www.gstatic.com (the default build fetches CanvasKit from CDN).
