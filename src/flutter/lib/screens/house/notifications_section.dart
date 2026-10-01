@@ -2,8 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/datetime_format.dart';
 import '../../core/roles.dart';
 import '../../core/scheduled_events.dart';
+import '../../l10n/strings.dart';
 import '../../models/models.dart';
 import '../../push/push_service.dart';
 import '../../state/app_state.dart';
@@ -75,23 +77,24 @@ class _NotificationsSectionState extends State<NotificationsSection> {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<AppState>().strings;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RoomiesHeading(context.watch<AppState>().strings.notificationsSchedule, level: 2),
+        RoomiesHeading(s.notificationsSchedule, level: 2),
         if (_loading)
           Semantics(
             liveRegion: true,
-            child: Text(context.watch<AppState>().strings.loadingNotificationSettings),
+            child: Text(s.loadingNotificationSettings),
           )
         else if (_loadError != null) ...[
           Semantics(
             liveRegion: true,
-            child: Text('Unable to load notification settings: $_loadError'),
+            child: Text(s.unableToLoadNotificationSettings(_loadError!)),
           ),
           FilledButton(
             onPressed: _load,
-            child: Text(context.watch<AppState>().strings.retryNotificationSettings),
+            child: Text(s.retryNotificationSettings),
           ),
         ] else if (_prefs != null &&
             notificationControlsReady(loading: _loading, error: _loadError)) ...[
@@ -154,10 +157,10 @@ class _PreferencesCardState extends State<_PreferencesCard> {
   }
 
   Future<void> _save() async {
+    final s = context.read<AppState>().strings;
     if (_value.timezone.trim().isEmpty) {
       setState(() {
-        _status =
-            'Use an IANA timezone and times between 00:00 and 23:59.';
+        _status = s.timezoneValidationHint;
       });
       return;
     }
@@ -167,17 +170,18 @@ class _PreferencesCardState extends State<_PreferencesCard> {
             _value,
           );
       if (!mounted) return;
-      setState(() => _status = 'Notification preferences saved.');
+      setState(() => _status = s.notificationPreferencesSaved);
       widget.onSaved(saved);
     } catch (error) {
       if (mounted) {
-        setState(() => _status = 'Could not save preferences: $error');
+        setState(() => _status = s.couldNotSavePreferences('$error'));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<AppState>().strings;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 10),
       child: Padding(
@@ -185,10 +189,10 @@ class _PreferencesCardState extends State<_PreferencesCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            RoomiesHeading(context.watch<AppState>().strings.yourNotificationPreferences, level: 3),
+            RoomiesHeading(s.yourNotificationPreferences, level: 3),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Shared expense alerts'),
+              title: Text(s.sharedExpenseAlerts),
               value: _value.expenseCreatedEnabled,
               onChanged: (checked) => setState(
                 () => _value =
@@ -197,7 +201,7 @@ class _PreferencesCardState extends State<_PreferencesCard> {
             ),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Scheduled reminder alerts'),
+              title: Text(s.scheduledReminderAlerts),
               value: _value.reminderEnabled,
               onChanged: (checked) => setState(
                 () => _value = _value.copyWith(reminderEnabled: checked ?? true),
@@ -205,12 +209,15 @@ class _PreferencesCardState extends State<_PreferencesCard> {
             ),
             DropdownButtonFormField<String>(
               value: _value.cadence,
-              decoration: const InputDecoration(labelText: 'Delivery'),
-              items: const [
-                DropdownMenuItem(value: 'immediate', child: Text('Immediate')),
+              decoration: InputDecoration(labelText: s.delivery),
+              items: [
+                DropdownMenuItem(
+                  value: 'immediate',
+                  child: Text(s.deliveryImmediate),
+                ),
                 DropdownMenuItem(
                   value: 'daily_digest',
-                  child: Text('Daily digest'),
+                  child: Text(s.deliveryDailyDigest),
                 ),
               ],
               onChanged: (cadence) {
@@ -220,8 +227,8 @@ class _PreferencesCardState extends State<_PreferencesCard> {
             ),
             TextFormField(
               initialValue: _value.timezone,
-              decoration: const InputDecoration(
-                labelText: 'IANA timezone',
+              decoration: InputDecoration(
+                labelText: s.ianaTimezone,
                 hintText: 'Europe/Lisbon',
               ),
               onChanged: (timezone) =>
@@ -230,7 +237,7 @@ class _PreferencesCardState extends State<_PreferencesCard> {
             TextFormField(
               key: ValueKey('quiet-start-${_value.quietStartMinutes}'),
               initialValue: minutesTime(_value.quietStartMinutes),
-              decoration: const InputDecoration(labelText: 'Quiet start (local)'),
+              decoration: InputDecoration(labelText: s.quietStartLocal),
               keyboardType: TextInputType.datetime,
               onChanged: (raw) {
                 final minutes = timeMinutes(raw);
@@ -244,7 +251,7 @@ class _PreferencesCardState extends State<_PreferencesCard> {
             TextFormField(
               key: ValueKey('quiet-end-${_value.quietEndMinutes}'),
               initialValue: minutesTime(_value.quietEndMinutes),
-              decoration: const InputDecoration(labelText: 'Quiet end (local)'),
+              decoration: InputDecoration(labelText: s.quietEndLocal),
               keyboardType: TextInputType.datetime,
               onChanged: (raw) {
                 final minutes = timeMinutes(raw);
@@ -258,8 +265,7 @@ class _PreferencesCardState extends State<_PreferencesCard> {
             TextFormField(
               key: ValueKey('digest-${_value.digestMinutes}'),
               initialValue: minutesTime(_value.digestMinutes),
-              decoration:
-                  const InputDecoration(labelText: 'Daily digest time (local)'),
+              decoration: InputDecoration(labelText: s.dailyDigestTimeLocal),
               keyboardType: TextInputType.datetime,
               onChanged: (raw) {
                 final minutes = timeMinutes(raw);
@@ -272,7 +278,7 @@ class _PreferencesCardState extends State<_PreferencesCard> {
             ),
             FilledButton(
               onPressed: _save,
-              child: Text(context.watch<AppState>().strings.savePreferences),
+              child: Text(s.savePreferences),
             ),
             if (_status.isNotEmpty)
               Semantics(liveRegion: true, child: Text(_status)),
@@ -318,6 +324,7 @@ class _BrowserPushCardState extends State<_BrowserPushCard> {
   Future<void> _enable() async {
     setState(() => _busy = true);
     final api = context.read<AppState>().api;
+    final s = context.read<AppState>().strings;
     final error = await enableBrowserPush(api, widget.houseId);
     if (!mounted) return;
     if (error != null) {
@@ -333,14 +340,14 @@ class _BrowserPushCardState extends State<_BrowserPushCard> {
           await api.getNotificationSubscriptions(widget.houseId);
       if (!mounted) return;
       widget.onSubscriptionsChanged(refreshed);
-      const message = 'Browser push enabled.';
+      final message = s.browserPushEnabled;
       setState(() {
         _status = message;
         _busy = false;
       });
       widget.onStatusChanged(message);
     } catch (error) {
-      final message = 'Subscription saved but refresh failed: $error';
+      final message = s.subscriptionRefreshFailed('$error');
       setState(() {
         _status = message;
         _busy = false;
@@ -352,6 +359,7 @@ class _BrowserPushCardState extends State<_BrowserPushCard> {
   Future<void> _disable() async {
     setState(() => _busy = true);
     final api = context.read<AppState>().api;
+    final s = context.read<AppState>().strings;
     final ids = widget.subscriptions
         .where((subscription) => subscription.platform == 'web_push')
         .map((subscription) => subscription.id)
@@ -370,7 +378,7 @@ class _BrowserPushCardState extends State<_BrowserPushCard> {
         .where((subscription) => subscription.platform != 'web_push')
         .toList();
     widget.onSubscriptionsChanged(remaining);
-    const message = 'Browser push disabled.';
+    final message = s.browserPushDisabled;
     setState(() {
       _status = message;
       _busy = false;
@@ -380,6 +388,8 @@ class _BrowserPushCardState extends State<_BrowserPushCard> {
 
   @override
   Widget build(BuildContext context) {
+    final app = context.watch<AppState>();
+    final s = app.strings;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 10),
       child: Padding(
@@ -387,26 +397,32 @@ class _BrowserPushCardState extends State<_BrowserPushCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const RoomiesHeading('Browser push', level: 3),
-            const Text(
-              'Browser push is only available in a supported web browser.',
-            ),
+            RoomiesHeading(s.browserPush, level: 3),
+            Text(s.browserPushOnlyWeb),
             if (_enabled)
               FilledButton(
                 onPressed: _busy ? null : _disable,
-                child: const Text('Disable browser push'),
+                child: Text(s.disableBrowserPush),
               )
             else
               FilledButton(
                 onPressed: _busy ? null : _enable,
-                child: const Text('Enable browser push'),
+                child: Text(s.enableBrowserPush),
               ),
             Semantics(liveRegion: true, child: Text(_status)),
-            const RoomiesHeading('Your devices', level: 4),
+            RoomiesHeading(s.yourDevices, level: 4),
             for (final subscription in widget.subscriptions)
               Text(
-                '${subscription.platform}: ${subscription.deviceLabel} '
-                '(last seen ${subscription.lastSeenAt})',
+                s.deviceLine(
+                  subscription.platform,
+                  subscription.deviceLabel,
+                  s.lastSeen(
+                    formatDisplayDateTime(
+                      subscription.lastSeenAt,
+                      localeCode: app.localeCode,
+                    ),
+                  ),
+                ),
               ),
           ],
         ),
@@ -477,6 +493,7 @@ class _ScheduleCardState extends State<_ScheduleCard> {
   }
 
   void _beginEdit(ScheduledHouseEvent event) {
+    final s = context.read<AppState>().strings;
     _title.text = event.title;
     _start.text = event.dtstartLocal.length >= 16
         ? event.dtstartLocal.substring(0, 16)
@@ -490,14 +507,15 @@ class _ScheduleCardState extends State<_ScheduleCard> {
     _exdates.text = event.exdates.join(', ');
     setState(() {
       _editingId = event.id;
-      _status = 'Editing scheduled event.';
+      _status = s.editingScheduledEvent;
     });
   }
 
   void _cancelEdit() {
+    final s = context.read<AppState>().strings;
     setState(() {
       _editingId = null;
-      _status = 'Event editing cancelled.';
+      _status = s.eventEditingCancelled;
     });
   }
 
@@ -524,6 +542,7 @@ class _ScheduleCardState extends State<_ScheduleCard> {
     if (request == null) return;
     setState(() => _saving = true);
     final api = context.read<AppState>().api;
+    final s = context.read<AppState>().strings;
     try {
       final ScheduledHouseEvent event;
       if (_editingId != null) {
@@ -543,10 +562,10 @@ class _ScheduleCardState extends State<_ScheduleCard> {
       final index = items.indexWhere((value) => value.id == event.id);
       if (index >= 0) {
         items[index] = event;
-        _status = 'Scheduled event updated.';
+        _status = s.scheduledEventUpdated;
       } else {
         items.add(event);
-        _status = 'Scheduled event created.';
+        _status = s.scheduledEventCreated;
       }
       widget.onEventsChanged(items);
       setState(() {
@@ -557,7 +576,7 @@ class _ScheduleCardState extends State<_ScheduleCard> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _status = 'Could not save event: $error';
+          _status = s.couldNotSaveEvent('$error');
           _saving = false;
         });
       }
@@ -565,6 +584,7 @@ class _ScheduleCardState extends State<_ScheduleCard> {
   }
 
   Future<void> _delete(String eventId) async {
+    final s = context.read<AppState>().strings;
     try {
       await context
           .read<AppState>()
@@ -576,17 +596,24 @@ class _ScheduleCardState extends State<_ScheduleCard> {
       widget.onEventsChanged(items);
       setState(() {
         _items = items;
-        _status = 'Scheduled event deleted.';
+        _status = s.scheduledEventDeleted;
       });
     } catch (error) {
       if (mounted) {
-        setState(() => _status = 'Could not delete event: $error');
+        setState(() => _status = s.couldNotDeleteEvent('$error'));
       }
     }
   }
 
+  String _eventWhenLine(ScheduledHouseEvent event, RoomiesStrings s, String locale) {
+    final when = formatDisplayDateTime(event.dtstartLocal, localeCode: locale);
+    return '$when · ${event.timezone} · ${event.rrule}';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final app = context.watch<AppState>();
+    final s = app.strings;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 10),
       child: Padding(
@@ -594,24 +621,35 @@ class _ScheduleCardState extends State<_ScheduleCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            RoomiesHeading(context.watch<AppState>().strings.scheduledEvents, level: 3),
+            RoomiesHeading(s.scheduledEvents, level: 3),
             for (final event in _items)
               RoomiesArticleCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(event.title, style: Theme.of(context).textTheme.titleMedium),
-                    Text('${event.dtstartLocal} · ${event.timezone} · ${event.rrule}'),
+                    Text(_eventWhenLine(event, s, app.localeCode)),
                     if (event.exdates.isNotEmpty)
-                      Text('Exceptions: ${event.exdates.join(', ')}'),
+                      Text(
+                        s.exceptionsList(
+                          event.exdates
+                              .map(
+                                (d) => formatDisplayDateTime(
+                                  d,
+                                  localeCode: app.localeCode,
+                                ),
+                              )
+                              .join(', '),
+                        ),
+                      ),
                     if (event.creatorId == widget.userId || widget.admin) ...[
                       TextButton(
                         onPressed: () => _beginEdit(event),
-                        child: Text(context.watch<AppState>().strings.edit),
+                        child: Text(s.edit),
                       ),
                       TextButton(
                         onPressed: () => _delete(event.id),
-                        child: Text(context.watch<AppState>().strings.delete),
+                        child: Text(s.delete),
                       ),
                     ],
                   ],
@@ -619,28 +657,34 @@ class _ScheduleCardState extends State<_ScheduleCard> {
               ),
             if (widget.canCreate) ...[
               RoomiesHeading(
-                _editingId != null ? context.read<AppState>().strings.editScheduledEvent : 'Add scheduled event',
+                _editingId != null ? s.editScheduledEvent : s.addScheduledEvent,
                 level: 4,
               ),
               TextFormField(
                 controller: _title,
-                decoration: const InputDecoration(labelText: 'Title'),
+                decoration: InputDecoration(labelText: s.title),
               ),
               TextFormField(
                 controller: _start,
-                decoration: const InputDecoration(labelText: 'Local start'),
+                decoration: InputDecoration(labelText: s.localStart),
               ),
               TextFormField(
                 controller: _zone,
-                decoration: const InputDecoration(labelText: 'IANA timezone'),
+                decoration: InputDecoration(labelText: s.ianaTimezone),
               ),
               DropdownButtonFormField<String>(
                 value: _frequency,
-                decoration: const InputDecoration(labelText: 'Frequency'),
-                items: const [
-                  DropdownMenuItem(value: 'DAILY', child: Text('Daily')),
-                  DropdownMenuItem(value: 'WEEKLY', child: Text('Weekly')),
-                  DropdownMenuItem(value: 'MONTHLY', child: Text('Monthly')),
+                decoration: InputDecoration(labelText: s.frequency),
+                items: [
+                  DropdownMenuItem(value: 'DAILY', child: Text(s.frequencyDaily)),
+                  DropdownMenuItem(
+                    value: 'WEEKLY',
+                    child: Text(s.frequencyWeekly),
+                  ),
+                  DropdownMenuItem(
+                    value: 'MONTHLY',
+                    child: Text(s.frequencyMonthly),
+                  ),
                 ],
                 onChanged: (value) {
                   if (value == null) return;
@@ -649,48 +693,39 @@ class _ScheduleCardState extends State<_ScheduleCard> {
               ),
               TextFormField(
                 controller: _interval,
-                decoration:
-                    const InputDecoration(labelText: 'Interval (1–366)'),
+                decoration: InputDecoration(labelText: s.intervalRange),
                 keyboardType: TextInputType.number,
               ),
               TextFormField(
                 controller: _count,
-                decoration: const InputDecoration(
-                  labelText: 'Count (1–366; leave blank to use until)',
-                ),
+                decoration: InputDecoration(labelText: s.countRange),
                 keyboardType: TextInputType.number,
               ),
               TextFormField(
                 controller: _until,
-                decoration: const InputDecoration(
-                  labelText: 'Until (optional, YYYYMMDDTHHMMSS)',
-                ),
+                decoration: InputDecoration(labelText: s.untilOptional),
               ),
               TextFormField(
                 controller: _exdates,
-                decoration: const InputDecoration(
-                  labelText: 'EXDATE local times (comma-separated)',
-                ),
+                decoration: InputDecoration(labelText: s.exdateLocalTimes),
               ),
               FilledButton(
                 onPressed: _saving ? null : _save,
                 child: Text(
                   _saving
-                      ? 'Saving…'
+                      ? s.savingEllipsis
                       : _editingId != null
-                          ? 'Save scheduled event'
-                          : 'Create scheduled event',
+                          ? s.saveScheduledEvent
+                          : s.createScheduledEvent,
                 ),
               ),
               if (_editingId != null)
                 TextButton(
                   onPressed: _saving ? null : _cancelEdit,
-                  child: const Text('Cancel edit'),
+                  child: Text(s.cancelEdit),
                 ),
             ] else
-              const Text(
-                'Monitors can view scheduled events but cannot create, edit, or delete them.',
-              ),
+              Text(s.monitorsViewOnlySchedule),
             if (_status.isNotEmpty)
               Semantics(liveRegion: true, child: Text(_status)),
           ],

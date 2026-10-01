@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/datetime_format.dart';
 import '../../core/roles.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
@@ -134,7 +135,8 @@ class _NotesSectionState extends State<NotesSection> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<AppState>().strings;
+    final app = context.watch<AppState>();
+    final s = app.strings;
     return RoomiesTabPanel(
       name: s.tabNotes,
       child: Column(
@@ -178,7 +180,13 @@ class _NotesSectionState extends State<NotesSection> {
                     RoomiesHeading(note.title, level: 3),
                     Text(note.content),
                     Text(
-                      s.noteBy(note.authorName, note.updatedAt),
+                      s.noteBy(
+                        note.authorName,
+                        formatDisplayDateTime(
+                          note.updatedAt,
+                          localeCode: app.localeCode,
+                        ),
+                      ),
                       style: const TextStyle(color: Colors.grey, fontSize: 12),
                     ),
                     if (_canEdit(note)) ...[

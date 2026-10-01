@@ -97,15 +97,17 @@ class RoomiesAtmosphere extends StatelessWidget {
       ),
       child: Stack(
         children: [
+          // Keep blobs mostly off-canvas so they don't crowd top-right CTAs
+          // (e.g. Open house) on CanvasKit phone web.
           Positioned(
-            top: -80,
-            right: -40,
-            child: _Blob(size: 260, color: p.blobPrimary),
+            top: -140,
+            right: -120,
+            child: _Blob(size: 168, color: p.blobPrimary),
           ),
           Positioned(
-            bottom: -60,
-            left: -50,
-            child: _Blob(size: 240, color: p.blobSecondary),
+            bottom: -130,
+            left: -140,
+            child: _Blob(size: 150, color: p.blobSecondary),
           ),
           child,
         ],

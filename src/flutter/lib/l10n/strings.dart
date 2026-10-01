@@ -171,8 +171,9 @@ class RoomiesStrings {
       isPortuguese ? 'Calendário' : 'Calendar';
   String get tabBalances =>
       isPortuguese ? 'Saldos' : 'Balances';
-  String get tabNotifications =>
-      isPortuguese ? 'Agenda' : 'Schedule';
+  String get tabNotifications => isPortuguese
+      ? 'Notificações / Agenda'
+      : 'Notifications / Schedule';
   String get tabMembers =>
       isPortuguese ? 'Membros' : 'Members';
 
@@ -256,6 +257,13 @@ class RoomiesStrings {
   String noteBy(String author, String updated) => isPortuguese
       ? 'Por $author · atualizado $updated'
       : 'By $author · updated $updated';
+
+  String lastSeen(String when) =>
+      isPortuguese ? 'visto por último $when' : 'last seen $when';
+  String exceptionsList(String dates) =>
+      isPortuguese ? 'Exceções: $dates' : 'Exceptions: $dates';
+  String deviceLine(String platform, String label, String when) =>
+      '$platform: $label ($when)';
 
   String get balances => isPortuguese ? 'Saldos' : 'Balances';
   String get balancesRefreshHint => isPortuguese
@@ -357,13 +365,109 @@ class RoomiesStrings {
   String get retryNotificationSettings => isPortuguese
       ? 'Tentar carregar de novo'
       : 'Retry loading notification settings';
+  String unableToLoadNotificationSettings(String detail) => isPortuguese
+      ? 'Não foi possível carregar as preferências: $detail'
+      : 'Unable to load notification settings: $detail';
   String get yourNotificationPreferences => isPortuguese
       ? 'Suas preferências de notificação'
       : 'Your notification preferences';
+  String get sharedExpenseAlerts =>
+      isPortuguese ? 'Alertas de despesas compartilhadas' : 'Shared expense alerts';
+  String get scheduledReminderAlerts => isPortuguese
+      ? 'Alertas de lembretes agendados'
+      : 'Scheduled reminder alerts';
+  String get delivery => isPortuguese ? 'Entrega' : 'Delivery';
+  String get deliveryImmediate =>
+      isPortuguese ? 'Imediata' : 'Immediate';
+  String get deliveryDailyDigest =>
+      isPortuguese ? 'Resumo diário' : 'Daily digest';
+  String get ianaTimezone =>
+      isPortuguese ? 'Fuso horário IANA' : 'IANA timezone';
+  String get quietStartLocal =>
+      isPortuguese ? 'Início do silêncio (local)' : 'Quiet start (local)';
+  String get quietEndLocal =>
+      isPortuguese ? 'Fim do silêncio (local)' : 'Quiet end (local)';
+  String get dailyDigestTimeLocal => isPortuguese
+      ? 'Horário do resumo diário (local)'
+      : 'Daily digest time (local)';
   String get savePreferences =>
       isPortuguese ? 'Salvar preferências' : 'Save preferences';
+  String get timezoneValidationHint => isPortuguese
+      ? 'Use um fuso IANA e horários entre 00:00 e 23:59.'
+      : 'Use an IANA timezone and times between 00:00 and 23:59.';
+  String get notificationPreferencesSaved => isPortuguese
+      ? 'Preferências de notificação salvas.'
+      : 'Notification preferences saved.';
+  String couldNotSavePreferences(String detail) => isPortuguese
+      ? 'Não foi possível salvar as preferências: $detail'
+      : 'Could not save preferences: $detail';
+
+  String get browserPush =>
+      isPortuguese ? 'Push no navegador' : 'Browser push';
+  String get browserPushOnlyWeb => isPortuguese
+      ? 'O push no navegador só está disponível em um navegador compatível.'
+      : 'Browser push is only available in a supported web browser.';
+  String get enableBrowserPush =>
+      isPortuguese ? 'Ativar push no navegador' : 'Enable browser push';
+  String get disableBrowserPush =>
+      isPortuguese ? 'Desativar push no navegador' : 'Disable browser push';
+  String get browserPushEnabled =>
+      isPortuguese ? 'Push no navegador ativado.' : 'Browser push enabled.';
+  String get browserPushDisabled =>
+      isPortuguese ? 'Push no navegador desativado.' : 'Browser push disabled.';
+  String subscriptionRefreshFailed(String detail) => isPortuguese
+      ? 'Inscrição salva, mas a atualização falhou: $detail'
+      : 'Subscription saved but refresh failed: $detail';
+  String get yourDevices =>
+      isPortuguese ? 'Seus dispositivos' : 'Your devices';
+
   String get scheduledEvents =>
       isPortuguese ? 'Eventos agendados' : 'Scheduled events';
+  String get addScheduledEvent =>
+      isPortuguese ? 'Adicionar evento agendado' : 'Add scheduled event';
   String get editScheduledEvent =>
       isPortuguese ? 'Editar evento agendado' : 'Edit scheduled event';
+  String get localStart =>
+      isPortuguese ? 'Início local' : 'Local start';
+  String get frequency => isPortuguese ? 'Frequência' : 'Frequency';
+  String get frequencyDaily => isPortuguese ? 'Diária' : 'Daily';
+  String get frequencyWeekly => isPortuguese ? 'Semanal' : 'Weekly';
+  String get frequencyMonthly => isPortuguese ? 'Mensal' : 'Monthly';
+  String get intervalRange =>
+      isPortuguese ? 'Intervalo (1–366)' : 'Interval (1–366)';
+  String get countRange => isPortuguese
+      ? 'Contagem (1–366; deixe em branco para usar até)'
+      : 'Count (1–366; leave blank to use until)';
+  String get untilOptional => isPortuguese
+      ? 'Até (opcional, YYYYMMDDTHHMMSS)'
+      : 'Until (optional, YYYYMMDDTHHMMSS)';
+  String get exdateLocalTimes => isPortuguese
+      ? 'EXDATE horários locais (separados por vírgula)'
+      : 'EXDATE local times (comma-separated)';
+  String get createScheduledEvent =>
+      isPortuguese ? 'Criar evento agendado' : 'Create scheduled event';
+  String get saveScheduledEvent =>
+      isPortuguese ? 'Salvar evento agendado' : 'Save scheduled event';
+  String get savingEllipsis => isPortuguese ? 'Salvando…' : 'Saving…';
+  String get cancelEdit =>
+      isPortuguese ? 'Cancelar edição' : 'Cancel edit';
+  String get editingScheduledEvent =>
+      isPortuguese ? 'Editando evento agendado.' : 'Editing scheduled event.';
+  String get eventEditingCancelled =>
+      isPortuguese ? 'Edição do evento cancelada.' : 'Event editing cancelled.';
+  String get scheduledEventCreated =>
+      isPortuguese ? 'Evento agendado criado.' : 'Scheduled event created.';
+  String get scheduledEventUpdated =>
+      isPortuguese ? 'Evento agendado atualizado.' : 'Scheduled event updated.';
+  String get scheduledEventDeleted =>
+      isPortuguese ? 'Evento agendado excluído.' : 'Scheduled event deleted.';
+  String couldNotSaveEvent(String detail) => isPortuguese
+      ? 'Não foi possível salvar o evento: $detail'
+      : 'Could not save event: $detail';
+  String couldNotDeleteEvent(String detail) => isPortuguese
+      ? 'Não foi possível excluir o evento: $detail'
+      : 'Could not delete event: $detail';
+  String get monitorsViewOnlySchedule => isPortuguese
+      ? 'Monitores podem ver eventos agendados, mas não criar, editar ou excluir.'
+      : 'Monitors can view scheduled events but cannot create, edit, or delete them.';
 }

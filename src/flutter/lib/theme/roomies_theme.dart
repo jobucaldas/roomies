@@ -68,8 +68,8 @@ class RoomiesPalette extends ThemeExtension<RoomiesPalette> {
       Color(0xFFF3F6F7),
       Color(0xFFDDE8EA),
     ],
-    blobPrimary: Color(0x240D7377),
-    blobSecondary: Color(0x1A095456),
+    blobPrimary: Color(0x140D7377),
+    blobSecondary: Color(0x0D095456),
     shadow: Color(0x1414212B),
   );
 
@@ -94,8 +94,8 @@ class RoomiesPalette extends ThemeExtension<RoomiesPalette> {
       Color(0xFF0E1A1E),
       Color(0xFF132428),
     ],
-    blobPrimary: Color(0x333CB8B8),
-    blobSecondary: Color(0x227AD4D1),
+    blobPrimary: Color(0x1F3CB8B8),
+    blobSecondary: Color(0x147AD4D1),
     shadow: Color(0x66000000),
   );
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../core/datetime_format.dart';
 import '../core/money.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
@@ -266,7 +267,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           for (final event in _events)
                                             _SummaryRow(
                                               title: event.title,
-                                              subtitle: event.when,
+                                              subtitle: formatDisplayDateTime(
+                                                event.when,
+                                                localeCode: app.localeCode,
+                                              ),
                                             ),
                                         ],
                                       ),
@@ -302,7 +306,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             _SummaryRow(
                                               title: expense.description,
                                               subtitle:
-                                                  '${expense.date} · ${formatMoney(expense.amount, localeCode: app.localeCode)}',
+                                                  '${formatDisplayDate(expense.date, localeCode: app.localeCode)} · ${formatMoney(expense.amount, localeCode: app.localeCode)}',
                                             ),
                                         ],
                                       ),
