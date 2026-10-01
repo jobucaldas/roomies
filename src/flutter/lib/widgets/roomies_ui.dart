@@ -78,6 +78,7 @@ class RoomiesError extends StatelessWidget {
   }
 }
 
+/// Page backdrop — flat brand canvas only (no decorative blobs/circles).
 class RoomiesAtmosphere extends StatelessWidget {
   const RoomiesAtmosphere({super.key, required this.child});
 
@@ -86,53 +87,9 @@ class RoomiesAtmosphere extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = RoomiesPalette.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: p.atmosphere,
-          stops: const [0.0, 0.35, 0.7, 1.0],
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Keep blobs mostly off-canvas so they don't crowd top-right CTAs
-          // (e.g. Open house) on CanvasKit phone web.
-          Positioned(
-            top: -140,
-            right: -120,
-            child: _Blob(size: 168, color: p.blobPrimary),
-          ),
-          Positioned(
-            bottom: -130,
-            left: -140,
-            child: _Blob(size: 150, color: p.blobSecondary),
-          ),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _Blob extends StatelessWidget {
-  const _Blob({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color,
-        ),
-      ),
+    return ColoredBox(
+      color: p.canvas,
+      child: child,
     );
   }
 }

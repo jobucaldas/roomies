@@ -1,9 +1,42 @@
 import 'package:flutter/material.dart';
 
-/// Roomies visual system — calm teal household, not a generic SaaS template.
+/// Brand accent families the user can pick in Settings.
+enum BrandAccent {
+  /// Teal-green `#21C68F`.
+  mint,
+
+  /// Deep plum/magenta `#53134B`.
+  plum,
+}
+
+extension BrandAccentX on BrandAccent {
+  String get id => switch (this) {
+        BrandAccent.mint => 'mint',
+        BrandAccent.plum => 'plum',
+      };
+
+  /// Seed accent used for swatches and primary actions.
+  Color get seed => switch (this) {
+        BrandAccent.mint => const Color(0xFF21C68F),
+        BrandAccent.plum => const Color(0xFF53134B),
+      };
+
+  static BrandAccent fromId(String? raw) {
+    switch (raw) {
+      case 'plum':
+        return BrandAccent.plum;
+      case 'mint':
+      default:
+        return BrandAccent.mint;
+    }
+  }
+}
+
+/// Roomies visual system — brand accent + light/dark tokens.
 ///
 /// Fonts load via `web/index.html` (Fraunces + Source Sans 3). Prefer
 /// [RoomiesPalette.of] in widgets so light/dark tokens stay in sync.
+/// Field names `teal*` are historical accent slots (mint or plum).
 @immutable
 class RoomiesPalette extends ThemeExtension<RoomiesPalette> {
   const RoomiesPalette({
@@ -20,9 +53,6 @@ class RoomiesPalette extends ThemeExtension<RoomiesPalette> {
     required this.danger,
     required this.dangerSoft,
     required this.success,
-    required this.atmosphere,
-    required this.blobPrimary,
-    required this.blobSecondary,
     required this.shadow,
   });
 
@@ -39,65 +69,102 @@ class RoomiesPalette extends ThemeExtension<RoomiesPalette> {
   final Color danger;
   final Color dangerSoft;
   final Color success;
-  final List<Color> atmosphere;
-  final Color blobPrimary;
-  final Color blobSecondary;
   final Color shadow;
 
   static RoomiesPalette of(BuildContext context) {
-    return Theme.of(context).extension<RoomiesPalette>() ?? light;
+    return Theme.of(context).extension<RoomiesPalette>() ??
+        forBrand(BrandAccent.mint, Brightness.light);
   }
 
-  static const light = RoomiesPalette(
-    ink: Color(0xFF14212B),
-    inkMuted: Color(0xFF5A6B76),
-    teal: Color(0xFF0D7377),
-    tealDeep: Color(0xFF095456),
-    tealSoft: Color(0xFFD7ECEB),
-    mist: Color(0xFFE7EEF0),
-    canvas: Color(0xFFF3F6F7),
-    surface: Color(0xFFFFFFF8),
-    surfaceRaised: Color(0xFFFFFFFF),
-    line: Color(0xFFD3DEE2),
-    danger: Color(0xFFB42318),
-    dangerSoft: Color(0xFFFCE8E6),
-    success: Color(0xFF1B7A4A),
-    atmosphere: [
-      Color(0xFFCBE3E1),
-      Color(0xFFE7EEF0),
-      Color(0xFFF3F6F7),
-      Color(0xFFDDE8EA),
-    ],
-    blobPrimary: Color(0x140D7377),
-    blobSecondary: Color(0x0D095456),
-    shadow: Color(0x1414212B),
-  );
+  static RoomiesPalette forBrand(BrandAccent accent, Brightness brightness) {
+    return brightness == Brightness.dark
+        ? _darkFor(accent)
+        : _lightFor(accent);
+  }
 
-  /// Night household — deep ink teal, not purple/glow SaaS dark.
-  static const dark = RoomiesPalette(
-    ink: Color(0xFFE6EEF1),
-    inkMuted: Color(0xFF9AADB8),
-    teal: Color(0xFF3CB8B8),
-    tealDeep: Color(0xFF7AD4D1),
-    tealSoft: Color(0xFF1A3336),
-    mist: Color(0xFF1C2A31),
-    canvas: Color(0xFF0B1418),
-    surface: Color(0xFF121C22),
-    surfaceRaised: Color(0xFF18242B),
-    line: Color(0xFF2A3A43),
-    danger: Color(0xFFFF8A7A),
-    dangerSoft: Color(0xFF3A1C1A),
-    success: Color(0xFF5DCE8E),
-    atmosphere: [
-      Color(0xFF0B1418),
-      Color(0xFF102026),
-      Color(0xFF0E1A1E),
-      Color(0xFF132428),
-    ],
-    blobPrimary: Color(0x1F3CB8B8),
-    blobSecondary: Color(0x147AD4D1),
-    shadow: Color(0x66000000),
-  );
+  /// Default light mint — kept for legacy static callers.
+  static final light = _lightFor(BrandAccent.mint);
+
+  /// Default dark mint — kept for legacy static callers.
+  static final dark = _darkFor(BrandAccent.mint);
+
+  static RoomiesPalette _lightFor(BrandAccent accent) {
+    switch (accent) {
+      case BrandAccent.mint:
+        return const RoomiesPalette(
+          ink: Color(0xFF14212B),
+          inkMuted: Color(0xFF5A6B76),
+          teal: Color(0xFF21C68F),
+          tealDeep: Color(0xFF0F8A62),
+          tealSoft: Color(0xFFD4F5E9),
+          mist: Color(0xFFE6F3EE),
+          canvas: Color(0xFFF3F8F6),
+          surface: Color(0xFFFFFFF8),
+          surfaceRaised: Color(0xFFFFFFFF),
+          line: Color(0xFFD3E2DB),
+          danger: Color(0xFFB42318),
+          dangerSoft: Color(0xFFFCE8E6),
+          success: Color(0xFF1B7A4A),
+          shadow: Color(0x1414212B),
+        );
+      case BrandAccent.plum:
+        return const RoomiesPalette(
+          ink: Color(0xFF1C1420),
+          inkMuted: Color(0xFF6B5A68),
+          teal: Color(0xFF53134B),
+          tealDeep: Color(0xFF3A0D34),
+          tealSoft: Color(0xFFF3E4F0),
+          mist: Color(0xFFF0E6ED),
+          canvas: Color(0xFFF8F4F7),
+          surface: Color(0xFFFFFFF8),
+          surfaceRaised: Color(0xFFFFFFFF),
+          line: Color(0xFFE0D3DE),
+          danger: Color(0xFFB42318),
+          dangerSoft: Color(0xFFFCE8E6),
+          success: Color(0xFF1B7A4A),
+          shadow: Color(0x141C1420),
+        );
+    }
+  }
+
+  static RoomiesPalette _darkFor(BrandAccent accent) {
+    switch (accent) {
+      case BrandAccent.mint:
+        return const RoomiesPalette(
+          ink: Color(0xFFE6EEF1),
+          inkMuted: Color(0xFF9AADB8),
+          teal: Color(0xFF21C68F),
+          tealDeep: Color(0xFF7AD9B4),
+          tealSoft: Color(0xFF16382C),
+          mist: Color(0xFF1A2C26),
+          canvas: Color(0xFF0B1412),
+          surface: Color(0xFF121C1A),
+          surfaceRaised: Color(0xFF182422),
+          line: Color(0xFF2A3A36),
+          danger: Color(0xFFFF8A7A),
+          dangerSoft: Color(0xFF3A1C1A),
+          success: Color(0xFF5DCE8E),
+          shadow: Color(0x66000000),
+        );
+      case BrandAccent.plum:
+        return const RoomiesPalette(
+          ink: Color(0xFFF0E6EE),
+          inkMuted: Color(0xFFB09AAD),
+          teal: Color(0xFFC45BB0),
+          tealDeep: Color(0xFFE8A8D8),
+          tealSoft: Color(0xFF2A1528),
+          mist: Color(0xFF241520),
+          canvas: Color(0xFF120C11),
+          surface: Color(0xFF1A1218),
+          surfaceRaised: Color(0xFF241820),
+          line: Color(0xFF3A2A38),
+          danger: Color(0xFFFF8A7A),
+          dangerSoft: Color(0xFF3A1C1A),
+          success: Color(0xFF5DCE8E),
+          shadow: Color(0x66000000),
+        );
+    }
+  }
 
   @override
   RoomiesPalette copyWith({
@@ -114,9 +181,6 @@ class RoomiesPalette extends ThemeExtension<RoomiesPalette> {
     Color? danger,
     Color? dangerSoft,
     Color? success,
-    List<Color>? atmosphere,
-    Color? blobPrimary,
-    Color? blobSecondary,
     Color? shadow,
   }) {
     return RoomiesPalette(
@@ -133,9 +197,6 @@ class RoomiesPalette extends ThemeExtension<RoomiesPalette> {
       danger: danger ?? this.danger,
       dangerSoft: dangerSoft ?? this.dangerSoft,
       success: success ?? this.success,
-      atmosphere: atmosphere ?? this.atmosphere,
-      blobPrimary: blobPrimary ?? this.blobPrimary,
-      blobSecondary: blobSecondary ?? this.blobSecondary,
       shadow: shadow ?? this.shadow,
     );
   }
@@ -158,28 +219,22 @@ class RoomiesPalette extends ThemeExtension<RoomiesPalette> {
       danger: mix(danger, other.danger),
       dangerSoft: mix(dangerSoft, other.dangerSoft),
       success: mix(success, other.success),
-      atmosphere: [
-        for (var i = 0; i < atmosphere.length; i++)
-          mix(atmosphere[i], other.atmosphere[i.clamp(0, other.atmosphere.length - 1)]),
-      ],
-      blobPrimary: mix(blobPrimary, other.blobPrimary),
-      blobSecondary: mix(blobSecondary, other.blobSecondary),
       shadow: mix(shadow, other.shadow),
     );
   }
 }
 
-/// Legacy static accessors — light tokens only. Prefer [RoomiesPalette.of].
+/// Legacy static accessors — light mint tokens only. Prefer [RoomiesPalette.of].
 abstract final class RoomiesColors {
   static const ink = Color(0xFF14212B);
   static const inkMuted = Color(0xFF5A6B76);
-  static const teal = Color(0xFF0D7377);
-  static const tealDeep = Color(0xFF095456);
-  static const tealSoft = Color(0xFFD7ECEB);
-  static const mist = Color(0xFFE7EEF0);
-  static const canvas = Color(0xFFF3F6F7);
+  static const teal = Color(0xFF21C68F);
+  static const tealDeep = Color(0xFF0F8A62);
+  static const tealSoft = Color(0xFFD4F5E9);
+  static const mist = Color(0xFFE6F3EE);
+  static const canvas = Color(0xFFF3F8F6);
   static const surface = Color(0xFFFFFFF8);
-  static const line = Color(0xFFD3DEE2);
+  static const line = Color(0xFFD3E2DB);
   static const danger = Color(0xFFB42318);
   static const dangerSoft = Color(0xFFFCE8E6);
   static const success = Color(0xFF1B7A4A);
@@ -188,11 +243,14 @@ abstract final class RoomiesColors {
 const _displayFamily = 'Fraunces';
 const _bodyFamily = 'Source Sans 3';
 
-ThemeData buildRoomiesTheme({Brightness brightness = Brightness.light}) {
-  final palette =
-      brightness == Brightness.dark ? RoomiesPalette.dark : RoomiesPalette.light;
-  final onPrimary =
-      brightness == Brightness.dark ? const Color(0xFF062022) : Colors.white;
+ThemeData buildRoomiesTheme({
+  Brightness brightness = Brightness.light,
+  BrandAccent brand = BrandAccent.mint,
+}) {
+  final palette = RoomiesPalette.forBrand(brand, brightness);
+  final onPrimary = brightness == Brightness.dark
+      ? const Color(0xFF0A1210)
+      : Colors.white;
 
   final colorScheme = ColorScheme(
     brightness: brightness,

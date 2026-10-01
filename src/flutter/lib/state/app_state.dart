@@ -6,6 +6,7 @@ import '../api/api_error.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/preferences_storage.dart';
+import '../theme/roomies_theme.dart';
 
 class AppState extends ChangeNotifier {
   AppState(
@@ -29,6 +30,9 @@ class AppState extends ChangeNotifier {
 
   /// Theme override: `null` (system), `light`, or `dark`.
   String? themeOverride;
+
+  /// Brand accent family (`mint` / `plum`).
+  BrandAccent brandAccent = BrandAccent.mint;
 
   /// Preferred house for later sessions.
   String? defaultHouseId;
@@ -57,6 +61,7 @@ class AppState extends ChangeNotifier {
   Future<void> loadPreferences() async {
     localeOverride = await preferences.loadLocaleOverride();
     themeOverride = await preferences.loadThemeOverride();
+    brandAccent = BrandAccentX.fromId(await preferences.loadBrandAccent());
     defaultHouseId = await preferences.loadDefaultHouseId();
     _applyLocale();
     notifyListeners();
@@ -83,6 +88,12 @@ class AppState extends ChangeNotifier {
     if (mode != null && mode != 'light' && mode != 'dark') return;
     themeOverride = mode;
     await preferences.saveThemeOverride(mode);
+    notifyListeners();
+  }
+
+  Future<void> setBrandAccent(BrandAccent accent) async {
+    brandAccent = accent;
+    await preferences.saveBrandAccent(accent.id);
     notifyListeners();
   }
 

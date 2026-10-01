@@ -4,6 +4,7 @@ import 'package:roomies/api/api_client.dart';
 import 'package:roomies/l10n/strings.dart';
 import 'package:roomies/services/preferences_storage.dart';
 import 'package:roomies/state/app_state.dart';
+import 'package:roomies/theme/roomies_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -82,5 +83,20 @@ void main() {
     expect(app.themeMode, ThemeMode.light);
     await app.setThemeOverride(null);
     expect(app.themeMode, ThemeMode.system);
+  });
+
+  test('brand accent persists mint and plum', () async {
+    final app = AppState(
+      ApiClient(baseUrl: 'http://example/api'),
+      preferences: PreferencesStorage(),
+      deviceLocale: 'en-US',
+    );
+    await app.loadPreferences();
+    expect(app.brandAccent, BrandAccent.mint);
+    await app.setBrandAccent(BrandAccent.plum);
+    expect(app.brandAccent, BrandAccent.plum);
+    expect(await PreferencesStorage().loadBrandAccent(), 'plum');
+    await app.setBrandAccent(BrandAccent.mint);
+    expect(app.brandAccent, BrandAccent.mint);
   });
 }

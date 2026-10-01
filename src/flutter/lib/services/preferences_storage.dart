@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 const localeOverrideKey = 'roomies.locale.override';
 const defaultHouseKey = 'roomies.default.house';
 const themeOverrideKey = 'roomies.theme.override';
+const brandAccentKey = 'roomies.brand.accent';
 
 /// Client preferences that survive sessions (locale, theme, default house).
 class PreferencesStorage {
@@ -38,6 +39,19 @@ class PreferencesStorage {
     } else {
       await prefs.setString(themeOverrideKey, mode);
     }
+  }
+
+  /// Brand accent id: `mint` (default) or `plum`.
+  Future<String> loadBrandAccent() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(brandAccentKey);
+    if (value == 'plum' || value == 'mint') return value!;
+    return 'mint';
+  }
+
+  Future<void> saveBrandAccent(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(brandAccentKey, id);
   }
 
   Future<String?> loadDefaultHouseId() async {

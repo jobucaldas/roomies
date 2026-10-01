@@ -128,6 +128,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               _Section(
+                title: s.brandTheme,
+                subtitle: s.brandThemeHint,
+                child: Column(
+                  children: [
+                    _BrandTile(
+                      label: s.brandMint,
+                      color: BrandAccent.mint.seed,
+                      selected: app.brandAccent == BrandAccent.mint,
+                      onTap: () => app.setBrandAccent(BrandAccent.mint),
+                    ),
+                    _BrandTile(
+                      label: s.brandPlum,
+                      color: BrandAccent.plum.seed,
+                      selected: app.brandAccent == BrandAccent.plum,
+                      onTap: () => app.setBrandAccent(BrandAccent.plum),
+                    ),
+                  ],
+                ),
+              ),
+              _Section(
                 title: s.appearance,
                 child: Column(
                   children: [
@@ -309,6 +329,69 @@ class _ChoiceTile extends StatelessWidget {
                 ),
               ),
               if (trailing != null) trailing!,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BrandTile extends StatelessWidget {
+  const _BrandTile({
+    required this.label,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = RoomiesPalette.of(context);
+    return Material(
+      color: selected ? p.tealSoft : Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: selected ? p.ink : p.line,
+                    width: selected ? 2 : 1,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w500,
+                      ),
+                ),
+              ),
+              Icon(
+                selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+                size: 22,
+                color: selected ? p.tealDeep : p.inkMuted,
+              ),
             ],
           ),
         ),

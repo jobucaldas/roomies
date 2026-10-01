@@ -103,6 +103,15 @@ class RoomiesStrings {
   String get languagePortuguese => 'Português';
   String get appearance =>
       isPortuguese ? 'Aparência' : 'Appearance';
+  String get brandTheme =>
+      isPortuguese ? 'Tema da marca' : 'Brand theme';
+  String get brandThemeHint => isPortuguese
+      ? 'Escolha a cor de destaque do app.'
+      : 'Pick the accent color for the app.';
+  String get brandMint =>
+      isPortuguese ? 'Verde-água' : 'Mint';
+  String get brandPlum =>
+      isPortuguese ? 'Ameixa' : 'Plum';
   String get themeSystem => isPortuguese
       ? 'Dispositivo'
       : 'Device';
