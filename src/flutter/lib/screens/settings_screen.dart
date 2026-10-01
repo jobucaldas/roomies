@@ -2,12 +2,83 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/roomies_theme.dart';
 import '../widgets/app_shell.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final _rename = TextEditingController();
+  String? _renameHouseId;
+  var _renaming = false;
+  var _renameSeeded = false;
+  String? _renameStatus;
+
+  @override
+  void dispose() {
+    _rename.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_renameSeeded) return;
+    final app = context.read<AppState>();
+    final id = app.defaultHouseId ??
+        (app.houses.isNotEmpty ? app.houses.first.id : null);
+    _renameHouseId = id;
+    if (id != null) {
+      for (final house in app.houses) {
+        if (house.id == id) {
+          _rename.text = house.name;
+          break;
+        }
+      }
+    }
+    _renameSeeded = true;
+  }
+
+  void _selectHouseForRename(House house) {
+    setState(() {
+      _renameHouseId = house.id;
+      _rename.text = house.name;
+      _renameStatus = null;
+    });
+  }
+
+  Future<void> _saveRename(AppState app) async {
+    final id = _renameHouseId;
+    final name = _rename.text.trim();
+    if (id == null || name.isEmpty) {
+      setState(() => _renameStatus = app.strings.selectHouseToRename);
+      return;
+    }
+    setState(() => _renaming = true);
+    try {
+      await app.api.updateHouse(id, name);
+      await app.refreshHouses();
+      if (!mounted) return;
+      setState(() {
+        _renaming = false;
+        _renameStatus = app.strings.houseRenamed;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _renaming = false;
+          _renameStatus = error.toString();
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,10 +151,46 @@ class SettingsScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              if (app.houses.isNotEmpty)
+                _Section(
+                  title: s.renameHouse,
+                  subtitle: s.renameHouseHint,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ...app.houses.map(
+                        (house) => _ChoiceTile(
+                          label: house.name,
+                          selected: _renameHouseId == house.id,
+                          onTap: () => _selectHouseForRename(house),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _rename,
+                        decoration: InputDecoration(labelText: s.houseName),
+                      ),
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton(
+                          onPressed: _renaming ? null : () => _saveRename(app),
+                          child: Text(s.save),
+                        ),
+                      ),
+                      if (_renameStatus != null) ...[
+                        const SizedBox(height: 8),
+                        Text(_renameStatus!),
+                      ],
+                    ],
+                  ),
+                ),
               const SizedBox(height: 12),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.logout_rounded, color: RoomiesColors.danger),
+                minVerticalPadding: 16,
+                leading:
+                    Icon(Icons.logout_rounded, color: RoomiesColors.danger),
                 title: Text(
                   s.logout,
                   style: TextStyle(color: RoomiesColors.danger),
@@ -115,7 +222,7 @@ class _Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -127,7 +234,7 @@ class _Section extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           child,
         ],
       ),
@@ -157,14 +264,14 @@ class _ChoiceTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           child: Row(
             children: [
               Icon(
                 selected
                     ? Icons.radio_button_checked
                     : Icons.radio_button_off,
-                size: 20,
+                size: 22,
                 color: selected
                     ? RoomiesColors.tealDeep
                     : RoomiesColors.inkMuted,

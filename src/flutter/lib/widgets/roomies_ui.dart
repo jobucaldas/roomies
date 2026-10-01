@@ -278,11 +278,14 @@ class RoomiesPrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: SizedBox(
         width: double.infinity,
         child: FilledButton(
           onPressed: enabled ? onPressed : null,
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(48),
+          ),
           child: Text(label),
         ),
       ),

@@ -20,7 +20,7 @@ const evidence = new WeakMap<Page, Evidence>();
 const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const sanitizedRequest = (method: string, url: string) => `${method} ${new URL(url).pathname
   .replace(/\/houses\/[^/]+/, '/houses/:id')
-  .replace(/\/(groceries|chores|calendar|chat)\/[^/]+/, '/$1/:id')}`;
+  .replace(/\/(groceries|chores|calendar)\/[^/]+/, '/$1/:id')}`;
 
 function assetPath(url: string) {
   const path = new URL(url).pathname;
@@ -72,7 +72,7 @@ test.afterEach(async ({ page }, info: TestInfo) => {
   expect(horizontalOverflow).toBeFalsy();
   await mkdir('artifacts/evidence', { recursive: true });
   const name = `${info.project.name}-household-${slug(info.title)}`;
-  // The chat interaction deletes its synthetic message before this screenshot so evidence never contains a chat body.
+  // Household evidence omits free-text message bodies.
   await page.screenshot({ path: `artifacts/evidence/${name}.png`, fullPage: true });
   await writeFile(`artifacts/evidence/${name}.json`, JSON.stringify({
     head,
@@ -125,7 +125,7 @@ async function open(page: Page, tab: string, heading: string) {
   return panel;
 }
 
-test('household groceries chores calendar and chat interactions', async ({ page, request }) => {
+test('household groceries chores and calendar interactions', async ({ page, request }) => {
   await household(page, request);
 
   const groceries = await open(page, 'Groceries', 'Groceries');
@@ -155,18 +155,4 @@ test('household groceries chores calendar and chat interactions', async ({ page,
   await expect(calendar.getByText('Calendar event saved.')).toBeVisible();
   await calendar.getByRole('button', { name: 'Delete' }).click();
   await expect(calendar.getByText('Calendar event deleted.')).toBeVisible();
-
-  const chat = await open(page, 'Chat', 'Chat');
-  await fillFlutterText(chat.getByLabel('Message'), 'Synthetic message');
-  await chat.getByRole('button', { name: 'Send message' }).click();
-  await expect(chat.getByText('Message sent.')).toBeVisible();
-  await chat.getByRole('button', { name: 'Edit message' }).click();
-  await fillFlutterText(chat.getByLabel('Message'), 'Synthetic edited message');
-  await chat.getByRole('button', { name: 'Save message' }).click();
-  await expect(chat.getByText('Message edited.')).toBeVisible();
-  await expect(chat.getByText('Synthetic edited message', { exact: true })).toBeVisible();
-  await chat.getByRole('button', { name: 'Delete message' }).click();
-  await expect(chat.getByText('Message deleted.')).toBeVisible();
-  await chat.getByRole('button', { name: 'Refresh chat' }).click();
-  await expect(chat.getByText('Chat refreshed.')).toBeVisible();
 });

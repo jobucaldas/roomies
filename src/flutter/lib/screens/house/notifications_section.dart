@@ -78,11 +78,11 @@ class _NotificationsSectionState extends State<NotificationsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const RoomiesHeading('Notifications & schedule', level: 2),
+        RoomiesHeading(context.watch<AppState>().strings.notificationsSchedule, level: 2),
         if (_loading)
           Semantics(
             liveRegion: true,
-            child: Text('Loading notification settings…'),
+            child: Text(context.watch<AppState>().strings.loadingNotificationSettings),
           )
         else if (_loadError != null) ...[
           Semantics(
@@ -91,7 +91,7 @@ class _NotificationsSectionState extends State<NotificationsSection> {
           ),
           FilledButton(
             onPressed: _load,
-            child: const Text('Retry loading notification settings'),
+            child: Text(context.watch<AppState>().strings.retryNotificationSettings),
           ),
         ] else if (_prefs != null &&
             notificationControlsReady(loading: _loading, error: _loadError)) ...[
@@ -185,7 +185,7 @@ class _PreferencesCardState extends State<_PreferencesCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const RoomiesHeading('Your notification preferences', level: 3),
+            RoomiesHeading(context.watch<AppState>().strings.yourNotificationPreferences, level: 3),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Shared expense alerts'),
@@ -272,7 +272,7 @@ class _PreferencesCardState extends State<_PreferencesCard> {
             ),
             FilledButton(
               onPressed: _save,
-              child: const Text('Save preferences'),
+              child: Text(context.watch<AppState>().strings.savePreferences),
             ),
             if (_status.isNotEmpty)
               Semantics(liveRegion: true, child: Text(_status)),
@@ -594,7 +594,7 @@ class _ScheduleCardState extends State<_ScheduleCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const RoomiesHeading('Scheduled events', level: 3),
+            RoomiesHeading(context.watch<AppState>().strings.scheduledEvents, level: 3),
             for (final event in _items)
               RoomiesArticleCard(
                 child: Column(
@@ -607,11 +607,11 @@ class _ScheduleCardState extends State<_ScheduleCard> {
                     if (event.creatorId == widget.userId || widget.admin) ...[
                       TextButton(
                         onPressed: () => _beginEdit(event),
-                        child: const Text('Edit'),
+                        child: Text(context.watch<AppState>().strings.edit),
                       ),
                       TextButton(
                         onPressed: () => _delete(event.id),
-                        child: const Text('Delete'),
+                        child: Text(context.watch<AppState>().strings.delete),
                       ),
                     ],
                   ],
@@ -619,7 +619,7 @@ class _ScheduleCardState extends State<_ScheduleCard> {
               ),
             if (widget.canCreate) ...[
               RoomiesHeading(
-                _editingId != null ? 'Edit scheduled event' : 'Add scheduled event',
+                _editingId != null ? context.read<AppState>().strings.editScheduledEvent : 'Add scheduled event',
                 level: 4,
               ),
               TextFormField(

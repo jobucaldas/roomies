@@ -24,6 +24,10 @@ void main() {
     expect(pt.signIn, 'Entrar');
     expect(pt.createAccount, 'Criar conta');
     expect(pt.settings, 'Configurações');
+    expect(pt.dashboard, 'Painel');
+    expect(pt.houseTabs.contains('Chat'), isFalse);
+    expect(pt.recentEvents, 'Eventos recentes');
+    expect(pt.monthMoney, 'Gastos do mês');
   });
 
   test('locale override beats device locale', () async {

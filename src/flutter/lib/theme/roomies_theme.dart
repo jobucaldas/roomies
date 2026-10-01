@@ -167,6 +167,7 @@ ThemeData buildRoomiesTheme() {
         foregroundColor: Colors.white,
         disabledBackgroundColor: RoomiesColors.mist,
         disabledForegroundColor: RoomiesColors.inkMuted,
+        minimumSize: const Size(48, 48),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         textStyle: themed.labelLarge,
@@ -185,6 +186,8 @@ ThemeData buildRoomiesTheme() {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: RoomiesColors.tealDeep,
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         textStyle: themed.labelLarge,
       ),
     ),

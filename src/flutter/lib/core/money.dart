@@ -1,7 +1,16 @@
+import 'package:intl/intl.dart';
+
 int? parseMoneyCents(String value) {
-  final trimmed = value.trim();
+  var trimmed = value.trim();
   if (trimmed.isEmpty || trimmed.startsWith('-')) {
     return null;
+  }
+  // Accept Brazilian decimal comma when there is no thousands-dot ambiguity.
+  if (trimmed.contains(',') && !trimmed.contains('.')) {
+    trimmed = trimmed.replaceAll(',', '.');
+  } else if (trimmed.contains(',') && trimmed.contains('.')) {
+    // pt-BR style 1.234,56 → 1234.56
+    trimmed = trimmed.replaceAll('.', '').replaceAll(',', '.');
   }
   final parts = trimmed.split('.');
   if (parts.length > 2) return null;
@@ -19,7 +28,13 @@ int? parseMoneyCents(String value) {
 
 double centsToApiAmount(int cents) => cents / 100.0;
 
-String formatMoney(double amount) => amount.toStringAsFixed(2);
+/// Format money for display. Portuguese locale uses BRL (reais); English uses USD.
+String formatMoney(double amount, {String localeCode = 'en'}) {
+  if (localeCode == 'pt') {
+    return NumberFormat.currency(locale: 'pt_BR', symbol: r'R$ ').format(amount);
+  }
+  return NumberFormat.currency(locale: 'en_US', symbol: r'$').format(amount);
+}
 
 List<Map<String, dynamic>> parseSplitEntries(String value, int totalCents) {
   final entries = <Map<String, dynamic>>[];
@@ -29,7 +44,8 @@ List<Map<String, dynamic>> parseSplitEntries(String value, int totalCents) {
     if (trimmed.isEmpty) continue;
     final parts = trimmed.split(':');
     if (parts.length != 2) {
-      throw FormatException('Custom splits use user-id:amount, separated by commas');
+      throw FormatException(
+          'Custom splits use user-id:amount, separated by commas');
     }
     final userId = parts[0].trim();
     if (userId.isEmpty) {
@@ -43,7 +59,8 @@ List<Map<String, dynamic>> parseSplitEntries(String value, int totalCents) {
     entries.add({'user_id': userId, 'amount': centsToApiAmount(cents)});
   }
   if (entries.isEmpty || sum != totalCents) {
-    throw FormatException('Custom split amounts must exactly equal the expense amount');
+    throw FormatException(
+        'Custom split amounts must exactly equal the expense amount');
   }
   return entries;
 }

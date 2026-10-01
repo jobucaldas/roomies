@@ -182,7 +182,7 @@ export async function openHouseViaUi(
     await page.goto(`${web}/dashboard`);
   }
   await expect(page).toHaveURL(/\/dashboard\/?$/);
-  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible({
+  await expect(page.getByRole('heading', { name: /^(Dashboard|Painel)$/ })).toBeVisible({
     timeout: 30_000,
   });
 
@@ -211,7 +211,7 @@ export async function openHouseViaUi(
 /** Sign out from AppShell (sidebar on wide, drawer on narrow). */
 export async function logoutViaUi(page: Page, web: string) {
   await page.goto(`${web}/dashboard`);
-  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible({
+  await expect(page.getByRole('heading', { name: /^(Dashboard|Painel)$/ })).toBeVisible({
     timeout: 30_000,
   });
   try {

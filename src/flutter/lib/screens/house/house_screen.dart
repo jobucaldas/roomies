@@ -36,7 +36,7 @@ class _HouseScreenState extends State<HouseScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 9, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
     _tabController.addListener(_onTabChanged);
     _load();
   }
@@ -141,44 +141,45 @@ class _HouseScreenState extends State<HouseScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const CircularProgressIndicator(),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
                       Text(s.loading),
                     ],
                   ),
                 ),
               )
             else if (_house != null) ...[
-              if (admin)
-                _HouseEditor(
-                  house: _house!,
-                  saveLabel: s.save,
-                  nameLabel: s.name,
-                  title: s.settings,
-                  onSaved: (h) => setState(() => _house = h),
-                ),
-              const SizedBox(height: 8),
               Material(
                 color: RoomiesColors.surface.withValues(alpha: 0.72),
                 borderRadius: BorderRadius.circular(16),
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                   child: Row(
                     children: [
                       for (var i = 0; i < tabs.length; i++)
-                        TextButton(
-                          onPressed: () => _tabController.animateTo(i),
-                          style: TextButton.styleFrom(
-                            foregroundColor: _tabController.index == i
-                                ? RoomiesColors.tealDeep
-                                : RoomiesColors.inkMuted,
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: TextButton(
+                            onPressed: () => _tabController.animateTo(i),
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size(48, 48),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              foregroundColor: _tabController.index == i
+                                  ? RoomiesColors.tealDeep
+                                  : RoomiesColors.inkMuted,
+                            ),
+                            child: Text(tabs[i]),
                           ),
-                          child: Text(tabs[i]),
                         ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
@@ -203,11 +204,6 @@ class _HouseScreenState extends State<HouseScreen>
                         houseId: widget.houseId, role: role)),
                     _panel(CalendarSection(
                         houseId: widget.houseId, role: role)),
-                    _panel(ChatSection(
-                      houseId: widget.houseId,
-                      role: role,
-                      userId: userId,
-                    )),
                     _panel(BalancesSection(balances: _balances)),
                     _panel(NotificationsSection(
                       houseId: widget.houseId,
@@ -236,78 +232,4 @@ Widget _panel(Widget child) {
     padding: const EdgeInsets.only(bottom: 24),
     child: child,
   );
-}
-
-class _HouseEditor extends StatefulWidget {
-  const _HouseEditor({
-    required this.house,
-    required this.onSaved,
-    required this.saveLabel,
-    required this.nameLabel,
-    required this.title,
-  });
-
-  final House house;
-  final ValueChanged<House> onSaved;
-  final String saveLabel;
-  final String nameLabel;
-  final String title;
-
-  @override
-  State<_HouseEditor> createState() => _HouseEditorState();
-}
-
-class _HouseEditorState extends State<_HouseEditor> {
-  late final TextEditingController _name;
-  String _status = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _name = TextEditingController(text: widget.house.name);
-  }
-
-  @override
-  void dispose() {
-    _name.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (_name.text.trim().isEmpty) {
-      setState(() => _status = widget.nameLabel);
-      return;
-    }
-    final updated = await context.read<AppState>().api.updateHouse(
-          widget.house.id,
-          _name.text.trim(),
-        );
-    setState(() => _status = widget.saveLabel);
-    widget.onSaved(updated);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            RoomiesHeading(widget.title, level: 2),
-            TextFormField(
-              controller: _name,
-              decoration: InputDecoration(labelText: widget.nameLabel),
-            ),
-            FilledButton(
-              onPressed: _save,
-              child: Text(widget.saveLabel),
-            ),
-            if (_status.isNotEmpty) Text(_status),
-          ],
-        ),
-      ),
-    );
-  }
 }

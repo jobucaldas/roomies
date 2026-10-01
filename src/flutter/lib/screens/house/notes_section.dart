@@ -70,8 +70,9 @@ class _NotesSectionState extends State<NotesSection> {
   }
 
   Future<void> _save() async {
+    final s = context.read<AppState>().strings;
     if (_title.text.trim().isEmpty || _content.text.trim().isEmpty) {
-      setState(() => _error = 'Title and content are required');
+      setState(() => _error = s.titleContentRequired);
       return;
     }
     await context.read<AppState>().api.createNote(
@@ -110,19 +111,20 @@ class _NotesSectionState extends State<NotesSection> {
   }
 
   Future<void> _confirmDelete(String id) async {
+    final s = context.read<AppState>().strings;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete note?'),
-        content: const Text('This cannot be undone.'),
+        title: Text(s.deleteNoteTitle),
+        content: Text(s.cannotUndo),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(s.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirm delete'),
+            child: Text(s.confirmDelete),
           ),
         ],
       ),
@@ -132,65 +134,68 @@ class _NotesSectionState extends State<NotesSection> {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<AppState>().strings;
     return RoomiesTabPanel(
-      name: 'Notes',
+      name: s.tabNotes,
       child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const RoomiesHeading('Notes', level: 2),
-        if (_error != null) RoomiesError(_error!),
-        if (!_canCreate)
-          const Text('Your monitor role is view-only.')
-        else
-          RoomiesCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const RoomiesHeading('New note', level: 3),
-                RoomiesLabeledField(
-                  label: 'Title',
-                  child: TextField(controller: _title),
-                ),
-                RoomiesLabeledField(
-                  label: 'Content',
-                  child: TextField(
-                    controller: _content,
-                    maxLines: 5,
-                  ),
-                ),
-                RoomiesPrimaryButton(label: 'Save note', onPressed: _save),
-              ],
-            ),
-          ),
-        if (_loading)
-          const Text('Loading notes…')
-        else if (_notes.isEmpty)
-          const Text('No notes yet.')
-        else
-          ..._notes.map((note) {
-            return RoomiesArticleCard(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RoomiesHeading(s.tabNotes, level: 2),
+          if (_error != null) RoomiesError(_error!),
+          if (!_canCreate)
+            Text(s.viewOnlyRole)
+          else
+            RoomiesCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  RoomiesHeading(note.title, level: 3),
-                  Text(note.content),
-                  Text('By ${note.authorName} · updated ${note.updatedAt}',
-                      style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                  if (_canEdit(note)) ...[
-                    RoomiesPrimaryButton(
-                      label: 'Edit',
-                      onPressed: () => _editNote(note),
+                  RoomiesHeading(s.newNote, level: 3),
+                  RoomiesLabeledField(
+                    label: s.title,
+                    child: TextField(controller: _title),
+                  ),
+                  RoomiesLabeledField(
+                    label: s.content,
+                    child: TextField(
+                      controller: _content,
+                      maxLines: 5,
                     ),
-                    RoomiesPrimaryButton(
-                      label: 'Delete',
-                      onPressed: () => _confirmDelete(note.id),
-                    ),
-                  ],
+                  ),
+                  RoomiesPrimaryButton(label: s.saveNote, onPressed: _save),
                 ],
               ),
-            );
-          }),
-      ],
+            ),
+          if (_loading)
+            Text(s.loadingNotes)
+          else if (_notes.isEmpty)
+            Text(s.noNotesYet)
+          else
+            ..._notes.map((note) {
+              return RoomiesArticleCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RoomiesHeading(note.title, level: 3),
+                    Text(note.content),
+                    Text(
+                      s.noteBy(note.authorName, note.updatedAt),
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                    if (_canEdit(note)) ...[
+                      RoomiesPrimaryButton(
+                        label: s.edit,
+                        onPressed: () => _editNote(note),
+                      ),
+                      RoomiesPrimaryButton(
+                        label: s.delete,
+                        onPressed: () => _confirmDelete(note.id),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }),
+        ],
       ),
     );
   }
@@ -241,26 +246,27 @@ class _EditNoteDialogState extends State<_EditNoteDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<AppState>().strings;
     return AlertDialog(
-      title: const Text('Edit note'),
+      title: Text(s.editNote),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             RoomiesLabeledField(
-              label: 'Title',
+              label: s.title,
               child: TextField(controller: _title),
             ),
             RoomiesLabeledField(
-              label: 'Content',
+              label: s.content,
               child: TextField(controller: _content, maxLines: 5),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: _save, child: const Text('Save changes')),
-        TextButton(onPressed: widget.onClose, child: const Text('Close')),
+        TextButton(onPressed: _save, child: Text(s.saveChanges)),
+        TextButton(onPressed: widget.onClose, child: Text(s.close)),
       ],
     );
   }
