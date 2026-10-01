@@ -1,14 +1,17 @@
 # Cleanup commands
 
 ## Generated outputs
-- `make clean-generated`
-- `rm -rf target src/backend/bin src/app/dist src/app/target`
+```bash
+make clean-generated
+# or:
+rm -rf src/backend/bin src/flutter/build
+```
 
-## Containers / processes
-- `make clean-containers`
-- `podman ps --filter name=roomies`
-- `podman-compose -f docker-compose.yml down -v`
-- `podman-compose -f .devcontainer/docker-compose.yml down -v`
+## Containers
+```bash
+make clean-containers
+# or:
+docker compose -f docker-compose.yml down -v
+```
 
-## Notes
 Only stop or remove containers that belong to the Roomies stack.

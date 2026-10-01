@@ -23,7 +23,12 @@ Do not apply this template unchanged. Replace every image (including Caddy) with
 
 ## Credential-free local release rehearsal
 
-Run `nix develop .#container -c make release-dry-run` from a clean commit.
+From a clean commit, with podman/skopeo/kustomize/syft/jq available:
+
+```bash
+make release-dry-run
+```
+
 Output lands under ignored `artifacts/release/<full-commit-sha>/` and includes rendered YAML, local OCI archives, provenance labels, SBOMs, and `SHA256SUMS`. Existing bundles are never overwritten. `RELEASE_SHA` defaults to HEAD and must match the clean checked-out HEAD. `RELEASE_VERSION` defaults to the full SHA; explicit values must be 1–128-character OCI tags excluding `latest`.
 
 This is local rehearsal only, not proof that registry digests are pullable.
