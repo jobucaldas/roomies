@@ -127,14 +127,17 @@ void main() {
       expect(client.held, hasLength(1));
       expect(client.held.single.houseId, 'alpha');
 
-      final beta = find.text('Beta');
-      expect(beta, findsOneWidget);
-      await tester.ensureVisible(beta);
+      // House switch is the top PopupMenu dropdown (selected label also appears in body).
+      expect(find.text('Alpha'), findsWidgets);
+      await tester.tap(find.byTooltip('Switch house'));
+      // Avoid pumpAndSettle: dashboard note rotation uses a periodic Timer.
       await tester.pump();
-      // The row also handles double-tap, so a single tap is confirmed only
-      // after the double-tap timeout.
-      await tester.tap(beta);
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Beta'), findsOneWidget);
+      await tester.tap(find.text('Beta'));
+      await tester.pump();
+      await tester.pump();
 
       expect(client.held, hasLength(2));
       expect(client.held[1].houseId, 'beta');

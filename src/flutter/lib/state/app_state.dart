@@ -37,7 +37,7 @@ class AppState extends ChangeNotifier {
   /// Preferred house for later sessions.
   String? defaultHouseId;
 
-  /// Cached membership list for the sidebar / Settings switcher.
+  /// Cached membership list for the house switcher / Settings.
   List<House> houses = const [];
 
   final String _deviceLocale;

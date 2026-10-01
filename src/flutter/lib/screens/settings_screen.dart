@@ -186,7 +186,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onTap: () => app.setDefaultHouseId(house.id),
                         trailing: TextButton(
                           onPressed: () => context.go('/house/${house.id}'),
-                          child: Text(s.switchHouse),
+                          child: Text(s.goToHouse),
                         ),
                       ),
                     ),

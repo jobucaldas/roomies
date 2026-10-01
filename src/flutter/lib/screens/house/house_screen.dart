@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/house_tabs.dart';
 import '../../core/roles.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
@@ -16,9 +17,14 @@ import 'notes_section.dart';
 import 'notifications_section.dart';
 
 class HouseScreen extends StatefulWidget {
-  const HouseScreen({super.key, required this.houseId});
+  const HouseScreen({
+    super.key,
+    required this.houseId,
+    this.initialTab,
+  });
 
   final String houseId;
+  final String? initialTab;
 
   @override
   State<HouseScreen> createState() => _HouseScreenState();
@@ -36,9 +42,28 @@ class _HouseScreenState extends State<HouseScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 8, vsync: this);
+    final initial = HouseTabs.indexOf(widget.initialTab);
+    _tabController = TabController(
+      length: HouseTabs.ordered.length,
+      vsync: this,
+      initialIndex: initial,
+    );
     _tabController.addListener(_onTabChanged);
     _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant HouseScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.houseId != widget.houseId) {
+      _load();
+    }
+    if (oldWidget.initialTab != widget.initialTab) {
+      final next = HouseTabs.indexOf(widget.initialTab);
+      if (_tabController.index != next) {
+        _tabController.animateTo(next);
+      }
+    }
   }
 
   @override
@@ -56,6 +81,12 @@ class _HouseScreenState extends State<HouseScreen>
         tabs[_tabController.index] ==
             context.read<AppState>().strings.tabBalances) {
       _loadBalances();
+    }
+    final key = HouseTabs.keyAt(_tabController.index);
+    final uri = GoRouterState.of(context).uri;
+    final current = uri.queryParameters['tab'];
+    if (current != key) {
+      context.go('/house/${widget.houseId}?tab=$key');
     }
   }
 
@@ -117,11 +148,16 @@ class _HouseScreenState extends State<HouseScreen>
     final role = _currentRole(userId);
     final admin = _admin(role);
     final tabs = s.houseTabs;
+    final activeTab = HouseTabs.keyAt(_tabController.index);
 
     return AppShell(
       currentHouseId: widget.houseId,
+      activeTab: activeTab,
       title: _house?.name,
       showBrand: false,
+      onHouseSelected: (id) {
+        context.go('/house/$id?tab=$activeTab');
+      },
       actions: [
         TextButton(
           onPressed: () => context.go('/dashboard'),
@@ -149,7 +185,8 @@ class _HouseScreenState extends State<HouseScreen>
               )
             else if (_house != null) ...[
               Material(
-                color: RoomiesPalette.of(context).surface.withValues(alpha: 0.72),
+                color:
+                    RoomiesPalette.of(context).surface.withValues(alpha: 0.72),
                 borderRadius: BorderRadius.circular(16),
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,

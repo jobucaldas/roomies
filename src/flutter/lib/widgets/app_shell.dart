@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../core/house_tabs.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/roomies_theme.dart';
 import 'roomies_ui.dart';
 
-/// Authenticated chrome: sidebar (wide) / drawer (narrow) for houses + settings.
+/// Authenticated chrome: action sidebar (wide) / hamburger drawer (narrow),
+/// with a compact house switcher in the top bar.
 ///
 /// Breakpoint state is sticky across soft-keyboard height changes: depending on
 /// [MediaQuery.sizeOf] alone rebuilds the whole shell when only height changes,
@@ -18,16 +20,22 @@ class AppShell extends StatefulWidget {
     super.key,
     required this.child,
     this.currentHouseId,
+    this.onHouseSelected,
     this.title,
     this.actions = const [],
     this.showBrand = true,
+    this.activeTab,
   });
 
   final Widget child;
   final String? currentHouseId;
+  final ValueChanged<String>? onHouseSelected;
   final String? title;
   final List<Widget> actions;
   final bool showBrand;
+
+  /// Optional house-tab key for highlighting the matching action tile.
+  final String? activeTab;
 
   static const double wideBreakpoint = 900;
 
@@ -66,25 +74,83 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
+  String? _resolveActiveHouseId(AppState app) {
+    final current = widget.currentHouseId;
+    if (current != null && current.isNotEmpty) {
+      for (final house in app.houses) {
+        if (house.id == current) return current;
+      }
+    }
+    final fallback = app.defaultHouseId;
+    if (fallback != null) {
+      for (final house in app.houses) {
+        if (house.id == fallback) return fallback;
+      }
+    }
+    return app.houses.isNotEmpty ? app.houses.first.id : null;
+  }
+
+  void _selectHouse(BuildContext context, AppState app, String houseId) {
+    final onSelected = widget.onHouseSelected;
+    if (onSelected != null) {
+      onSelected(houseId);
+      return;
+    }
+    final path = GoRouterState.of(context).uri.path;
+    if (path.startsWith('/house/')) {
+      final tab = GoRouterState.of(context).uri.queryParameters['tab'];
+      final q = tab == null || tab.isEmpty ? '' : '?tab=$tab';
+      context.go('/house/$houseId$q');
+    } else {
+      context.go('/house/$houseId');
+    }
+  }
+
+  void _openAction(
+    BuildContext context,
+    AppState app,
+    RoomiesStrings s,
+    String? houseId,
+    String tab,
+  ) {
+    if (houseId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.needHouseForAction)),
+      );
+      return;
+    }
+    context.go('/house/$houseId?tab=$tab');
+  }
+
   Widget _buildChrome(
     BuildContext context,
     AppState app,
     RoomiesStrings s,
     bool wide,
   ) {
-    final nav = _ShellNav(
+    final activeHouseId = _resolveActiveHouseId(app);
+    final path = GoRouterState.of(context).uri.path;
+    final nav = _ActionNav(
       strings: s,
-      houses: app.houses,
-      defaultHouseId: app.defaultHouseId,
-      currentHouseId: widget.currentHouseId,
-      currentPath: GoRouterState.of(context).uri.path,
-      onDashboard: () => context.go('/dashboard'),
-      onHouse: (id) => context.go('/house/$id'),
+      currentPath: path,
+      activeTab: widget.activeTab ??
+          GoRouterState.of(context).uri.queryParameters['tab'],
+      onHome: () => context.go('/dashboard'),
+      onAction: (tab) => _openAction(context, app, s, activeHouseId, tab),
       onSettings: () => context.go('/settings'),
       onLogout: () async {
         await app.logout();
         if (context.mounted) context.go('/');
       },
+    );
+
+    final houseSwitcher = _HouseSwitcher(
+      strings: s,
+      houses: app.houses,
+      selectedHouseId: activeHouseId,
+      defaultHouseId: app.defaultHouseId,
+      onSelected: (id) => _selectHouse(context, app, id),
+      onCreate: () => context.go('/dashboard?create=1'),
     );
 
     if (wide) {
@@ -95,7 +161,7 @@ class _AppShellState extends State<AppShell> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(width: 268, child: nav),
+                SizedBox(width: 248, child: nav),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -104,6 +170,7 @@ class _AppShellState extends State<AppShell> {
                         title: widget.title,
                         showBrand: widget.showBrand,
                         strings: s,
+                        houseSwitcher: houseSwitcher,
                         actions: widget.actions,
                       ),
                       Expanded(child: widget.child),
@@ -142,6 +209,7 @@ class _AppShellState extends State<AppShell> {
                     onPressed: () => Scaffold.of(context).openDrawer(),
                     icon: const Icon(Icons.menu_rounded),
                   ),
+                  houseSwitcher: houseSwitcher,
                   actions: widget.actions,
                 ),
               ),
@@ -158,6 +226,7 @@ class _ShellTopBar extends StatelessWidget {
   const _ShellTopBar({
     required this.strings,
     required this.actions,
+    required this.houseSwitcher,
     this.title,
     this.showBrand = true,
     this.leading,
@@ -165,6 +234,7 @@ class _ShellTopBar extends StatelessWidget {
 
   final RoomiesStrings strings;
   final List<Widget> actions;
+  final Widget houseSwitcher;
   final String? title;
   final bool showBrand;
   final Widget? leading;
@@ -172,41 +242,39 @@ class _ShellTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.fromLTRB(8, 8, 12, 4),
       child: Row(
         children: [
           if (leading != null) leading!,
           if (showBrand)
-            Text(
-              strings.brand,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: RoomiesPalette.of(context).tealDeep,
-                    fontFamily: 'Fraunces',
-                  ),
-            ),
-          if (title != null) ...[
-            if (showBrand) ...[
-              const SizedBox(width: 10),
-              Text(
-                '·',
-                style: TextStyle(color: RoomiesPalette.of(context).inkMuted),
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: Text(
+                strings.brand,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: RoomiesPalette.of(context).tealDeep,
+                      fontFamily: 'Fraunces',
+                    ),
               ),
-              const SizedBox(width: 10),
-            ],
-            Expanded(
-              // House / page title must be a heading for a11y
-              // (Playwright getByRole('heading', { name: houseName })).
+            ),
+          Flexible(child: houseSwitcher),
+          if (title != null) ...[
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 140),
               child: Semantics(
                 header: true,
                 child: Text(
                   title!,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium,
+                  textAlign: TextAlign.end,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: RoomiesPalette.of(context).inkMuted,
+                      ),
                 ),
               ),
             ),
-          ] else
-            const Spacer(),
+          ],
           ...actions,
         ],
       ),
@@ -214,33 +282,208 @@ class _ShellTopBar extends StatelessWidget {
   }
 }
 
-class _ShellNav extends StatelessWidget {
-  const _ShellNav({
+class _HouseSwitcher extends StatelessWidget {
+  const _HouseSwitcher({
     required this.strings,
     required this.houses,
+    required this.selectedHouseId,
     required this.defaultHouseId,
-    required this.currentHouseId,
+    required this.onSelected,
+    required this.onCreate,
+  });
+
+  final RoomiesStrings strings;
+  final List<House> houses;
+  final String? selectedHouseId;
+  final String? defaultHouseId;
+  final ValueChanged<String> onSelected;
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = RoomiesPalette.of(context);
+    if (houses.isEmpty) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: onCreate,
+          icon: const Icon(Icons.add_home_outlined, size: 18),
+          label: Text(strings.createNewHouse),
+        ),
+      );
+    }
+
+    House? selected;
+    for (final house in houses) {
+      if (house.id == selectedHouseId) {
+        selected = house;
+        break;
+      }
+    }
+    selected ??= houses.first;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: PopupMenuButton<String>(
+        tooltip: strings.switchHouse,
+        offset: const Offset(0, 40),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        onSelected: (value) {
+          if (value == '__create__') {
+            onCreate();
+            return;
+          }
+          onSelected(value);
+        },
+        itemBuilder: (context) => [
+          for (final house in houses)
+            PopupMenuItem(
+              value: house.id,
+              child: Row(
+                children: [
+                  Icon(
+                    house.id == selected!.id
+                        ? Icons.home_rounded
+                        : Icons.home_outlined,
+                    size: 18,
+                    color: house.id == selected.id ? p.tealDeep : p.inkMuted,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      house.name,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (house.id == defaultHouseId)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Text(
+                        strings.defaultBadge,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: p.tealDeep,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            value: '__create__',
+            child: Row(
+              children: [
+                Icon(Icons.add, size: 18, color: p.inkMuted),
+                const SizedBox(width: 10),
+                Text(strings.createNewHouse),
+              ],
+            ),
+          ),
+        ],
+        child: Semantics(
+          button: true,
+          label: '${strings.switchHouse}: ${selected.name}',
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: p.surface.withValues(alpha: 0.92),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: p.line),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.home_rounded, size: 18, color: p.tealDeep),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    selected.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.expand_more_rounded, size: 18, color: p.inkMuted),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionNav extends StatelessWidget {
+  const _ActionNav({
+    required this.strings,
     required this.currentPath,
-    required this.onDashboard,
-    required this.onHouse,
+    required this.activeTab,
+    required this.onHome,
+    required this.onAction,
     required this.onSettings,
     required this.onLogout,
   });
 
   final RoomiesStrings strings;
-  final List<House> houses;
-  final String? defaultHouseId;
-  final String? currentHouseId;
   final String currentPath;
-  final VoidCallback onDashboard;
-  final ValueChanged<String> onHouse;
+  final String? activeTab;
+  final VoidCallback onHome;
+  final ValueChanged<String> onAction;
   final VoidCallback onSettings;
   final Future<void> Function() onLogout;
+
+  void _tap(BuildContext context, VoidCallback action) {
+    final scaffold = Scaffold.maybeOf(context);
+    if (scaffold?.isDrawerOpen ?? false) {
+      Navigator.of(context).pop();
+    }
+    action();
+  }
 
   @override
   Widget build(BuildContext context) {
     final onDash = currentPath.startsWith('/dashboard');
     final onSettingsPath = currentPath.startsWith('/settings');
+    final onHouse = currentPath.startsWith('/house/');
+    final tab = activeTab;
+
+    final actions = <_ActionItem>[
+      _ActionItem(
+        icon: Icons.sticky_note_2_outlined,
+        label: strings.tabNotes,
+        tab: HouseTabs.notes,
+      ),
+      _ActionItem(
+        icon: Icons.shopping_basket_outlined,
+        label: strings.tabGroceries,
+        tab: HouseTabs.groceries,
+      ),
+      _ActionItem(
+        icon: Icons.payments_outlined,
+        label: strings.tabExpenses,
+        tab: HouseTabs.expenses,
+      ),
+      _ActionItem(
+        icon: Icons.checklist_outlined,
+        label: strings.tabChores,
+        tab: HouseTabs.chores,
+      ),
+      _ActionItem(
+        icon: Icons.event_outlined,
+        label: strings.tabCalendar,
+        tab: HouseTabs.calendar,
+      ),
+      _ActionItem(
+        icon: Icons.account_balance_wallet_outlined,
+        label: strings.tabBalances,
+        tab: HouseTabs.balances,
+      ),
+    ];
 
     return Container(
       margin: const EdgeInsets.all(12),
@@ -257,68 +500,76 @@ class _ShellNav extends StatelessWidget {
             strings.brand,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   color: RoomiesPalette.of(context).tealDeep,
+                  fontFamily: 'Fraunces',
                 ),
           ),
           const SizedBox(height: 4),
           Text(
-            strings.navigation,
+            strings.thingsToDo,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           _NavTile(
             selected: onDash,
             icon: Icons.grid_view_rounded,
-            label: strings.dashboard,
-            onTap: onDashboard,
+            label: strings.home,
+            onTap: () => _tap(context, onHome),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
-            strings.houses,
-            style: Theme.of(context).textTheme.titleMedium,
+            strings.thingsToDo,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: RoomiesPalette.of(context).inkMuted,
+                ),
           ),
           const SizedBox(height: 6),
           Expanded(
-            child: houses.isEmpty
-                ? Text(
-                    strings.noHousesYet,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  )
-                : ListView.separated(
-                    itemCount: houses.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 4),
-                    itemBuilder: (context, index) {
-                      final house = houses[index];
-                      final selected = house.id == currentHouseId;
-                      final isDefault = house.id == defaultHouseId;
-                      return _NavTile(
-                        selected: selected,
-                        icon: Icons.home_outlined,
-                        label: house.name,
-                        badge: isDefault ? strings.defaultBadge : null,
-                        onTap: () => onHouse(house.id),
-                      );
-                    },
-                  ),
+            child: ListView.separated(
+              itemCount: actions.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 4),
+              itemBuilder: (context, index) {
+                final item = actions[index];
+                final selected = onHouse && tab == item.tab;
+                return _NavTile(
+                  selected: selected,
+                  icon: item.icon,
+                  label: item.label,
+                  onTap: () => _tap(context, () => onAction(item.tab)),
+                );
+              },
+            ),
           ),
           const Divider(height: 24),
           _NavTile(
             selected: onSettingsPath,
             icon: Icons.settings_outlined,
             label: strings.settings,
-            onTap: onSettings,
+            onTap: () => _tap(context, onSettings),
           ),
           _NavTile(
             selected: false,
             icon: Icons.logout_rounded,
             label: strings.logout,
-            onTap: () {
+            onTap: () => _tap(context, () {
               onLogout();
-            },
+            }),
           ),
         ],
       ),
     );
   }
+}
+
+class _ActionItem {
+  const _ActionItem({
+    required this.icon,
+    required this.label,
+    required this.tab,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tab;
 }
 
 class _NavTile extends StatelessWidget {
@@ -327,14 +578,12 @@ class _NavTile extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
-    this.badge,
   });
 
   final bool selected;
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -343,7 +592,9 @@ class _NavTile extends StatelessWidget {
       label: label,
       excludeSemantics: true,
       child: Material(
-        color: selected ? RoomiesPalette.of(context).tealSoft : Colors.transparent,
+        color: selected
+            ? RoomiesPalette.of(context).tealSoft
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -355,8 +606,9 @@ class _NavTile extends StatelessWidget {
                 Icon(
                   icon,
                   size: 20,
-                  color:
-                      selected ? RoomiesPalette.of(context).tealDeep : RoomiesPalette.of(context).inkMuted,
+                  color: selected
+                      ? RoomiesPalette.of(context).tealDeep
+                      : RoomiesPalette.of(context).inkMuted,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -372,22 +624,6 @@ class _NavTile extends StatelessWidget {
                         ),
                   ),
                 ),
-                if (badge != null)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: RoomiesPalette.of(context).mist,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      badge!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: RoomiesPalette.of(context).tealDeep,
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ),
               ],
             ),
           ),
