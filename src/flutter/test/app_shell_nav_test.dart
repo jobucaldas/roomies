@@ -138,4 +138,96 @@ void main() {
     expect(find.text('Groceries'), findsWidgets);
     expect(find.text('Expenses'), findsWidgets);
   });
+
+  testWidgets('narrow shell centers house switcher in the top bar',
+      (tester) async {
+    final appState = makeApp();
+    final router = GoRouter(
+      initialLocation: '/dashboard',
+      routes: [
+        GoRoute(
+          path: '/dashboard',
+          builder: (context, state) => AppShell(
+            title: 'Home',
+            currentHouseId: 'h1',
+            child: const Text('dashboard-body'),
+          ),
+        ),
+        GoRoute(
+          path: '/house/:id',
+          builder: (context, state) => const SizedBox.shrink(),
+        ),
+        GoRoute(
+          path: '/settings',
+          builder: (context, state) => const SizedBox.shrink(),
+        ),
+      ],
+    );
+
+    const size = Size(390, 844);
+    await tester.binding.setSurfaceSize(size);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: appState,
+        child: MediaQuery(
+          data: const MediaQueryData(size: size),
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final switcher = tester.getCenter(find.byTooltip('Switch house'));
+    expect(switcher.dx, closeTo(size.width / 2, 20));
+  });
+
+  testWidgets('wide shell centers house switcher in the main content bar',
+      (tester) async {
+    final appState = makeApp();
+    final router = GoRouter(
+      initialLocation: '/dashboard',
+      routes: [
+        GoRoute(
+          path: '/dashboard',
+          builder: (context, state) => AppShell(
+            title: 'Home',
+            currentHouseId: 'h1',
+            child: const Text('dashboard-body'),
+          ),
+        ),
+        GoRoute(
+          path: '/house/:id',
+          builder: (context, state) => const SizedBox.shrink(),
+        ),
+        GoRoute(
+          path: '/settings',
+          builder: (context, state) => const SizedBox.shrink(),
+        ),
+      ],
+    );
+
+    const size = Size(1200, 900);
+    await tester.binding.setSurfaceSize(size);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: appState,
+        child: MediaQuery(
+          data: const MediaQueryData(size: size),
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Sidebar is 248 wide; main content starts after it. Switcher should be
+    // centered in that main column, not the full window.
+    const sidebarWidth = 248.0;
+    final mainCenterX = sidebarWidth + (size.width - sidebarWidth) / 2;
+    final switcher = tester.getCenter(find.byTooltip('Switch house'));
+    expect(switcher.dx, closeTo(mainCenterX, 24));
+  });
 }
