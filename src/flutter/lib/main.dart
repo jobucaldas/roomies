@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 
@@ -17,7 +18,7 @@ Future<void> main() async {
   }
   usePathUrlStrategy();
   final api = ApiClient(webOrigin: kIsWeb ? Uri.base.origin : null);
-  final appState = AppState(api);
+  final appState = AppState(api, deviceLocale: platformLocaleTag());
   await appState.restoreSession();
   runApp(RoomiesApp(appState: appState));
 }
@@ -38,20 +39,37 @@ class _RoomiesAppState extends State<RoomiesApp> {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
       value: widget.appState,
-      child: MaterialApp.router(
-        title: 'Roomies',
-        theme: buildRoomiesTheme(),
-        routerConfig: _router,
-        builder: (context, child) {
-          if (!widget.appState.sessionReady) {
-            return RoomiesAtmosphere(
-              child: const Scaffold(
-                backgroundColor: Colors.transparent,
-                body: Center(child: Text('Restoring session…')),
-              ),
-            );
-          }
-          return child ?? const SizedBox.shrink();
+      child: Consumer<AppState>(
+        builder: (context, app, _) {
+          final locale = app.localeCode == 'pt'
+              ? const Locale('pt', 'BR')
+              : const Locale('en');
+          return MaterialApp.router(
+            title: 'Roomies',
+            theme: buildRoomiesTheme(),
+            locale: locale,
+            supportedLocales: const [
+              Locale('en'),
+              Locale('pt', 'BR'),
+            ],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            routerConfig: _router,
+            builder: (context, child) {
+              if (!app.sessionReady) {
+                return RoomiesAtmosphere(
+                  child: Scaffold(
+                    backgroundColor: Colors.transparent,
+                    body: Center(child: Text(app.strings.restoringSession)),
+                  ),
+                );
+              }
+              return child ?? const SizedBox.shrink();
+            },
+          );
         },
       ),
     );

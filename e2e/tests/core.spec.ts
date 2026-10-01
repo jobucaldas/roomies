@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { expect, test, type APIRequestContext, type Locator, type Page, type TestInfo } from '@playwright/test';
-import { fillFlutterText, loginViaUiOrToken } from '../helpers/login';
+import { fillFlutterText, loginViaUiOrToken, logoutViaUi, openHouseViaUi } from '../helpers/login';
 
 // Core tests deliberately disable Playwright screenshots and traces. The sanitized JSON record
 // below is sufficient for the CI gate and cannot retain expense, note, or session contents.
@@ -175,10 +175,8 @@ async function login(page: Page, email: string, token?: string) {
 }
 
 async function logout(page: Page) {
-  // Logout lives on the Dashboard route.
-  await page.goto(`${web}/dashboard`);
-  await page.getByRole('button', { name: 'Logout' }).click();
-  await expect(page.getByRole('button', { name: 'Login', exact: true })).toBeVisible();
+  // Logout lives in AppShell (sidebar / drawer), not the Dashboard body.
+  await logoutViaUi(page, web);
 }
 
 async function openTab(page: Page, tab: string, heading: string) {
@@ -199,8 +197,11 @@ async function chooseOption(page: Page, opener: Locator, option: string) {
 }
 
 async function openHouse(page: Page, houseId: string) {
-  await page.goto(`${web}/house/${houseId}`);
-  await expect(page.getByRole('heading', { name: 'Core Validation House' })).toBeVisible();
+  await openHouseViaUi(page, {
+    web,
+    houseId,
+    houseName: 'Core Validation House',
+  });
 }
 
 async function cardContains(page: Page, marker: string) {

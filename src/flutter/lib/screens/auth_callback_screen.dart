@@ -18,7 +18,7 @@ class AuthCallbackScreen extends StatefulWidget {
 }
 
 class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
-  String _status = 'Completing sign-in…';
+  String _status = '';
   var _failed = false;
 
   @override
@@ -28,10 +28,11 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
   }
 
   Future<void> _complete() async {
+    final s = context.read<AppState>().strings;
     if (widget.error != null && widget.error!.isNotEmpty) {
       setState(() {
         _failed = true;
-        _status = 'Sign-in failed: ${widget.error}';
+        _status = s.signInFailed(widget.error!);
       });
       return;
     }
@@ -40,10 +41,11 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
     if (code.isEmpty || oauthState.isEmpty) {
       setState(() {
         _failed = true;
-        _status = 'Sign-in failed: missing authorization code.';
+        _status = s.signInFailed(s.missingAuthCode);
       });
       return;
     }
+    setState(() => _status = s.completingSignIn);
     final app = context.read<AppState>();
     final navigator = GoRouter.of(context);
     try {
@@ -54,36 +56,41 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
       if (pending != null && pending.isNotEmpty) {
         navigator.go('/accept-invitation');
       } else {
+        // Fresh AuthKit login → Dashboard first.
         navigator.go('/dashboard');
       }
     } on ApiError catch (error) {
       if (!mounted) return;
       setState(() {
         _failed = true;
-        _status = 'Sign-in failed: ${error.message}';
+        _status = s.signInFailed(error.message);
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _failed = true;
-        _status = 'Sign-in failed: $error';
+        _status = s.signInFailed('$error');
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<AppState>().strings;
     return RoomiesPage(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const RoomiesHeading('Roomies'),
-          const RoomiesHeading('Signing in', level: 2),
-          Semantics(liveRegion: true, child: Text(_status)),
+          RoomiesBrandMark(compact: true, tagline: s.brandTagline),
+          RoomiesHeading(s.signingIn, level: 2),
+          Semantics(
+            liveRegion: true,
+            child: Text(_status.isEmpty ? s.completingSignIn : _status),
+          ),
           if (_failed)
             FilledButton(
               onPressed: () => context.go('/'),
-              child: const Text('Back to login'),
+              child: Text(s.backToLogin),
             ),
         ],
       ),

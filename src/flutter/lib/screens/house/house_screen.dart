@@ -6,6 +6,7 @@ import '../../core/roles.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../../theme/roomies_theme.dart';
+import '../../widgets/app_shell.dart';
 import '../../widgets/roomies_ui.dart';
 import 'balances_section.dart';
 import 'expenses_section.dart';
@@ -32,22 +33,10 @@ class _HouseScreenState extends State<HouseScreen>
   String? _error;
   late TabController _tabController;
 
-  static const _tabs = [
-    'Expenses',
-    'Notes',
-    'Groceries',
-    'Chores',
-    'Calendar',
-    'Chat',
-    'Balances',
-    'Notifications / Schedule',
-    'Members',
-  ];
-
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController = TabController(length: 9, vsync: this);
     _tabController.addListener(_onTabChanged);
     _load();
   }
@@ -62,7 +51,10 @@ class _HouseScreenState extends State<HouseScreen>
   void _onTabChanged() {
     if (_tabController.indexIsChanging) return;
     setState(() {});
-    if (_tabs[_tabController.index] == 'Balances') {
+    final tabs = context.read<AppState>().strings.houseTabs;
+    if (_tabController.index < tabs.length &&
+        tabs[_tabController.index] ==
+            context.read<AppState>().strings.tabBalances) {
       _loadBalances();
     }
   }
@@ -74,6 +66,7 @@ class _HouseScreenState extends State<HouseScreen>
     });
     try {
       final api = context.read<AppState>().api;
+      await context.read<AppState>().refreshHouses();
       final house = await api.getHouse(widget.houseId);
       final members = await api.getMembers(widget.houseId);
       if (mounted) {
@@ -115,119 +108,123 @@ class _HouseScreenState extends State<HouseScreen>
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
+    final s = app.strings;
     if (!app.api.isAuthenticated) {
       WidgetsBinding.instance.addPostFrameCallback((_) => context.go('/'));
-      return const RoomiesPage(child: Text('Redirecting to login…'));
+      return RoomiesPage(child: Text(s.redirectingToLogin));
     }
     final userId = app.user?.id ?? '';
     final role = _currentRole(userId);
     final admin = _admin(role);
+    final tabs = s.houseTabs;
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: RoomiesAtmosphere(
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 960),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_error != null) RoomiesError(_error!),
-                    if (_loading)
-                      const Expanded(
-                        child: Center(child: CircularProgressIndicator()),
-                      )
-                    else if (_house != null) ...[
-                      Row(
-                        children: [
-                          Expanded(child: RoomiesHeading(_house!.name)),
-                          TextButton(
-                            onPressed: () => context.go('/dashboard'),
-                            child: const Text('Back'),
-                          ),
-                        ],
-                      ),
-                      if (admin)
-                        _HouseEditor(
-                          house: _house!,
-                          onSaved: (h) => setState(() => _house = h),
-                        ),
-                      const SizedBox(height: 8),
-                      Material(
-                        color: RoomiesColors.surface.withValues(alpha: 0.72),
-                        borderRadius: BorderRadius.circular(16),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              for (var i = 0; i < _tabs.length; i++)
-                                TextButton(
-                                  onPressed: () => _tabController.animateTo(i),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: _tabController.index == i
-                                        ? RoomiesColors.tealDeep
-                                        : RoomiesColors.inkMuted,
-                                  ),
-                                  child: Text(_tabs[i]),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Expanded(
-                        child: TabBarView(
-                          controller: _tabController,
-                          physics: const NeverScrollableScrollPhysics(),
-                          children: [
-                            _panel(ExpensesSection(
-                              houseId: widget.houseId,
-                              role: role,
-                              userId: userId,
-                            )),
-                            _panel(NotesSection(
-                              houseId: widget.houseId,
-                              role: role,
-                              userId: userId,
-                            )),
-                            _panel(GroceriesSection(
-                              houseId: widget.houseId,
-                              role: role,
-                              members: _members,
-                            )),
-                            _panel(ChoresSection(
-                                houseId: widget.houseId, role: role)),
-                            _panel(CalendarSection(
-                                houseId: widget.houseId, role: role)),
-                            _panel(ChatSection(
-                              houseId: widget.houseId,
-                              role: role,
-                              userId: userId,
-                            )),
-                            _panel(BalancesSection(balances: _balances)),
-                            _panel(NotificationsSection(
-                              houseId: widget.houseId,
-                              role: role,
-                              userId: userId,
-                            )),
-                            _panel(MembersSection(
-                              houseId: widget.houseId,
-                              admin: admin,
-                              members: _members,
-                              onRefresh: _load,
-                            )),
-                          ],
-                        ),
-                      ),
+    return AppShell(
+      currentHouseId: widget.houseId,
+      title: _house?.name,
+      showBrand: false,
+      actions: [
+        TextButton(
+          onPressed: () => context.go('/dashboard'),
+          child: Text(s.back),
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_error != null) RoomiesError(_error!),
+            if (_loading)
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 12),
+                      Text(s.loading),
                     ],
+                  ),
+                ),
+              )
+            else if (_house != null) ...[
+              if (admin)
+                _HouseEditor(
+                  house: _house!,
+                  saveLabel: s.save,
+                  nameLabel: s.name,
+                  title: s.settings,
+                  onSaved: (h) => setState(() => _house = h),
+                ),
+              const SizedBox(height: 8),
+              Material(
+                color: RoomiesColors.surface.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(16),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < tabs.length; i++)
+                        TextButton(
+                          onPressed: () => _tabController.animateTo(i),
+                          style: TextButton.styleFrom(
+                            foregroundColor: _tabController.index == i
+                                ? RoomiesColors.tealDeep
+                                : RoomiesColors.inkMuted,
+                          ),
+                          child: Text(tabs[i]),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _panel(ExpensesSection(
+                      houseId: widget.houseId,
+                      role: role,
+                      userId: userId,
+                    )),
+                    _panel(NotesSection(
+                      houseId: widget.houseId,
+                      role: role,
+                      userId: userId,
+                    )),
+                    _panel(GroceriesSection(
+                      houseId: widget.houseId,
+                      role: role,
+                      members: _members,
+                    )),
+                    _panel(ChoresSection(
+                        houseId: widget.houseId, role: role)),
+                    _panel(CalendarSection(
+                        houseId: widget.houseId, role: role)),
+                    _panel(ChatSection(
+                      houseId: widget.houseId,
+                      role: role,
+                      userId: userId,
+                    )),
+                    _panel(BalancesSection(balances: _balances)),
+                    _panel(NotificationsSection(
+                      houseId: widget.houseId,
+                      role: role,
+                      userId: userId,
+                    )),
+                    _panel(MembersSection(
+                      houseId: widget.houseId,
+                      admin: admin,
+                      members: _members,
+                      onRefresh: _load,
+                    )),
                   ],
                 ),
               ),
-            ),
-          ),
+            ],
+          ],
         ),
       ),
     );
@@ -242,10 +239,19 @@ Widget _panel(Widget child) {
 }
 
 class _HouseEditor extends StatefulWidget {
-  const _HouseEditor({required this.house, required this.onSaved});
+  const _HouseEditor({
+    required this.house,
+    required this.onSaved,
+    required this.saveLabel,
+    required this.nameLabel,
+    required this.title,
+  });
 
   final House house;
   final ValueChanged<House> onSaved;
+  final String saveLabel;
+  final String nameLabel;
+  final String title;
 
   @override
   State<_HouseEditor> createState() => _HouseEditorState();
@@ -269,14 +275,14 @@ class _HouseEditorState extends State<_HouseEditor> {
 
   Future<void> _save() async {
     if (_name.text.trim().isEmpty) {
-      setState(() => _status = 'House name is required');
+      setState(() => _status = widget.nameLabel);
       return;
     }
     final updated = await context.read<AppState>().api.updateHouse(
           widget.house.id,
           _name.text.trim(),
         );
-    setState(() => _status = 'House updated.');
+    setState(() => _status = widget.saveLabel);
     widget.onSaved(updated);
   }
 
@@ -289,12 +295,15 @@ class _HouseEditorState extends State<_HouseEditor> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const RoomiesHeading('House settings', level: 2),
+            RoomiesHeading(widget.title, level: 2),
             TextFormField(
               controller: _name,
-              decoration: const InputDecoration(labelText: 'Name'),
+              decoration: InputDecoration(labelText: widget.nameLabel),
             ),
-            FilledButton(onPressed: _save, child: const Text('Save house')),
+            FilledButton(
+              onPressed: _save,
+              child: Text(widget.saveLabel),
+            ),
             if (_status.isNotEmpty) Text(_status),
           ],
         ),

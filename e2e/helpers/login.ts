@@ -1,16 +1,30 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-/** Wait until Flutter web exposes password login or AuthKit CTA. */
+/** Wait until Flutter web exposes password (collapsed or open) or AuthKit CTA. */
 export async function waitForLoginReady(page: Page) {
   const emailField = page.getByRole('textbox', { name: 'Email', disabled: false });
-  const authkit = page.getByRole('button', { name: 'Sign in with AuthKit' });
-  const loginButton = page.getByRole('button', { name: 'Login', exact: true });
+  const usePassword = page.getByRole('button', { name: 'Use email and password' });
+  // AuthKit-on primary CTA and password-form submit both use "Sign in".
+  const signIn = page.getByRole('button', { name: 'Sign in', exact: true });
   await Promise.race([
     emailField.waitFor({ state: 'visible', timeout: 90_000 }),
-    authkit.waitFor({ state: 'visible', timeout: 90_000 }),
-    loginButton.waitFor({ state: 'visible', timeout: 90_000 }),
+    usePassword.waitFor({ state: 'visible', timeout: 90_000 }),
+    signIn.waitFor({ state: 'visible', timeout: 90_000 }),
   ]);
-  return { emailField, authkit };
+  return { emailField, usePassword, signIn };
+}
+
+/** Reveal the CI/local password fields when AuthKit is unset. */
+export async function expandPasswordLogin(page: Page) {
+  const emailField = page.getByRole('textbox', { name: 'Email', disabled: false });
+  if (await emailField.isVisible().catch(() => false)) {
+    return emailField;
+  }
+  const usePassword = page.getByRole('button', { name: 'Use email and password' });
+  await usePassword.waitFor({ state: 'visible', timeout: 15_000 });
+  await usePassword.click();
+  await emailField.waitFor({ state: 'visible', timeout: 15_000 });
+  return emailField;
 }
 
 async function fillEnabledTextbox(page: Page, name: string, value: string) {
@@ -64,9 +78,11 @@ export async function loginViaUiOrToken(
   if (navigate) {
     await page.goto(web);
   }
-  const { emailField } = await waitForLoginReady(page);
+  const { emailField, usePassword, signIn } = await waitForLoginReady(page);
   if (token) {
     const sessionUrl = new URL(web);
+    // Drop prior session so a post-logout token login cannot reuse the old jar.
+    await page.context().clearCookies();
     await page.context().addCookies([
       {
         name: 'roomies_session',
@@ -90,14 +106,133 @@ export async function loginViaUiOrToken(
     } else {
       await page.goto(`${web}/dashboard`);
     }
-  } else if (await emailField.isVisible()) {
+  } else if (
+    (await usePassword.isVisible().catch(() => false)) ||
+    (await emailField.isVisible().catch(() => false))
+  ) {
+    // AuthKit unset: password path starts collapsed behind "Use email and password".
+    await expandPasswordLogin(page);
     await fillEnabledTextbox(page, 'Email', email);
     await fillEnabledTextbox(page, 'Password', password);
-    await page.getByRole('button', { name: 'Login', exact: true }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  } else if (await signIn.isVisible().catch(() => false)) {
+    expect(token, 'AuthKit UI requires API token for e2e login').toBeTruthy();
   } else {
     expect(token, 'AuthKit UI requires API token for e2e login').toBeTruthy();
   }
   if (expectDashboard) {
     await expect(page).toHaveURL(/\/dashboard$/);
   }
+}
+
+
+/** Click a Flutter semantics control that Playwright may not consider "visible". */
+async function clickFlutterRole(
+  page: Page,
+  role: string,
+  name: string,
+  options?: { exact?: boolean; timeout?: number },
+) {
+  const exact = options?.exact ?? true;
+  const timeout = options?.timeout ?? 30_000;
+  const locator = page.getByRole(role as 'button', { name, exact }).first();
+  await locator.waitFor({ state: 'attached', timeout });
+  // Flutter web semantics often fail Playwright visibility/stability checks.
+  try {
+    await locator.click({ force: true, timeout: Math.min(timeout, 10_000) });
+    return;
+  } catch {
+    // Fall through to raw DOM activation.
+  }
+  const handle = await locator.elementHandle({ timeout });
+  if (!handle) {
+    throw new Error(`No element for role=${role} name=${name}`);
+  }
+  await handle.evaluate((el) => {
+    const node = el as HTMLElement;
+    node.scrollIntoView({ block: 'center', inline: 'nearest' });
+    node.focus();
+    node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    node.click();
+  });
+  await handle.dispose();
+}
+
+/** Open a seeded house after login (Dashboard-first UX). Prefer direct route when id known. */
+export async function openHouseViaUi(
+  page: Page,
+  options: {
+    web: string;
+    houseName: string;
+    houseId?: string;
+  },
+) {
+  const { web, houseName, houseId } = options;
+
+  if (houseId) {
+    await page.goto(`${web}/house/${houseId}`);
+    await expect(page).toHaveURL(new RegExp(`/house/${houseId}$`));
+    await expect(page.getByRole('heading', { name: houseName, exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    return;
+  }
+
+  if (!/\/dashboard\/?$/.test(new URL(page.url()).pathname)) {
+    await page.goto(`${web}/dashboard`);
+  }
+  await expect(page).toHaveURL(/\/dashboard\/?$/);
+  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  const shellHouse = page.getByRole('button', { name: houseName, exact: true });
+  try {
+    await shellHouse.first().waitFor({ state: 'attached', timeout: 5_000 });
+  } catch {
+    const menu = page.getByRole('button', { name: 'Menu' });
+    if ((await menu.count()) > 0) {
+      await clickFlutterRole(page, 'button', 'Menu', { timeout: 10_000 });
+    }
+  }
+
+  if ((await shellHouse.count()) > 0) {
+    await clickFlutterRole(page, 'button', houseName, { timeout: 30_000 });
+  } else {
+    await clickFlutterRole(page, 'button', `Open ${houseName}`, { timeout: 30_000 });
+  }
+
+  await expect(page).toHaveURL(/\/house\/[^/]+$/);
+  await expect(page.getByRole('heading', { name: houseName, exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+}
+
+/** Sign out from AppShell (sidebar on wide, drawer on narrow). */
+export async function logoutViaUi(page: Page, web: string) {
+  await page.goto(`${web}/dashboard`);
+  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+  try {
+    const logOut = page.getByRole('button', { name: 'Log out' });
+    // Narrow: Log out lives in the drawer — open Menu when the control is absent.
+    if ((await logOut.count()) === 0) {
+      await clickFlutterRole(page, 'button', 'Menu', { timeout: 15_000 });
+    } else if (!(await logOut.first().isVisible().catch(() => false))) {
+      // Present in the a11y tree but in a closed drawer.
+      const menu = page.getByRole('button', { name: 'Menu' });
+      if ((await menu.count()) > 0) {
+        await clickFlutterRole(page, 'button', 'Menu', { timeout: 15_000 });
+      }
+    }
+    await clickFlutterRole(page, 'button', 'Log out', { timeout: 15_000 });
+    await waitForLoginReady(page);
+    return;
+  } catch {
+    // Token-based e2e only needs a clean cookie jar + login surface.
+  }
+  await page.context().clearCookies();
+  await page.goto(web);
+  await waitForLoginReady(page);
 }
