@@ -88,14 +88,14 @@ class _ExpensesSectionState extends State<ExpensesSection> {
   }
 
   Future<void> _saveExpense() async {
+    final s = context.read<AppState>().strings;
     final cents = parseMoneyCents(_amount.text);
     if (cents == null || cents <= 0) {
-      setState(
-          () => _error = 'Enter a positive amount with at most two decimals');
+      setState(() => _error = s.positiveAmountRequired);
       return;
     }
     if (_description.text.trim().isEmpty) {
-      setState(() => _error = 'Description is required');
+      setState(() => _error = s.descriptionRequired);
       return;
     }
     List<Map<String, dynamic>> split = [];
@@ -110,8 +110,8 @@ class _ExpensesSectionState extends State<ExpensesSection> {
     final visibleTo = _visibility == 'private'
         ? _recipients.text
             .split(',')
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty)
+            .map((part) => part.trim())
+            .where((part) => part.isNotEmpty)
             .toList()
         : <String>[];
     try {
@@ -164,19 +164,20 @@ class _ExpensesSectionState extends State<ExpensesSection> {
   }
 
   Future<void> _confirmDelete(String id) async {
+    final s = context.read<AppState>().strings;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete expense?'),
-        content: const Text('This cannot be undone.'),
+        title: Text(s.deleteExpenseTitle),
+        content: Text(s.cannotUndo),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(s.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirm delete'),
+            child: Text(s.confirmDelete),
           ),
         ],
       ),
@@ -186,20 +187,23 @@ class _ExpensesSectionState extends State<ExpensesSection> {
 
   @override
   Widget build(BuildContext context) {
+    final app = context.watch<AppState>();
+    final s = app.strings;
+    final locale = app.localeCode;
     return Semantics(
-      label: 'Expenses',
+      label: s.tabExpenses,
       container: true,
       liveRegion: true,
       explicitChildNodes: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const RoomiesHeading('Expenses', level: 2),
+          RoomiesHeading(s.tabExpenses, level: 2),
           if (_error != null) RoomiesError(_error!),
-          if (!_canCreate) const Text('Your monitor role is view-only.'),
+          if (!_canCreate) Text(s.viewOnlyRole),
           if (_canCreate) ...[
             RoomiesPrimaryButton(
-              label: _showForm ? 'Cancel' : 'Add expense',
+              label: _showForm ? s.cancel : s.addExpense,
               onPressed: () => setState(() => _showForm = !_showForm),
             ),
             if (_showForm)
@@ -207,17 +211,17 @@ class _ExpensesSectionState extends State<ExpensesSection> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const RoomiesHeading('New expense', level: 3),
+                    RoomiesHeading(s.newExpense, level: 3),
                     RoomiesLabeledField(
-                      label: 'Amount',
+                      label: s.amount,
                       child: TextField(controller: _amount),
                     ),
                     RoomiesLabeledField(
-                      label: 'Description',
+                      label: s.description,
                       child: TextField(controller: _description),
                     ),
                     RoomiesLabeledField(
-                      label: 'Custom splits',
+                      label: s.customSplits,
                       child: TextField(
                         controller: _customSplits,
                         decoration: const InputDecoration(
@@ -226,39 +230,33 @@ class _ExpensesSectionState extends State<ExpensesSection> {
                       ),
                     ),
                     RoomiesLabeledField(
-                      label: 'Category (optional)',
+                      label: s.categoryOptional,
                       child: TextField(controller: _category),
                     ),
                     RoomiesLabeledField(
-                      label: 'Date',
+                      label: s.date,
                       child: TextField(controller: _date),
                     ),
                     RoomiesLabeledField(
-                      label: 'Visibility',
+                      label: s.visibility,
                       child: DropdownButtonFormField<String>(
                         value: _visibility,
-                        items: const [
+                        items: [
                           DropdownMenuItem(
-                              value: 'shared', child: Text('Shared')),
+                              value: 'shared', child: Text(s.shared)),
                           DropdownMenuItem(
-                              value: 'private', child: Text('Private')),
+                              value: 'private', child: Text(s.privateLabel)),
                         ],
                         onChanged: (v) =>
                             setState(() => _visibility = v ?? 'shared'),
                       ),
                     ),
                     RoomiesLabeledField(
-                      label: 'Recipient user IDs',
-                      child: TextField(
-                        controller: _recipients,
-                        decoration: const InputDecoration(
-                          hintText:
-                              'Comma separated. Used for private expenses.',
-                        ),
-                      ),
+                      label: s.recipientUserIds,
+                      child: TextField(controller: _recipients),
                     ),
                     RoomiesPrimaryButton(
-                      label: 'Save expense',
+                      label: s.saveExpense,
                       onPressed: _saveExpense,
                     ),
                   ],
@@ -266,9 +264,9 @@ class _ExpensesSectionState extends State<ExpensesSection> {
               ),
           ],
           if (_loading)
-            const Text('Loading expenses…')
+            Text(s.loadingExpenses)
           else if (_expenses.isEmpty)
-            const Text('No expenses yet.')
+            Text(s.noExpensesYet)
           else
             ..._expenses.map((expense) {
               return RoomiesArticleCard(
@@ -277,15 +275,15 @@ class _ExpensesSectionState extends State<ExpensesSection> {
                   children: [
                     RoomiesHeading(expense.description, level: 3),
                     Text(
-                      '${expense.date} · \$${expense.amount.toStringAsFixed(2)} · ${expense.payerName} · ${expense.visibility}',
+                      '${expense.date} · ${formatMoney(expense.amount, localeCode: locale)} · ${expense.payerName} · ${expense.visibility}',
                     ),
                     if (_editable(expense)) ...[
                       RoomiesPrimaryButton(
-                        label: 'Details / edit',
+                        label: s.detailsEdit,
                         onPressed: () => _openDetail(expense),
                       ),
                       RoomiesPrimaryButton(
-                        label: 'Delete',
+                        label: s.delete,
                         onPressed: () => _confirmDelete(expense.id),
                       ),
                     ],
@@ -348,9 +346,10 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<AppState>().strings;
     final activeIds = widget.members.map((m) => m.userId).join(', ');
     return AlertDialog(
-      title: const Text('Expense details'),
+      title: Text(s.expenseDetails),
       content: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -358,16 +357,16 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
           children: [
             if (_error != null) RoomiesError(_error!),
             RoomiesLabeledField(
-              label: 'Description',
+              label: s.description,
               child: TextField(controller: _description),
             ),
-            Text('Active members: $activeIds'),
+            Text('${s.activeMembers}: $activeIds'),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: _save, child: const Text('Save changes')),
-        TextButton(onPressed: widget.onClose, child: const Text('Close')),
+        TextButton(onPressed: _save, child: Text(s.saveChanges)),
+        TextButton(onPressed: widget.onClose, child: Text(s.close)),
       ],
     );
   }

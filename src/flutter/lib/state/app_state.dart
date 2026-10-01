@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
 import '../api/api_error.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/preferences_storage.dart';
+import '../theme/roomies_theme.dart';
 
 class AppState extends ChangeNotifier {
   AppState(
@@ -26,6 +28,12 @@ class AppState extends ChangeNotifier {
   /// Explicit Settings override; `null` means follow the device.
   String? localeOverride;
 
+  /// Theme override: `null` (system), `light`, or `dark`.
+  String? themeOverride;
+
+  /// Brand accent family (`mint` / `plum`).
+  BrandAccent brandAccent = BrandAccent.mint;
+
   /// Preferred house for later sessions.
   String? defaultHouseId;
 
@@ -39,8 +47,21 @@ class AppState extends ChangeNotifier {
 
   RoomiesStrings get strings => RoomiesStrings(localeCode);
 
+  ThemeMode get themeMode {
+    switch (themeOverride) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      default:
+        return ThemeMode.system;
+    }
+  }
+
   Future<void> loadPreferences() async {
     localeOverride = await preferences.loadLocaleOverride();
+    themeOverride = await preferences.loadThemeOverride();
+    brandAccent = BrandAccentX.fromId(await preferences.loadBrandAccent());
     defaultHouseId = await preferences.loadDefaultHouseId();
     _applyLocale();
     notifyListeners();
@@ -60,6 +81,19 @@ class AppState extends ChangeNotifier {
     localeOverride = code;
     await preferences.saveLocaleOverride(code);
     _applyLocale();
+    notifyListeners();
+  }
+
+  Future<void> setThemeOverride(String? mode) async {
+    if (mode != null && mode != 'light' && mode != 'dark') return;
+    themeOverride = mode;
+    await preferences.saveThemeOverride(mode);
+    notifyListeners();
+  }
+
+  Future<void> setBrandAccent(BrandAccent accent) async {
+    brandAccent = accent;
+    await preferences.saveBrandAccent(accent.id);
     notifyListeners();
   }
 

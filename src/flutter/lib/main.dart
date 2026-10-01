@@ -6,6 +6,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 
 import 'api/api_client.dart';
+import 'core/datetime_format.dart';
 import 'router.dart';
 import 'state/app_state.dart';
 import 'theme/roomies_theme.dart';
@@ -17,6 +18,7 @@ Future<void> main() async {
     SemanticsBinding.instance.ensureSemantics();
   }
   usePathUrlStrategy();
+  await ensureDateFormatting();
   final api = ApiClient(webOrigin: kIsWeb ? Uri.base.origin : null);
   final appState = AppState(api, deviceLocale: platformLocaleTag());
   await appState.restoreSession();
@@ -46,7 +48,15 @@ class _RoomiesAppState extends State<RoomiesApp> {
               : const Locale('en');
           return MaterialApp.router(
             title: 'Roomies',
-            theme: buildRoomiesTheme(),
+            theme: buildRoomiesTheme(
+              brightness: Brightness.light,
+              brand: app.brandAccent,
+            ),
+            darkTheme: buildRoomiesTheme(
+              brightness: Brightness.dark,
+              brand: app.brandAccent,
+            ),
+            themeMode: app.themeMode,
             locale: locale,
             supportedLocales: const [
               Locale('en'),

@@ -71,8 +71,9 @@ class _GroceriesSectionState extends State<GroceriesSection> {
   }
 
   Future<void> _add() async {
+    final s = context.read<AppState>().strings;
     if (_name.text.trim().isEmpty) {
-      setState(() => _status = 'A grocery name is required.');
+      setState(() => _status = s.name);
       return;
     }
     await context.read<AppState>().api.createGrocery(widget.houseId, {
@@ -84,7 +85,7 @@ class _GroceriesSectionState extends State<GroceriesSection> {
       'position': 0,
     });
     _name.clear();
-    setState(() => _status = 'Grocery saved.');
+    setState(() => _status = s.grocerySaved);
     await _load();
   }
 
@@ -99,61 +100,63 @@ class _GroceriesSectionState extends State<GroceriesSection> {
   }
 
   Future<void> _delete(GroceryItem item) async {
+    final s = context.read<AppState>().strings;
     await context
         .read<AppState>()
         .api
         .deleteGrocery(widget.houseId, item.id, item.version);
-    setState(() => _status = 'Grocery deleted.');
+    setState(() => _status = s.groceryDeleted);
     await _load();
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<AppState>().strings;
     final canWrite = _writable(widget.role);
     return RoomiesTabPanel(
-      name: 'Groceries',
+      name: s.tabGroceries,
       child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const RoomiesHeading('Groceries', level: 2),
-        if (_loading) const Text('Loading groceries…'),
-        if (_loadError != null) ...[
-          RoomiesError('Unable to load groceries: $_loadError'),
-          RoomiesPrimaryButton(label: 'Retry groceries', onPressed: _load),
-        ],
-        if (!canWrite) const Text('Your monitor role is view-only.'),
-        if (canWrite && !_loading && _loadError == null) ...[
-          RoomiesLabeledField(
-            label: 'Name',
-            child: TextField(controller: _name),
-          ),
-          RoomiesPrimaryButton(label: 'Add grocery', onPressed: _add),
-        ],
-        if (_status.isNotEmpty) Text(_status),
-        if (!_loading && _loadError == null && _items.isEmpty)
-          const Text('No groceries yet.'),
-        ..._items.map((item) {
-          return RoomiesArticleCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                RoomiesHeading(item.name, level: 3),
-                Text(item.checked ? 'Checked' : 'Needed'),
-                if (canWrite) ...[
-                  RoomiesPrimaryButton(
-                    label: item.checked ? 'Uncheck' : 'Check',
-                    onPressed: () => _toggle(item),
-                  ),
-                  RoomiesPrimaryButton(
-                    label: 'Delete',
-                    onPressed: () => _delete(item),
-                  ),
-                ],
-              ],
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RoomiesHeading(s.tabGroceries, level: 2),
+          if (_loading) Text(s.loading),
+          if (_loadError != null) ...[
+            RoomiesError(_loadError!),
+            RoomiesPrimaryButton(label: s.retry, onPressed: _load),
+          ],
+          if (!canWrite) Text(s.viewOnlyRole),
+          if (canWrite && !_loading && _loadError == null) ...[
+            RoomiesLabeledField(
+              label: s.name,
+              child: TextField(controller: _name),
             ),
-          );
-        }),
-      ],
+            RoomiesPrimaryButton(label: s.addGrocery, onPressed: _add),
+          ],
+          if (_status.isNotEmpty) Text(_status),
+          if (!_loading && _loadError == null && _items.isEmpty)
+            Text(s.noGroceriesYet),
+          ..._items.map((item) {
+            return RoomiesArticleCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RoomiesHeading(item.name, level: 3),
+                  Text(item.checked ? s.checked : s.needed),
+                  if (canWrite) ...[
+                    RoomiesPrimaryButton(
+                      label: item.checked ? s.uncheck : s.check,
+                      onPressed: () => _toggle(item),
+                    ),
+                    RoomiesPrimaryButton(
+                      label: s.delete,
+                      onPressed: () => _delete(item),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
@@ -202,7 +205,9 @@ class _ChoresSectionState extends State<ChoresSection> {
   }
 
   Future<void> _create() async {
-    final due = _dueLocal.text.length == 16 ? '${_dueLocal.text}:00' : _dueLocal.text;
+    final s = context.read<AppState>().strings;
+    final due =
+        _dueLocal.text.length == 16 ? '${_dueLocal.text}:00' : _dueLocal.text;
     try {
       await context.read<AppState>().api.createChore(widget.houseId, {
         'title': _title.text.trim(),
@@ -214,7 +219,7 @@ class _ChoresSectionState extends State<ChoresSection> {
         'exdates': <String>[],
         'enabled': true,
       });
-      setState(() => _status = 'Chore saved.');
+      setState(() => _status = s.choreSaved);
       await _load();
     } on ApiError catch (error) {
       setState(() => _status = error.message);
@@ -222,6 +227,7 @@ class _ChoresSectionState extends State<ChoresSection> {
   }
 
   Future<void> _toggle(Chore chore) async {
+    final s = context.read<AppState>().strings;
     await context.read<AppState>().api.updateChore(widget.houseId, chore.id, {
       'title': chore.title,
       'description': chore.description,
@@ -233,61 +239,63 @@ class _ChoresSectionState extends State<ChoresSection> {
       'enabled': !chore.enabled,
       'version': chore.version,
     });
-    setState(() => _status = 'Chore enabled state saved.');
+    setState(() => _status = s.choreEnabledSaved);
     await _load();
   }
 
   Future<void> _delete(Chore chore) async {
+    final s = context.read<AppState>().strings;
     await context
         .read<AppState>()
         .api
         .deleteChore(widget.houseId, chore.id, chore.version);
-    setState(() => _status = 'Chore deleted.');
+    setState(() => _status = s.choreDeleted);
     await _load();
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<AppState>().strings;
     final canWrite = _writable(widget.role);
     return RoomiesTabPanel(
-      name: 'Chores',
+      name: s.tabChores,
       child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const RoomiesHeading('Chores', level: 2),
-        if (_loading) const Text('Loading chores…'),
-        if (!canWrite) const Text('Your monitor role is view-only.'),
-        if (canWrite && !_loading) ...[
-          RoomiesLabeledField(
-            label: 'Title',
-            child: TextField(controller: _title),
-          ),
-          RoomiesLabeledField(
-            label: 'Due local',
-            child: TextField(controller: _dueLocal),
-          ),
-          RoomiesPrimaryButton(label: 'Create chore', onPressed: _create),
-        ],
-        if (_status.isNotEmpty) Text(_status),
-        ..._chores.map((chore) => RoomiesArticleCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  RoomiesHeading(chore.title, level: 3),
-                  if (canWrite) ...[
-                    RoomiesPrimaryButton(
-                      label: chore.enabled ? 'Disable' : 'Enable',
-                      onPressed: () => _toggle(chore),
-                    ),
-                    RoomiesPrimaryButton(
-                      label: 'Delete',
-                      onPressed: () => _delete(chore),
-                    ),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RoomiesHeading(s.tabChores, level: 2),
+          if (_loading) Text(s.loading),
+          if (!canWrite) Text(s.viewOnlyRole),
+          if (canWrite && !_loading) ...[
+            RoomiesLabeledField(
+              label: s.title,
+              child: TextField(controller: _title),
+            ),
+            RoomiesLabeledField(
+              label: s.dueLocal,
+              child: TextField(controller: _dueLocal),
+            ),
+            RoomiesPrimaryButton(label: s.createChore, onPressed: _create),
+          ],
+          if (_status.isNotEmpty) Text(_status),
+          ..._chores.map((chore) => RoomiesArticleCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RoomiesHeading(chore.title, level: 3),
+                    if (canWrite) ...[
+                      RoomiesPrimaryButton(
+                        label: chore.enabled ? s.disable : s.enable,
+                        onPressed: () => _toggle(chore),
+                      ),
+                      RoomiesPrimaryButton(
+                        label: s.delete,
+                        onPressed: () => _delete(chore),
+                      ),
+                    ],
                   ],
-                ],
-              ),
-            )),
-      ],
+                ),
+              )),
+        ],
       ),
     );
   }
@@ -337,10 +345,10 @@ class _CalendarSectionState extends State<CalendarSection> {
     }
   }
 
-  String _local(String value) =>
-      value.length == 16 ? '$value:00' : value;
+  String _local(String value) => value.length == 16 ? '$value:00' : value;
 
   Future<void> _create() async {
+    final s = context.read<AppState>().strings;
     await context.read<AppState>().api.createCalendarEvent(widget.houseId, {
       'title': _title.text.trim(),
       'description': '',
@@ -351,198 +359,65 @@ class _CalendarSectionState extends State<CalendarSection> {
       'rrule': _defaultRrule(),
       'exdates': <String>[],
     });
-    setState(() => _status = 'Calendar event saved.');
+    setState(() => _status = s.calendarEventSaved);
     await _load();
   }
 
   Future<void> _delete(CalendarEvent event) async {
+    final s = context.read<AppState>().strings;
     await context
         .read<AppState>()
         .api
         .deleteCalendarEvent(widget.houseId, event.id, event.version);
-    setState(() => _status = 'Calendar event deleted.');
+    setState(() => _status = s.calendarEventDeleted);
     await _load();
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<AppState>().strings;
     final canWrite = _writable(widget.role);
     return RoomiesTabPanel(
-      name: 'Calendar',
+      name: s.tabCalendar,
       child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const RoomiesHeading('Calendar', level: 2),
-        if (_loading) const Text('Loading calendar…'),
-        if (!canWrite) const Text('Your monitor role is view-only.'),
-        if (canWrite && !_loading) ...[
-          RoomiesLabeledField(
-            label: 'Title',
-            child: TextField(controller: _title),
-          ),
-          RoomiesLabeledField(
-            label: 'Start local',
-            child: TextField(controller: _start),
-          ),
-          RoomiesLabeledField(
-            label: 'End local',
-            child: TextField(controller: _end),
-          ),
-          RoomiesPrimaryButton(
-            label: 'Create calendar event',
-            onPressed: _create,
-          ),
-        ],
-        if (_status.isNotEmpty) Text(_status),
-        ..._events.map((event) => RoomiesArticleCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  RoomiesHeading(event.title, level: 3),
-                  if (canWrite)
-                    RoomiesPrimaryButton(
-                      label: 'Delete',
-                      onPressed: () => _delete(event),
-                    ),
-                ],
-              ),
-            )),
-      ],
-      ),
-    );
-  }
-}
-
-class ChatSection extends StatefulWidget {
-  const ChatSection({
-    super.key,
-    required this.houseId,
-    required this.role,
-    required this.userId,
-  });
-
-  final String houseId;
-  final HouseRole? role;
-  final String userId;
-
-  @override
-  State<ChatSection> createState() => _ChatSectionState();
-}
-
-class _ChatSectionState extends State<ChatSection> {
-  List<ChatMessage> _messages = [];
-  var _loading = true;
-  String _status = '';
-  ChatMessage? _editing;
-  final _body = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _body.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    final page = await context.read<AppState>().api.getChat(widget.houseId);
-    if (mounted) {
-      setState(() {
-        _messages = page.messages;
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _send() async {
-    if (_editing != null) {
-      await context.read<AppState>().api.updateChat(
-            widget.houseId,
-            _editing!.id,
-            _body.text.trim(),
-          );
-      setState(() {
-        _status = 'Message edited.';
-        _editing = null;
-      });
-    } else {
-      await context
-          .read<AppState>()
-          .api
-          .createChat(widget.houseId, _body.text.trim());
-      setState(() => _status = 'Message sent.');
-    }
-    _body.clear();
-    await _load();
-  }
-
-  Future<void> _delete(ChatMessage message) async {
-    await context.read<AppState>().api.deleteChat(widget.houseId, message.id);
-    setState(() => _status = 'Message deleted.');
-    await _load();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final canWrite = _writable(widget.role);
-    return RoomiesTabPanel(
-      name: 'Chat',
-      child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const RoomiesHeading('Chat', level: 2),
-        if (_loading) const Text('Loading chat…'),
-        RoomiesPrimaryButton(
-          label: 'Refresh chat',
-          onPressed: () async {
-            await _load();
-            setState(() => _status = 'Chat refreshed.');
-          },
-        ),
-        if (!canWrite) const Text('Your monitor role is view-only.'),
-        if (canWrite) ...[
-          RoomiesLabeledField(
-            label: 'Message',
-            child: TextField(controller: _body, maxLines: 3),
-          ),
-          RoomiesPrimaryButton(
-            label: _editing != null ? 'Save message' : 'Send message',
-            onPressed: _send,
-          ),
-        ],
-        if (_status.isNotEmpty) Text(_status),
-        ..._messages.where((m) => m.body != null).map((message) {
-          final own = message.authorId == widget.userId;
-          return RoomiesArticleCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(message.body ?? ''),
-                if (own && canWrite) ...[
-                  RoomiesPrimaryButton(
-                    label: 'Edit message',
-                    onPressed: () {
-                      setState(() {
-                        _editing = message;
-                        _body.text = message.body ?? '';
-                      });
-                    },
-                  ),
-                  RoomiesPrimaryButton(
-                    label: 'Delete message',
-                    onPressed: () => _delete(message),
-                  ),
-                ],
-              ],
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RoomiesHeading(s.tabCalendar, level: 2),
+          if (_loading) Text(s.loading),
+          if (!canWrite) Text(s.viewOnlyRole),
+          if (canWrite && !_loading) ...[
+            RoomiesLabeledField(
+              label: s.title,
+              child: TextField(controller: _title),
             ),
-          );
-        }),
-      ],
+            RoomiesLabeledField(
+              label: s.startLocal,
+              child: TextField(controller: _start),
+            ),
+            RoomiesLabeledField(
+              label: s.endLocal,
+              child: TextField(controller: _end),
+            ),
+            RoomiesPrimaryButton(
+              label: s.createCalendarEvent,
+              onPressed: _create,
+            ),
+          ],
+          if (_status.isNotEmpty) Text(_status),
+          ..._events.map((event) => RoomiesArticleCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RoomiesHeading(event.title, level: 3),
+                    if (canWrite)
+                      RoomiesPrimaryButton(
+                        label: s.delete,
+                        onPressed: () => _delete(event),
+                      ),
+                  ],
+                ),
+              )),
+        ],
       ),
     );
   }

@@ -22,14 +22,14 @@ class RoomiesCard extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 10),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: RoomiesColors.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: RoomiesColors.line),
+          color: RoomiesPalette.of(context).surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: RoomiesPalette.of(context).line),
           boxShadow: [
             BoxShadow(
-              color: RoomiesColors.ink.withValues(alpha: 0.05),
-              blurRadius: 24,
-              offset: const Offset(0, 10),
+              color: RoomiesPalette.of(context).shadow,
+              blurRadius: 28,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
@@ -61,14 +61,16 @@ class RoomiesError extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         margin: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: RoomiesColors.dangerSoft,
+          color: RoomiesPalette.of(context).dangerSoft,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFF0B8B0)),
+          border: Border.all(
+            color: RoomiesPalette.of(context).danger.withValues(alpha: 0.35),
+          ),
         ),
         child: Text(
           message,
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: RoomiesColors.danger,
+                color: RoomiesPalette.of(context).danger,
               ),
         ),
       ),
@@ -76,6 +78,7 @@ class RoomiesError extends StatelessWidget {
   }
 }
 
+/// Page backdrop — flat brand canvas only (no decorative blobs/circles).
 class RoomiesAtmosphere extends StatelessWidget {
   const RoomiesAtmosphere({super.key, required this.child});
 
@@ -83,62 +86,10 @@ class RoomiesAtmosphere extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFCBE3E1),
-            Color(0xFFE7EEF0),
-            Color(0xFFF3F6F7),
-            Color(0xFFDDE8EA),
-          ],
-          stops: [0.0, 0.35, 0.7, 1.0],
-        ),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            top: -80,
-            right: -40,
-            child: _Blob(
-              size: 240,
-              color: RoomiesColors.teal.withValues(alpha: 0.14),
-            ),
-          ),
-          Positioned(
-            bottom: -60,
-            left: -50,
-            child: _Blob(
-              size: 220,
-              color: RoomiesColors.tealDeep.withValues(alpha: 0.10),
-            ),
-          ),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _Blob extends StatelessWidget {
-  const _Blob({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color,
-        ),
-      ),
+    final p = RoomiesPalette.of(context);
+    return ColoredBox(
+      color: p.canvas,
+      child: child,
     );
   }
 }
@@ -190,7 +141,7 @@ class RoomiesPage extends StatelessWidget {
     );
 
     return Material(
-      color: RoomiesColors.canvas,
+      color: RoomiesPalette.of(context).canvas,
       child: atmosphere ? RoomiesAtmosphere(child: content) : content,
     );
   }
@@ -245,15 +196,16 @@ class RoomiesBrandMark extends StatelessWidget {
           Text(
             'Roomies',
             style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                  fontSize: compact ? 32 : 44,
+                  fontSize: compact ? 34 : 52,
+                  height: 0.98,
                 ),
           ),
           if (!compact) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
               line,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: RoomiesColors.inkMuted,
+                    color: RoomiesPalette.of(context).inkMuted,
                   ),
             ),
           ],
@@ -278,11 +230,14 @@ class RoomiesPrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: SizedBox(
         width: double.infinity,
         child: FilledButton(
           onPressed: enabled ? onPressed : null,
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(48),
+          ),
           child: Text(label),
         ),
       ),
@@ -357,11 +312,11 @@ class RoomiesTabStrip extends StatelessWidget {
                       child: TextButton(
                         style: TextButton.styleFrom(
                           backgroundColor: selected == tab
-                              ? RoomiesColors.teal
-                              : RoomiesColors.mist,
+                              ? RoomiesPalette.of(context).teal
+                              : RoomiesPalette.of(context).mist,
                           foregroundColor: selected == tab
-                              ? Colors.white
-                              : RoomiesColors.inkMuted,
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : RoomiesPalette.of(context).inkMuted,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),

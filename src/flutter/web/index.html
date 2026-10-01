@@ -40,21 +40,24 @@
     html, body {
       height: 100%;
       margin: 0;
-      background:
-        radial-gradient(circle at 12% 18%, rgba(13, 115, 119, 0.18), transparent 42%),
-        radial-gradient(circle at 88% 12%, rgba(9, 84, 86, 0.12), transparent 36%),
-        linear-gradient(160deg, #cbe3e1 0%, #e7eef0 42%, #f3f6f7 100%);
+      background: #f3f8f6;
       font-family: "Source Sans 3", "Segoe UI", sans-serif;
+      color: #14212b;
+    }
+    @media (prefers-color-scheme: dark) {
+      html, body {
+        background: #0b1412;
+        color: #e6eef1;
+      }
     }
     .roomies-boot {
       min-height: 100%;
       display: grid;
       place-items: center;
-      color: #14212b;
       letter-spacing: -0.03em;
       font-family: Fraunces, Georgia, serif;
-      font-size: 2rem;
-      font-weight: 600;
+      font-size: 2.4rem;
+      font-weight: 700;
     }
   </style>
 </head>

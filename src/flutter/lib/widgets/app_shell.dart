@@ -89,7 +89,7 @@ class _AppShellState extends State<AppShell> {
 
     if (wide) {
       return Material(
-        color: RoomiesColors.canvas,
+        color: RoomiesPalette.of(context).canvas,
         child: RoomiesAtmosphere(
           child: SafeArea(
             child: Row(
@@ -124,7 +124,7 @@ class _AppShellState extends State<AppShell> {
       backgroundColor: Colors.transparent,
       resizeToAvoidBottomInset: false,
       drawer: Drawer(
-        backgroundColor: RoomiesColors.surface,
+        backgroundColor: RoomiesPalette.of(context).surface,
         child: SafeArea(child: nav),
       ),
       body: RoomiesAtmosphere(
@@ -180,7 +180,7 @@ class _ShellTopBar extends StatelessWidget {
             Text(
               strings.brand,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: RoomiesColors.tealDeep,
+                    color: RoomiesPalette.of(context).tealDeep,
                     fontFamily: 'Fraunces',
                   ),
             ),
@@ -189,7 +189,7 @@ class _ShellTopBar extends StatelessWidget {
               const SizedBox(width: 10),
               Text(
                 '·',
-                style: TextStyle(color: RoomiesColors.inkMuted),
+                style: TextStyle(color: RoomiesPalette.of(context).inkMuted),
               ),
               const SizedBox(width: 10),
             ],
@@ -246,9 +246,9 @@ class _ShellNav extends StatelessWidget {
       margin: const EdgeInsets.all(12),
       padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
       decoration: BoxDecoration(
-        color: RoomiesColors.surface.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: RoomiesColors.line),
+        color: RoomiesPalette.of(context).surface.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: RoomiesPalette.of(context).line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -256,7 +256,7 @@ class _ShellNav extends StatelessWidget {
           Text(
             strings.brand,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: RoomiesColors.tealDeep,
+                  color: RoomiesPalette.of(context).tealDeep,
                 ),
           ),
           const SizedBox(height: 4),
@@ -343,20 +343,20 @@ class _NavTile extends StatelessWidget {
       label: label,
       excludeSemantics: true,
       child: Material(
-        color: selected ? RoomiesColors.tealSoft : Colors.transparent,
+        color: selected ? RoomiesPalette.of(context).tealSoft : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
             child: Row(
               children: [
                 Icon(
                   icon,
                   size: 20,
                   color:
-                      selected ? RoomiesColors.tealDeep : RoomiesColors.inkMuted,
+                      selected ? RoomiesPalette.of(context).tealDeep : RoomiesPalette.of(context).inkMuted,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -365,8 +365,8 @@ class _NavTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           color: selected
-                              ? RoomiesColors.tealDeep
-                              : RoomiesColors.ink,
+                              ? RoomiesPalette.of(context).tealDeep
+                              : RoomiesPalette.of(context).ink,
                           fontWeight:
                               selected ? FontWeight.w700 : FontWeight.w500,
                         ),
@@ -377,13 +377,13 @@ class _NavTile extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: RoomiesColors.mist,
+                      color: RoomiesPalette.of(context).mist,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
                       badge!,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: RoomiesColors.tealDeep,
+                            color: RoomiesPalette.of(context).tealDeep,
                             fontWeight: FontWeight.w600,
                           ),
                     ),

@@ -73,7 +73,7 @@ class _MembersSectionState extends State<MembersSection> {
 
   Future<void> _addMember() async {
     if (_userId.text.trim().isEmpty) {
-      setState(() => _status = 'User ID is required');
+      setState(() => _status = context.read<AppState>().strings.userIdRequired);
       return;
     }
     await context.read<AppState>().api.addMember(
@@ -81,7 +81,7 @@ class _MembersSectionState extends State<MembersSection> {
           _userId.text.trim(),
           _role,
         );
-    setState(() => _status = 'Member added.');
+    setState(() => _status = context.read<AppState>().strings.memberAdded);
     widget.onRefresh();
   }
 
@@ -99,13 +99,13 @@ class _MembersSectionState extends State<MembersSection> {
         .read<AppState>()
         .api
         .removeMember(widget.houseId, member.userId);
-    setState(() => _status = 'Member removed.');
+    setState(() => _status = context.read<AppState>().strings.memberRemoved);
     widget.onRefresh();
   }
 
   Future<void> _sendInvite() async {
     if (_inviteEmail.text.trim().isEmpty) {
-      setState(() => _inviteError = 'Email is required.');
+      setState(() => _inviteError = context.read<AppState>().strings.emailRequired);
       return;
     }
     try {
@@ -117,54 +117,57 @@ class _MembersSectionState extends State<MembersSection> {
       _inviteEmail.clear();
       await _loadInvites();
     } catch (error) {
-      setState(() => _inviteError = 'Unable to send invitation: $error');
+      setState(() => _inviteError = context.read<AppState>().strings.inviteFailed('$error'));
     }
   }
 
+  List<DropdownMenuItem<String>> _roleItems(dynamic s) => [
+        DropdownMenuItem(value: 'member', child: Text(s.roleMember)),
+        DropdownMenuItem(value: 'admin', child: Text(s.roleAdmin)),
+        DropdownMenuItem(value: 'monitor', child: Text(s.roleMonitor)),
+      ];
+
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<AppState>().strings;
     return RoomiesTabPanel(
-      name: 'Members',
+      name: s.tabMembers,
       child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const RoomiesHeading('Members', level: 2),
+        RoomiesHeading(s.tabMembers, level: 2),
         if (widget.admin) ...[
           Semantics(
-            label: 'Email invitations',
+            label: s.emailInvitations,
             container: true,
             explicitChildNodes: true,
             child: RoomiesCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const RoomiesHeading('Invite by email', level: 3),
+                  RoomiesHeading(s.inviteByEmail, level: 3),
                   RoomiesLabeledField(
-                    label: 'Email address',
+                    label: s.emailAddress,
                     child: TextField(controller: _inviteEmail),
                   ),
                   RoomiesLabeledField(
-                    label: 'Role',
+                    label: s.role,
                     child: DropdownButtonFormField<String>(
                       value: _inviteRole,
-                      items: const [
-                        DropdownMenuItem(value: 'member', child: Text('Member')),
-                        DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                        DropdownMenuItem(value: 'monitor', child: Text('Monitor')),
-                      ],
+                      items: _roleItems(s),
                       onChanged: (v) => setState(() => _inviteRole = v ?? 'member'),
                     ),
                   ),
                   RoomiesPrimaryButton(
-                    label: 'Send invitation',
+                    label: s.sendInvitation,
                     onPressed: _sendInvite,
                   ),
                   if (_inviteError != null) RoomiesError(_inviteError!),
-                  const RoomiesHeading('Invitation history', level: 3),
+                  RoomiesHeading(s.invitationHistory, level: 3),
                   if (_invitesLoading)
-                    const Text('Loading invitations…')
+                    Text(s.loadingInvitations)
                   else if (_invites.isEmpty)
-                    const Text('No invitations yet.'),
+                    Text(s.noInvitationsYet),
                 ],
               ),
             ),
@@ -173,21 +176,17 @@ class _MembersSectionState extends State<MembersSection> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const RoomiesHeading('Add existing member', level: 3),
+                RoomiesHeading(s.addExistingMember, level: 3),
                 RoomiesLabeledField(
-                  label: 'User ID',
+                  label: s.userId,
                   child: TextField(controller: _userId),
                 ),
                 DropdownButtonFormField<String>(
                   value: _role,
-                  items: const [
-                    DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                    DropdownMenuItem(value: 'member', child: Text('Member')),
-                    DropdownMenuItem(value: 'monitor', child: Text('Monitor')),
-                  ],
+                  items: _roleItems(s),
                   onChanged: (v) => setState(() => _role = v ?? 'member'),
                 ),
-                RoomiesPrimaryButton(label: 'Add member', onPressed: _addMember),
+                RoomiesPrimaryButton(label: s.addMember, onPressed: _addMember),
                 if (_status.isNotEmpty) Text(_status),
               ],
             ),
@@ -204,15 +203,12 @@ class _MembersSectionState extends State<MembersSection> {
                 if (widget.admin)
                   Wrap(
                     crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
+                    spacing: 12,
+                    runSpacing: 8,
                     children: [
                       DropdownButton<String>(
                         value: _pendingRoles[member.userId] ?? member.role,
-                        items: const [
-                          DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                          DropdownMenuItem(value: 'member', child: Text('Member')),
-                          DropdownMenuItem(value: 'monitor', child: Text('Monitor')),
-                        ],
+                        items: _roleItems(s),
                         onChanged: (role) {
                           if (role != null) {
                             setState(() => _pendingRoles[member.userId] = role);
@@ -224,11 +220,11 @@ class _MembersSectionState extends State<MembersSection> {
                           member,
                           _pendingRoles[member.userId] ?? member.role,
                         ),
-                        child: const Text('Change role'),
+                        child: Text(s.changeRole),
                       ),
                       TextButton(
                         onPressed: () => _remove(member),
-                        child: const Text('Remove'),
+                        child: Text(s.remove),
                       ),
                     ],
                   ),
