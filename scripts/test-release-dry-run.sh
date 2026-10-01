@@ -10,12 +10,11 @@ cd "$fixture/repo"
 git init -q
 git config user.email test@example.invalid
 git config user.name release-test
-echo lock > flake.lock
 mkdir -p deploy/kustomize
 echo config > deploy/kustomize/fixture
 git add .; git commit -qm fixture
 old=$(git rev-parse HEAD)
-echo next >> flake.lock; git commit -qam next
+echo next >> deploy/kustomize/fixture; git commit -qam next
 sha=$(git rev-parse HEAD)
 cat > "$fixture/tools/podman" <<'SH'
 #!/bin/sh
@@ -35,7 +34,7 @@ for version in '' latest 'bad/version'; do
     reject env RELEASE_VERSION="$version" bash scripts/release-dry-run.sh
     grep -q 'RELEASE_VERSION' "$fixture/result"
 done
-for file in flake.lock deploy/kustomize/fixture untracked-fixture; do
+for file in deploy/kustomize/fixture untracked-fixture; do
     echo dirty >> "$file"
     reject bash scripts/release-dry-run.sh
     grep -q 'clean checkout' "$fixture/result"
