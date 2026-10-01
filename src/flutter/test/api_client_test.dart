@@ -18,6 +18,36 @@ void main() {
     expect(resolveApiBaseUrl(isWeb: true), '/api');
   });
 
+  test('resolveApiBaseUrl ignores baked localhost on public web origin', () {
+    expect(
+      resolveApiBaseUrl(
+        configured: 'http://localhost:8080/api',
+        webOrigin: 'https://roomies-dev.example',
+        isWeb: true,
+      ),
+      'https://roomies-dev.example/api',
+    );
+    expect(
+      resolveApiBaseUrl(
+        configured: 'http://127.0.0.1:8080/api',
+        webOrigin: 'https://roomies-dev.example',
+        isWeb: true,
+      ),
+      'https://roomies-dev.example/api',
+    );
+  });
+
+  test('resolveApiBaseUrl keeps localhost when page is also loopback', () {
+    expect(
+      resolveApiBaseUrl(
+        configured: 'http://localhost:8080/api',
+        webOrigin: 'http://localhost:58000',
+        isWeb: true,
+      ),
+      'http://localhost:8080/api',
+    );
+  });
+
   test('workos authorize urls are limited to the hosted api host', () {
     expect(
       isWorkOSAuthorizeUrl(

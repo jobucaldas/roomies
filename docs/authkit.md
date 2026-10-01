@@ -2,6 +2,20 @@
 
 Roomies uses WorkOS **hosted AuthKit** for sign-in when `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` are set. The Flutter client shows a single **Sign in** action that redirects to AuthKit. Google and other enabled methods appear on the hosted AuthKit page. Without those variables, the app keeps local email/password (used by CI), collapsed behind **Use email and password**. When AuthKit is enabled, `POST /api/auth/login` and `POST /api/auth/register` return 403.
 
+## Staging AuthKit URLs (phone / Tailscale)
+
+Shared Staging app (`client_01M3QCMK75B35RPC8EAJA5GREP`) defaults must point at the public Tailscale host — AuthKit email/IdP/logout links follow these, not only the OAuth `redirect_uri` Roomies sends:
+
+| Setting | Preferred value |
+|---|---|
+| Default redirect URI | `https://roomies-dev.tailbe71e1.ts.net/callback` |
+| Initiate login / homepage / sign-up | `https://roomies-dev.tailbe71e1.ts.net/` |
+| Default logout return | `https://roomies-dev.tailbe71e1.ts.net/` |
+
+Also allow `https://encom.tailbe71e1.ts.net/…` and local `http://localhost…` / `127.0.0.1` / `:8787` / `com.jobucaldas.a217://…` for CI and 217. Prefer **`https://roomies-dev.tailbe71e1.ts.net/`** for phone AuthKit tests so cookies and callback share one host.
+
+Roomies backend always sends an explicit `redirect_uri` (`WORKOS_REDIRECT_URI` or `{ROOMIES_PUBLIC_BASE_URL}/callback`). Keep AuthKit app defaults on the public host anyway so AuthKit-owned redirects never send a phone browser to localhost.
+
 ## Google OAuth (AuthKit social login)
 
 Google appears on the AuthKit page when enabled and credentials are available. Docs: [AuthKit](https://workos.com/docs/authkit), [Social Login](https://workos.com/docs/authkit/social-login), [Google OAuth](https://workos.com/docs/integrations/google-oauth).
@@ -28,11 +42,11 @@ Do **not** put Google client secrets in Roomies env files. Only WorkOS needs the
 ```bash
 WORKOS_API_KEY=sk_...          # from WorkOS Dashboard → API Keys
 WORKOS_CLIENT_ID=client_...
-WORKOS_REDIRECT_URI=http://localhost/callback   # optional; defaults to {ROOMIES_PUBLIC_BASE_URL}/callback
+WORKOS_REDIRECT_URI=https://roomies-dev.tailbe71e1.ts.net/callback   # optional; defaults to {ROOMIES_PUBLIC_BASE_URL}/callback
 JWT_ACCESS_TTL_HOURS=8         # session cookie and bearer lifetime (default 8h)
 ```
 
-Configure matching redirect, initiate-login, and logout-return URIs in the WorkOS Dashboard for your environment.
+For local compose/CI without Tailscale, `http://localhost/callback` (or `:58000`) is fine. Configure matching redirect, initiate-login, and logout-return URIs in the WorkOS Dashboard for your environment.
 
 ## Flow
 

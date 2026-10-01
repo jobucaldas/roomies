@@ -12,19 +12,47 @@ import 'api_error.dart';
 import 'http_client_factory_stub.dart'
     if (dart.library.js_interop) 'http_client_factory_web.dart';
 
+bool _isLoopbackHost(String? host) {
+  if (host == null || host.isEmpty) return false;
+  final normalized = host.toLowerCase();
+  return normalized == 'localhost' ||
+      normalized == '127.0.0.1' ||
+      normalized == '::1' ||
+      normalized == '[::1]';
+}
+
+/// Resolves the API base for the current client.
+///
+/// Web builds should use relative `/api` (same-origin via Caddy). If a release
+/// image was accidentally baked with a loopback `ROOMIES_API_URL` but is served
+/// from a public origin (Tailscale, Ingress), ignore the loopback URL and use
+/// `{webOrigin}/api` so phones on the tailnet never call the device's localhost.
 String resolveApiBaseUrl({
   String? configured,
   String? webOrigin,
   bool isWeb = kIsWeb,
 }) {
   const fallback = '/api';
-  final value =
+  var value =
       (configured == null || configured.isEmpty) ? fallback : configured;
-  if (isWeb && value.startsWith('/')) {
-    if (webOrigin != null && webOrigin.isNotEmpty) {
-      return '${webOrigin.replaceAll(RegExp(r'/+$'), '')}$value'
-          .replaceAll(RegExp(r'/+$'), '');
+  final origin = (webOrigin == null || webOrigin.isEmpty)
+      ? null
+      : webOrigin.replaceAll(RegExp(r'/+$'), '');
+
+  if (isWeb && origin != null) {
+    final originHost = Uri.tryParse(origin)?.host;
+    final configuredUri = Uri.tryParse(value);
+    if (!_isLoopbackHost(originHost) &&
+        configuredUri != null &&
+        configuredUri.hasScheme &&
+        _isLoopbackHost(configuredUri.host)) {
+      value = fallback;
     }
+    if (value.startsWith('/')) {
+      return '$origin$value'.replaceAll(RegExp(r'/+$'), '');
+    }
+  } else if (isWeb && value.startsWith('/')) {
+    return value.replaceAll(RegExp(r'/+$'), '');
   }
   return value.replaceAll(RegExp(r'/+$'), '');
 }
