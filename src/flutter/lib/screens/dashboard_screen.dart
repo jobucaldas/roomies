@@ -31,6 +31,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Note> _notes = [];
   List<_DashEvent> _events = [];
 
+  /// Bumps on every summary fetch. A response applies only if it is still the
+  /// latest, so a slow house cannot overwrite the one the user switched to.
+  int _summaryGeneration = 0;
+
   @override
   void initState() {
     super.initState();
@@ -75,6 +79,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadSummary(String houseId) async {
+    final generation = ++_summaryGeneration;
     setState(() {
       _summaryLoading = true;
       _summaryError = null;
@@ -88,7 +93,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         api.getCalendar(houseId),
         api.getScheduledEvents(houseId),
       ]);
-      if (!mounted) return;
+      if (!mounted || generation != _summaryGeneration) return;
       final expenses = results[0] as List<Expense>;
       final notes = results[1] as List<Note>;
       final calendar = results[2] as List<CalendarEvent>;
@@ -121,7 +126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _summaryLoading = false;
       });
     } catch (error) {
-      if (mounted) {
+      if (mounted && generation == _summaryGeneration) {
         setState(() {
           _summaryError = error.toString();
           _summaryLoading = false;
