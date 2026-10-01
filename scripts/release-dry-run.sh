@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Run inside nix develop .#container. No registry writes or cluster access.
+# Local release rehearsal. No registry writes or cluster access.
+# Requires: podman, skopeo, kustomize, syft, jq, python3.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 test -z "$(git status --porcelain --untracked-files=all)" || { echo "Release requires a clean checkout (including untracked files)" >&2; exit 1; }
@@ -22,7 +23,6 @@ tar -xf "$out/source.tar" -C "$work"
 jq -n --arg revision "$sha" --arg version "$version" --arg source "$source" \
   '{schemaVersion:1,revision:$revision,version:$version,source:$source,publication:"none",sbom:"Syft SPDX JSON; local inventory, not an attestation"}' > "$out/release.json"
 { podman --version; skopeo --version; kustomize version; syft version; } > "$out/tool-versions.txt"
-cp "$work/flake.lock" "$out/flake.lock"
 cp -R "$work/deploy/kustomize" "$out/kustomize"
 for component in backend frontend; do
     image="localhost/roomies-$component:$sha"

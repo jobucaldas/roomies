@@ -194,7 +194,7 @@ class _ShellTopBar extends StatelessWidget {
               const SizedBox(width: 10),
             ],
             Expanded(
-              // House / page title must be a heading for a11y + household-browser
+              // House / page title must be a heading for a11y
               // (Playwright getByRole('heading', { name: houseName })).
               child: Semantics(
                 header: true,

@@ -3,21 +3,19 @@
 Roomies is a roommate-management app for shared expenses, notes, balances, settlements, and house-scoped household workflows.
 
 ## Codebase facts
-- Client targets in this repo: web, Linux desktop, and Android.
-- Backend: `src/backend/`
-- Production web client: `src/flutter/`
-- Rust reference client: `src/app/`
-- Release manifests: `deploy/kustomize/`
-- Docs: `docs/`
-- Production blob store configuration uses S3-compatible settings (for example Cloudflare R2); local filesystem storage is fine for dev and tests.
-- Email uses generic SMTP; Mailpit is the common local sink.
-- Notifications use Web Push plus Android FCM; fake adapters are used when credentials are absent.
+- Client: Flutter under `src/flutter/` (web + Android).
+- Backend: Go under `src/backend/`.
+- Release manifests: `deploy/kustomize/`.
+- Docs: `docs/` (what/how only).
+- Blob store: filesystem locally, S3-compatible (for example R2) in production.
+- Email: SMTP (Mailpit in local/test).
+- Notifications: Web Push + Android FCM; fakes when credentials are absent.
 - Household resources are house-scoped. Recurrence uses RFC 5545 with exceptions.
 
 ## Baseline commands
 - `make check-compose`
 - `make test-backend`
-- `make test-frontend`
+- `make test-flutter`
 - `make build`
 - `make smoke`
 - `make render-manifests`
@@ -26,6 +24,8 @@ Roomies is a roommate-management app for shared expenses, notes, balances, settl
 ## Working rules
 - Preserve completed MVP changes and intended deletions.
 - Do not add secrets or generated binaries to the repo.
-- Keep docs, templates, and release artifacts in sync with code.
-- Prefer narrow edits and validate with the smallest useful test set.
+- Keep docs and release artifacts in sync with code.
+- Prefer narrow edits and validate with the smallest useful test set (unit/lint/build).
+- Product flows are verified by agents/cloud as needed; do not reintroduce heavy browser CI gates as the main quality bar.
 - Public docs state what/how for running and self-hosting; do not add private product or design rationale.
+- Keep the repo lean: Flutter + Go only — no Rust, Nix, or AI scratch docs in git.

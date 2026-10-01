@@ -1,16 +1,13 @@
-# roomies
+# Flutter client
 
-A new Flutter project.
+Production web and Android client for Roomies.
 
-## Getting Started
+```bash
+flutter pub get
+flutter analyze
+flutter test
+flutter build web --release --no-web-resources-cdn --dart-define=ROOMIES_API_URL=/api
+flutter build apk --release --dart-define=ROOMIES_API_URL=
+```
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Web builds bake `ROOMIES_API_URL` at compile time (Compose/K8s use `/api`). Mobile APKs leave it empty so a self-hosted backend URL can be chosen later in-app.

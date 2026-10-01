@@ -15,6 +15,12 @@ node_modules/
 **/node_modules/
 e2e/artifacts/
 
+# Flutter
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+
 # IDE
 .idea/
 .vscode/
@@ -44,3 +50,7 @@ coverage.out
 
 artifacts/release/
 .worktrees/
+
+# Python
+__pycache__/
+*.pyc
