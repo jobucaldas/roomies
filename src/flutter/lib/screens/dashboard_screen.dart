@@ -222,9 +222,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           children: [
                             _SectionHeader(
                               title: s.focusHouse,
-                              trailing: TextButton(
+                              trailing: FilledButton.tonal(
                                 onPressed: () =>
                                     context.go('/house/${house.id}'),
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size(48, 44),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 10,
+                                  ),
+                                ),
                                 child: Text(s.openHouse),
                               ),
                             ),
