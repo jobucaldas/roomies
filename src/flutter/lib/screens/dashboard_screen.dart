@@ -17,6 +17,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final _houseName = TextEditingController();
+  final _houseNameFocus = FocusNode(debugLabel: 'create-house-name');
   var _loading = true;
   var _creating = false;
   var _showCreate = false;
@@ -30,6 +31,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    _houseNameFocus.dispose();
     _houseName.dispose();
     super.dispose();
   }
@@ -166,6 +168,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 8),
                   _CreateHouseBlock(
                     controller: _houseName,
+                    focusNode: _houseNameFocus,
                     creating: _creating,
                     title: s.createNewHouse,
                     hint: s.houseName,
@@ -185,6 +188,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 class _CreateHouseBlock extends StatelessWidget {
   const _CreateHouseBlock({
     required this.controller,
+    required this.focusNode,
     required this.creating,
     required this.title,
     required this.hint,
@@ -193,6 +197,7 @@ class _CreateHouseBlock extends StatelessWidget {
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final bool creating;
   final String title;
   final String hint;
@@ -207,9 +212,16 @@ class _CreateHouseBlock extends StatelessWidget {
         children: [
           Text(title, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 10),
+          // Stable key + FocusNode: AppState/GoRouter/MediaQuery rebuilds must
+          // not remount this field and drop soft-keyboard focus on mobile web.
           TextField(
+            key: const ValueKey('create-house-name'),
             controller: controller,
-            decoration: InputDecoration(hintText: hint),
+            focusNode: focusNode,
+            decoration: InputDecoration(
+              hintText: hint,
+              labelText: hint,
+            ),
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => onSubmit(),
           ),

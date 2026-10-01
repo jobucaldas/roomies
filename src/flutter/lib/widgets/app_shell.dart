@@ -9,7 +9,11 @@ import '../theme/roomies_theme.dart';
 import 'roomies_ui.dart';
 
 /// Authenticated chrome: sidebar (wide) / drawer (narrow) for houses + settings.
-class AppShell extends StatelessWidget {
+///
+/// Breakpoint state is sticky across soft-keyboard height changes: depending on
+/// [MediaQuery.sizeOf] alone rebuilds the whole shell when only height changes,
+/// which on Flutter web remounts semantics inputs and dismisses the keyboard.
+class AppShell extends StatefulWidget {
   const AppShell({
     super.key,
     required this.child,
@@ -25,17 +29,54 @@ class AppShell extends StatelessWidget {
   final List<Widget> actions;
   final bool showBrand;
 
+  static const double wideBreakpoint = 900;
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  /// Last width-derived layout mode. Updated only when width crosses the
+  /// breakpoint so keyboard-driven height / viewInsets churn does not swap
+  /// Material+sidebar ↔ Scaffold+drawer (a full child remount).
+  bool? _wide;
+
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final s = app.strings;
-    final wide = MediaQuery.sizeOf(context).width >= 900;
 
+    // LayoutBuilder (not MediaQuery.sizeOf): soft-keyboard height changes must
+    // not be treated as a breakpoint signal. Sticky [_wide] keeps sidebar vs
+    // drawer stable across those rebuilds.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wideNow = constraints.maxWidth >= AppShell.wideBreakpoint;
+        if (_wide == null) {
+          _wide = wideNow;
+        } else if (_wide != wideNow) {
+          final next = wideNow;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            if (_wide != next) setState(() => _wide = next);
+          });
+        }
+        return _buildChrome(context, app, s, _wide ?? wideNow);
+      },
+    );
+  }
+
+  Widget _buildChrome(
+    BuildContext context,
+    AppState app,
+    RoomiesStrings s,
+    bool wide,
+  ) {
     final nav = _ShellNav(
       strings: s,
       houses: app.houses,
       defaultHouseId: app.defaultHouseId,
-      currentHouseId: currentHouseId,
+      currentHouseId: widget.currentHouseId,
       currentPath: GoRouterState.of(context).uri.path,
       onDashboard: () => context.go('/dashboard'),
       onHouse: (id) => context.go('/house/$id'),
@@ -60,12 +101,12 @@ class AppShell extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _ShellTopBar(
-                        title: title,
-                        showBrand: showBrand,
+                        title: widget.title,
+                        showBrand: widget.showBrand,
                         strings: s,
-                        actions: actions,
+                        actions: widget.actions,
                       ),
-                      Expanded(child: child),
+                      Expanded(child: widget.child),
                     ],
                   ),
                 ),
@@ -76,8 +117,12 @@ class AppShell extends StatelessWidget {
       );
     }
 
+    // resizeToAvoidBottomInset: false — on Flutter web / mobile Chrome the
+    // default inset resize rebuilds the body under an open soft keyboard and
+    // drops TextField focus (keyboard flashes then dismisses).
     return Scaffold(
       backgroundColor: Colors.transparent,
+      resizeToAvoidBottomInset: false,
       drawer: Drawer(
         backgroundColor: RoomiesColors.surface,
         child: SafeArea(child: nav),
@@ -89,18 +134,18 @@ class AppShell extends StatelessWidget {
             children: [
               Builder(
                 builder: (context) => _ShellTopBar(
-                  title: title,
-                  showBrand: showBrand,
+                  title: widget.title,
+                  showBrand: widget.showBrand,
                   strings: s,
                   leading: IconButton(
                     tooltip: s.openMenu,
                     onPressed: () => Scaffold.of(context).openDrawer(),
                     icon: const Icon(Icons.menu_rounded),
                   ),
-                  actions: actions,
+                  actions: widget.actions,
                 ),
               ),
-              Expanded(child: child),
+              Expanded(child: widget.child),
             ],
           ),
         ),
