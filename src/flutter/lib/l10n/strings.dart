@@ -92,6 +92,27 @@ class RoomiesStrings {
   String get summaryUnavailable => isPortuguese
       ? 'Não foi possível carregar o resumo.'
       : 'Could not load summary.';
+  String get home => isPortuguese ? 'Início' : 'Home';
+  String get thingsToDo =>
+      isPortuguese ? 'Ações' : 'Things to do';
+  String get switchHouse =>
+      isPortuguese ? 'Trocar casa' : 'Switch house';
+  String get selectHouse =>
+      isPortuguese ? 'Selecionar casa' : 'Select house';
+  String get upcoming =>
+      isPortuguese ? 'Próximos' : 'Upcoming';
+  String get noUpcoming => isPortuguese
+      ? 'Nada agendado por agora.'
+      : 'Nothing coming up.';
+  String get notesShowcase =>
+      isPortuguese ? 'Notas da casa' : 'House notes';
+  String get openNotes =>
+      isPortuguese ? 'Ver notas' : 'Open notes';
+  String get moneyGraph =>
+      isPortuguese ? 'Gastos do mês' : 'This month';
+  String get needHouseForAction => isPortuguese
+      ? 'Crie ou escolha uma casa primeiro.'
+      : 'Create or pick a house first.';
 
   String get settings =>
       isPortuguese ? 'Configurações' : 'Settings';
@@ -125,8 +146,7 @@ class RoomiesStrings {
   String get noDefaultHouse => isPortuguese
       ? 'Nenhuma (Painel)'
       : 'None (Dashboard)';
-  String get switchHouse =>
-      isPortuguese ? 'Ir para' : 'Go to';
+  String get goToHouse => isPortuguese ? 'Ir para' : 'Go to';
   String get houses => isPortuguese ? 'Casas' : 'Houses';
   String get renameHouse =>
       isPortuguese ? 'Renomear casa' : 'Rename house';

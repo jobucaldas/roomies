@@ -64,8 +64,10 @@ GoRouter createRouter(AppState appState) {
       ),
       GoRoute(
         path: '/house/:id',
-        builder: (context, state) =>
-            HouseScreen(houseId: state.pathParameters['id']!),
+        builder: (context, state) => HouseScreen(
+          houseId: state.pathParameters['id']!,
+          initialTab: state.uri.queryParameters['tab'],
+        ),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
