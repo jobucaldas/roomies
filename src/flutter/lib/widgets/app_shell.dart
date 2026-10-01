@@ -241,42 +241,70 @@ class _ShellTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // House switcher is centered in the top bar: on mobile that is the full
+    // chrome width; on desktop the top bar already lives only in the main
+    // content column (sidebar is a sibling), so centering here matches
+    // "center within the main content section".
+    final trailing = <Widget>[
+      if (title != null) ...[
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 140),
+          child: Semantics(
+            header: true,
+            child: Text(
+              title!,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: RoomiesPalette.of(context).inkMuted,
+                  ),
+            ),
+          ),
+        ),
+      ],
+      ...actions,
+    ];
+
+    final leadingSlot = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (leading != null) leading!,
+        if (showBrand)
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: Text(
+              strings.brand,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: RoomiesPalette.of(context).tealDeep,
+                    fontFamily: 'Fraunces',
+                  ),
+            ),
+          ),
+      ],
+    );
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 12, 4),
-      child: Row(
-        children: [
-          if (leading != null) leading!,
-          if (showBrand)
-            Padding(
-              padding: const EdgeInsets.only(right: 10),
-              child: Text(
-                strings.brand,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: RoomiesPalette.of(context).tealDeep,
-                      fontFamily: 'Fraunces',
-                    ),
-              ),
+      child: SizedBox(
+        height: 48,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Row(
+              children: [
+                leadingSlot,
+                const Spacer(),
+                ...trailing,
+              ],
             ),
-          Flexible(child: houseSwitcher),
-          if (title != null) ...[
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 140),
-              child: Semantics(
-                header: true,
-                child: Text(
-                  title!,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.end,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: RoomiesPalette.of(context).inkMuted,
-                      ),
-                ),
-              ),
+            // Keep clear of the menu button / trailing label so taps do not
+            // collide; the switcher itself stays visually centered.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 52),
+              child: houseSwitcher,
             ),
           ],
-          ...actions,
-        ],
+        ),
       ),
     );
   }
@@ -303,8 +331,7 @@ class _HouseSwitcher extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = RoomiesPalette.of(context);
     if (houses.isEmpty) {
-      return Align(
-        alignment: Alignment.centerLeft,
+      return Center(
         child: TextButton.icon(
           onPressed: onCreate,
           icon: const Icon(Icons.add_home_outlined, size: 18),
@@ -322,8 +349,7 @@ class _HouseSwitcher extends StatelessWidget {
     }
     selected ??= houses.first;
 
-    return Align(
-      alignment: Alignment.centerLeft,
+    return Center(
       child: PopupMenuButton<String>(
         tooltip: strings.switchHouse,
         offset: const Offset(0, 40),
