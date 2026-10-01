@@ -285,7 +285,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 .titleMedium
                                                 ?.copyWith(
                                                   color:
-                                                      RoomiesColors.tealDeep,
+                                                      RoomiesPalette.of(context).tealDeep,
                                                   fontWeight: FontWeight.w700,
                                                 ),
                                           ),
@@ -448,7 +448,7 @@ class _SummaryRow extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: RoomiesColors.inkMuted,
+                  color: RoomiesPalette.of(context).inkMuted,
                 ),
           ),
         ],
@@ -541,7 +541,7 @@ class _HouseRow extends StatelessWidget {
       label: '$viewLabel ${house.name}',
       excludeSemantics: true,
       child: Material(
-        color: isFocus ? RoomiesColors.tealSoft : RoomiesColors.surface,
+        color: isFocus ? RoomiesPalette.of(context).tealSoft : RoomiesPalette.of(context).surface,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
@@ -553,7 +553,7 @@ class _HouseRow extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isFocus ? RoomiesColors.teal : RoomiesColors.line,
+                color: isFocus ? RoomiesPalette.of(context).teal : RoomiesPalette.of(context).line,
               ),
             ),
             child: Row(
@@ -562,7 +562,7 @@ class _HouseRow extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: RoomiesColors.tealSoft,
+                    color: RoomiesPalette.of(context).tealSoft,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
@@ -571,7 +571,7 @@ class _HouseRow extends StatelessWidget {
                         ? '?'
                         : house.name.substring(0, 1).toUpperCase(),
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: RoomiesColors.tealDeep,
+                          color: RoomiesPalette.of(context).tealDeep,
                         ),
                   ),
                 ),
@@ -589,7 +589,7 @@ class _HouseRow extends StatelessWidget {
                           defaultLabel,
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: RoomiesColors.tealDeep,
+                                    color: RoomiesPalette.of(context).tealDeep,
                                     fontWeight: FontWeight.w600,
                                   ),
                         ),
@@ -601,13 +601,13 @@ class _HouseRow extends StatelessWidget {
                     tooltip: setDefaultLabel,
                     onPressed: onSetDefault,
                     icon: const Icon(Icons.star_outline_rounded),
-                    color: RoomiesColors.inkMuted,
+                    color: RoomiesPalette.of(context).inkMuted,
                   ),
                 IconButton(
                   tooltip: viewLabel,
                   onPressed: onOpen,
                   icon: const Icon(Icons.chevron_right_rounded),
-                  color: RoomiesColors.inkMuted,
+                  color: RoomiesPalette.of(context).inkMuted,
                 ),
               ],
             ),

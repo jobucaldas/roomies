@@ -101,6 +101,13 @@ class RoomiesStrings {
       : 'Device';
   String get languageEnglish => 'English';
   String get languagePortuguese => 'Português';
+  String get appearance =>
+      isPortuguese ? 'Aparência' : 'Appearance';
+  String get themeSystem => isPortuguese
+      ? 'Dispositivo'
+      : 'Device';
+  String get themeLight => isPortuguese ? 'Claro' : 'Light';
+  String get themeDark => isPortuguese ? 'Escuro' : 'Dark';
   String get defaultHouse =>
       isPortuguese ? 'Casa padrão' : 'Default house';
   String get defaultHouseHint => isPortuguese

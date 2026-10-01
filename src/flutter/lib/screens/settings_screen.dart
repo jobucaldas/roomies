@@ -109,7 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall
-                                  ?.copyWith(color: RoomiesColors.inkMuted),
+                                  ?.copyWith(color: RoomiesPalette.of(context).inkMuted),
                             )
                           : null,
                       onTap: () => app.setLocaleOverride(null),
@@ -123,6 +123,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       label: s.languagePortuguese,
                       selected: app.localeOverride == 'pt',
                       onTap: () => app.setLocaleOverride('pt'),
+                    ),
+                  ],
+                ),
+              ),
+              _Section(
+                title: s.appearance,
+                child: Column(
+                  children: [
+                    _ChoiceTile(
+                      label: s.themeSystem,
+                      selected: app.themeOverride == null,
+                      onTap: () => app.setThemeOverride(null),
+                    ),
+                    _ChoiceTile(
+                      label: s.themeLight,
+                      selected: app.themeOverride == 'light',
+                      onTap: () => app.setThemeOverride('light'),
+                    ),
+                    _ChoiceTile(
+                      label: s.themeDark,
+                      selected: app.themeOverride == 'dark',
+                      onTap: () => app.setThemeOverride('dark'),
                     ),
                   ],
                 ),
@@ -190,10 +212,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 contentPadding: EdgeInsets.zero,
                 minVerticalPadding: 16,
                 leading:
-                    Icon(Icons.logout_rounded, color: RoomiesColors.danger),
+                    Icon(Icons.logout_rounded, color: RoomiesPalette.of(context).danger),
                 title: Text(
                   s.logout,
-                  style: TextStyle(color: RoomiesColors.danger),
+                  style: TextStyle(color: RoomiesPalette.of(context).danger),
                 ),
                 onTap: () async {
                   await app.logout();
@@ -258,7 +280,7 @@ class _ChoiceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? RoomiesColors.tealSoft : Colors.transparent,
+      color: selected ? RoomiesPalette.of(context).tealSoft : Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -273,8 +295,8 @@ class _ChoiceTile extends StatelessWidget {
                     : Icons.radio_button_off,
                 size: 22,
                 color: selected
-                    ? RoomiesColors.tealDeep
-                    : RoomiesColors.inkMuted,
+                    ? RoomiesPalette.of(context).tealDeep
+                    : RoomiesPalette.of(context).inkMuted,
               ),
               const SizedBox(width: 12),
               Expanded(

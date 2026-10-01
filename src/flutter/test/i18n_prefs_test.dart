@@ -1,8 +1,9 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:roomies/api/api_client.dart';
 import 'package:roomies/l10n/strings.dart';
 import 'package:roomies/services/preferences_storage.dart';
 import 'package:roomies/state/app_state.dart';
-import 'package:roomies/api/api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -25,6 +26,8 @@ void main() {
     expect(pt.createAccount, 'Criar conta');
     expect(pt.settings, 'Configurações');
     expect(pt.dashboard, 'Painel');
+    expect(pt.appearance, 'Aparência');
+    expect(pt.themeDark, 'Escuro');
     expect(pt.houseTabs.contains('Chat'), isFalse);
     expect(pt.recentEvents, 'Eventos recentes');
     expect(pt.monthMoney, 'Gastos do mês');
@@ -62,5 +65,22 @@ void main() {
     app.defaultHouseId = 'h1';
     app.houses = [];
     expect(app.restoredHomePath(), '/house/h1');
+  });
+
+  test('theme override persists and maps to ThemeMode', () async {
+    final app = AppState(
+      ApiClient(baseUrl: 'http://example/api'),
+      preferences: PreferencesStorage(),
+      deviceLocale: 'en-US',
+    );
+    await app.loadPreferences();
+    expect(app.themeMode, ThemeMode.system);
+    await app.setThemeOverride('dark');
+    expect(app.themeOverride, 'dark');
+    expect(app.themeMode, ThemeMode.dark);
+    await app.setThemeOverride('light');
+    expect(app.themeMode, ThemeMode.light);
+    await app.setThemeOverride(null);
+    expect(app.themeMode, ThemeMode.system);
   });
 }

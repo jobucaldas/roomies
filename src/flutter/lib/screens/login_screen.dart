@@ -127,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
             alignment: Alignment.centerRight,
             child: TextButton(
               style: TextButton.styleFrom(
-                foregroundColor: RoomiesColors.inkMuted,
+                foregroundColor: RoomiesPalette.of(context).inkMuted,
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
               ),
@@ -135,9 +135,9 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Text(s.toggleLanguage),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           RoomiesBrandMark(tagline: s.brandTagline),
-          const SizedBox(height: 40),
+          const SizedBox(height: 36),
           if (_error != null) RoomiesError(_error!),
           if (_configLoading)
             const Padding(
@@ -167,8 +167,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     ? () => setState(() => _showPasswordForm = true)
                     : null,
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: RoomiesColors.ink,
-                  side: const BorderSide(color: RoomiesColors.line),
+                  foregroundColor: RoomiesPalette.of(context).ink,
+                  side: BorderSide(color: RoomiesPalette.of(context).line),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                   shape: RoundedRectangleBorder(
@@ -193,7 +193,7 @@ class _LoginScreenState extends State<LoginScreen> {
             s.privacyLine,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: RoomiesColors.inkMuted,
+                  color: RoomiesPalette.of(context).inkMuted,
                   fontSize: 12,
                 ),
           ),
@@ -217,10 +217,11 @@ class _AuthPrimaryButton extends StatelessWidget {
       child: FilledButton(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
-          backgroundColor: RoomiesColors.teal,
-          foregroundColor: Colors.white,
+          backgroundColor: RoomiesPalette.of(context).teal,
+          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+          minimumSize: const Size.fromHeight(52),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
           textStyle: Theme.of(context).textTheme.labelLarge,
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
 import '../api/api_error.dart';
@@ -26,6 +27,9 @@ class AppState extends ChangeNotifier {
   /// Explicit Settings override; `null` means follow the device.
   String? localeOverride;
 
+  /// Theme override: `null` (system), `light`, or `dark`.
+  String? themeOverride;
+
   /// Preferred house for later sessions.
   String? defaultHouseId;
 
@@ -39,8 +43,20 @@ class AppState extends ChangeNotifier {
 
   RoomiesStrings get strings => RoomiesStrings(localeCode);
 
+  ThemeMode get themeMode {
+    switch (themeOverride) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      default:
+        return ThemeMode.system;
+    }
+  }
+
   Future<void> loadPreferences() async {
     localeOverride = await preferences.loadLocaleOverride();
+    themeOverride = await preferences.loadThemeOverride();
     defaultHouseId = await preferences.loadDefaultHouseId();
     _applyLocale();
     notifyListeners();
@@ -60,6 +76,13 @@ class AppState extends ChangeNotifier {
     localeOverride = code;
     await preferences.saveLocaleOverride(code);
     _applyLocale();
+    notifyListeners();
+  }
+
+  Future<void> setThemeOverride(String? mode) async {
+    if (mode != null && mode != 'light' && mode != 'dark') return;
+    themeOverride = mode;
+    await preferences.saveThemeOverride(mode);
     notifyListeners();
   }
 

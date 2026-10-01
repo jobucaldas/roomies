@@ -46,7 +46,9 @@ class _RoomiesAppState extends State<RoomiesApp> {
               : const Locale('en');
           return MaterialApp.router(
             title: 'Roomies',
-            theme: buildRoomiesTheme(),
+            theme: buildRoomiesTheme(brightness: Brightness.light),
+            darkTheme: buildRoomiesTheme(brightness: Brightness.dark),
+            themeMode: app.themeMode,
             locale: locale,
             supportedLocales: const [
               Locale('en'),

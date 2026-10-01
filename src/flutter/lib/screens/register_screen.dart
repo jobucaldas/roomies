@@ -122,7 +122,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             alignment: Alignment.centerRight,
             child: TextButton(
               style: TextButton.styleFrom(
-                foregroundColor: RoomiesColors.inkMuted,
+                foregroundColor: RoomiesPalette.of(context).inkMuted,
                 visualDensity: VisualDensity.compact,
               ),
               onPressed: app.toggleLanguageQuick,

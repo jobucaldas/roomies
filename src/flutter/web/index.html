@@ -45,16 +45,25 @@
         radial-gradient(circle at 88% 12%, rgba(9, 84, 86, 0.12), transparent 36%),
         linear-gradient(160deg, #cbe3e1 0%, #e7eef0 42%, #f3f6f7 100%);
       font-family: "Source Sans 3", "Segoe UI", sans-serif;
+      color: #14212b;
+    }
+    @media (prefers-color-scheme: dark) {
+      html, body {
+        background:
+          radial-gradient(circle at 18% 12%, rgba(60, 184, 184, 0.18), transparent 40%),
+          radial-gradient(circle at 86% 18%, rgba(122, 212, 209, 0.10), transparent 34%),
+          linear-gradient(160deg, #0b1418 0%, #102026 48%, #0e1a1e 100%);
+        color: #e6eef1;
+      }
     }
     .roomies-boot {
       min-height: 100%;
       display: grid;
       place-items: center;
-      color: #14212b;
       letter-spacing: -0.03em;
       font-family: Fraunces, Georgia, serif;
-      font-size: 2rem;
-      font-weight: 600;
+      font-size: 2.4rem;
+      font-weight: 700;
     }
   </style>
 </head>

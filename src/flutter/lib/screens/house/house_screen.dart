@@ -149,7 +149,7 @@ class _HouseScreenState extends State<HouseScreen>
               )
             else if (_house != null) ...[
               Material(
-                color: RoomiesColors.surface.withValues(alpha: 0.72),
+                color: RoomiesPalette.of(context).surface.withValues(alpha: 0.72),
                 borderRadius: BorderRadius.circular(16),
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -169,8 +169,8 @@ class _HouseScreenState extends State<HouseScreen>
                                 vertical: 12,
                               ),
                               foregroundColor: _tabController.index == i
-                                  ? RoomiesColors.tealDeep
-                                  : RoomiesColors.inkMuted,
+                                  ? RoomiesPalette.of(context).tealDeep
+                                  : RoomiesPalette.of(context).inkMuted,
                             ),
                             child: Text(tabs[i]),
                           ),
