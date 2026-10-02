@@ -1,6 +1,8 @@
 # Release baseline
 
 ## Build
+CI publishes both images to GHCR on every push to `main` (see `docs/ci.md`). To build them yourself:
+
 - Backend image: `podman build -f src/backend/Dockerfile -t <registry>/roomies-backend:<tag> src/backend`
 - Frontend image: `podman build -f src/flutter/Dockerfile -t <registry>/roomies-frontend:<tag> .`
 - Android APK: `cd src/flutter && flutter build apk --release --dart-define=ROOMIES_API_URL=` (debug-signed unless you configure signing)

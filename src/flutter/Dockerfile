@@ -2,6 +2,8 @@ FROM ghcr.io/cirruslabs/flutter:3.27.1 AS builder
 
 WORKDIR /workspace/src/flutter
 ARG ROOMIES_API_URL=/api
+# Commit stamped into the bundle so a live site shows which build it serves.
+ARG BUILD_SHA=unknown
 
 COPY src/flutter/pubspec.yaml src/flutter/pubspec.lock ./
 RUN flutter pub get
@@ -12,7 +14,8 @@ COPY src/flutter/ ./
 # connect-src off www.gstatic.com (the default build fetches CanvasKit from CDN).
 RUN flutter build web --release \
   --no-web-resources-cdn \
-  --dart-define=ROOMIES_API_URL=${ROOMIES_API_URL}
+  --dart-define=ROOMIES_API_URL=${ROOMIES_API_URL} \
+  && printf 'BUILD_SHA=%s\n' "${BUILD_SHA}" > build/web/BUILD_SHA.txt
 
 FROM docker.io/alpine:3.20
 WORKDIR /app

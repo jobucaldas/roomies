@@ -1,0 +1,33 @@
+# :nightly is a moving tag; always pull so a restart picks up the new digest.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: roomies-backend
+spec:
+  template:
+    spec:
+      containers:
+        - name: backend
+          imagePullPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: roomies-backend-worker
+spec:
+  template:
+    spec:
+      containers:
+        - name: backend-worker
+          imagePullPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: roomies-frontend
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: bundle
+          imagePullPolicy: Always
