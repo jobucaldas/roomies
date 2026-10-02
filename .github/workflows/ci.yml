@@ -100,6 +100,11 @@ jobs:
       # image. Third-party actions are pinned to a commit because this job can
       # hold the signing key.
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          # The default also requests the obsolete "tools" package, which
+          # current cmdline-tools no longer provide. Gradle fetches the
+          # platform and build-tools it needs once licenses are accepted.
+          packages: platform-tools
       - name: Configure release signing
         # Only pushes to main get the upload key; other branches and pull
         # requests (including forks, which never see secrets) build with debug
