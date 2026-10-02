@@ -10,7 +10,35 @@ Pushes and pull requests run on [Depot CI](https://depot.dev/docs/ci/overview) f
 2. Depot dashboard → Organization Settings → GitHub Code Access → **Connect to GitHub**, then install the Depot Code Access app on `jobucaldas/roomies`. Depot CI supports repositories owned by personal accounts.
 3. Merge a commit containing `.depot/workflows/` to the default branch so Depot registers the push and pull request triggers.
 
-The CI workflow needs no secrets. `deploy-dev.yml` stays on GitHub Actions (manual dispatch with Tailscale and kubeconfig secrets).
+The CI workflow needs no secrets to pass; the Android signing secrets below are optional. `deploy-dev.yml` stays on GitHub Actions (manual dispatch with Tailscale and kubeconfig secrets).
+
+## Android release signing
+
+The `android` job signs the release APK with your upload key when these Depot CI secrets exist, and with debug keys otherwise (fine for CI, not for publishing):
+
+| Secret | Value |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 upload-keystore.jks` |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore password |
+| `ANDROID_KEY_ALIAS` | key alias |
+| `ANDROID_KEY_PASSWORD` | key password (omit if it equals the keystore password) |
+
+Create a keystore once and keep it outside the repo (losing it means you cannot ship updates under the same signature):
+
+```bash
+keytool -genkeypair -v -keystore upload-keystore.jks -alias upload \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Add the secrets in the Depot dashboard (Depot CI settings) or with the CLI:
+
+```bash
+base64 -w0 upload-keystore.jks | depot ci secrets add ANDROID_KEYSTORE_BASE64 --repo jobucaldas/roomies
+depot ci secrets add ANDROID_KEYSTORE_PASSWORD --repo jobucaldas/roomies   # prompts
+depot ci secrets add ANDROID_KEY_ALIAS --repo jobucaldas/roomies
+```
+
+Locally, the same keys go in `src/flutter/android/key.properties` (gitignored): `storeFile` (relative to `android/`), `storePassword`, `keyAlias`, `keyPassword`.
 
 ## CLI
 

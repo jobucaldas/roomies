@@ -100,6 +100,28 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      # Not every runner image ships the Android SDK; install it and accept
+      # licenses instead of relying on a preinstalled one.
+      - uses: android-actions/setup-android@v3
+      - name: Configure release signing
+        # Optional: without these secrets the APK is signed with debug keys.
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "No ANDROID_KEYSTORE_BASE64 secret: release APK uses debug keys."
+            exit 0
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+          {
+            echo "storeFile=app/upload-keystore.jks"
+            echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "keyPassword=${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
+          } > android/key.properties
       - run: flutter pub get
       - run: flutter build apk --release --dart-define=ROOMIES_API_URL=
       - uses: actions/upload-artifact@v4
