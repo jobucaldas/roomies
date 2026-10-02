@@ -77,21 +77,34 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<AppState>().strings;
-    return RoomiesPage(
+    return RoomiesAuthFrame(
+      strings: s,
+      showTagline: false,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          RoomiesBrandMark(compact: true, tagline: s.brandTagline),
-          RoomiesHeading(s.signingIn, level: 2),
-          Semantics(
-            liveRegion: true,
-            child: Text(_status.isEmpty ? s.completingSignIn : _status),
-          ),
-          if (_failed)
+          if (_failed) ...[
+            RoomiesError(_status),
+            const SizedBox(height: 12),
             FilledButton(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+              ),
               onPressed: () => context.go('/'),
               child: Text(s.backToLogin),
             ),
+          ] else ...[
+            const Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
+            const SizedBox(height: 16),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                _status.isEmpty ? s.completingSignIn : _status,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../auth/workos_url.dart';
 import '../models/models.dart';
 import '../services/session_hint_stub.dart'
     if (dart.library.js_interop) '../services/session_hint_web.dart'
@@ -126,14 +127,20 @@ class ApiClient {
     _valid = false;
   }
 
-  Future<void> logout() async {
-    final gen = _generation;
+  /// Clears the session. Returns the hosted AuthKit logout URL when the
+  /// server reports one, so the caller can also end the WorkOS session.
+  Future<String?> logout() async {
+    String? logoutUrl;
     try {
-      await _empty(
-        () =>
-            _http.post(Uri.parse('$baseUrl/auth/logout'), headers: _headers()),
-        generation: gen,
-      );
+      final response = await _http
+          .post(Uri.parse('$baseUrl/auth/logout'), headers: _headers());
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        if (body is Map && body['logout_url'] is String) {
+          final url = body['logout_url'] as String;
+          if (isWorkOSLogoutUrl(url)) logoutUrl = url;
+        }
+      }
     } catch (_) {
       // Clearing the local session still logs the tab out if the network call fails.
     }
@@ -142,6 +149,7 @@ class ApiClient {
     _cookieSession = false;
     _valid = false;
     await _storage.clearToken();
+    return logoutUrl;
   }
 
   void _handleUnauthorized(int? generation) {

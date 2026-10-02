@@ -70,10 +70,14 @@ class _RoomiesAppState extends State<RoomiesApp> {
             routerConfig: _router,
             builder: (context, child) {
               if (!app.sessionReady) {
+                // Mirrors the HTML boot splash in web/index.html.
                 return RoomiesAtmosphere(
-                  child: Scaffold(
-                    backgroundColor: Colors.transparent,
-                    body: Center(child: Text(app.strings.restoringSession)),
+                  child: Center(
+                    child: Semantics(
+                      label: app.strings.restoringSession,
+                      excludeSemantics: true,
+                      child: const RoomiesWordmark(size: 52),
+                    ),
                   ),
                 );
               }

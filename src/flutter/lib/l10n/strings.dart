@@ -93,8 +93,7 @@ class RoomiesStrings {
       ? 'Não foi possível carregar o resumo.'
       : 'Could not load summary.';
   String get home => isPortuguese ? 'Início' : 'Home';
-  String get thingsToDo =>
-      isPortuguese ? 'Ações' : 'Things to do';
+  String get navHouseSection => isPortuguese ? 'Casa' : 'House';
   String get switchHouse =>
       isPortuguese ? 'Trocar casa' : 'Switch house';
   String get selectHouse =>
@@ -125,10 +124,7 @@ class RoomiesStrings {
   String get appearance =>
       isPortuguese ? 'Aparência' : 'Appearance';
   String get brandTheme =>
-      isPortuguese ? 'Tema da marca' : 'Brand theme';
-  String get brandThemeHint => isPortuguese
-      ? 'Escolha a cor de destaque do app.'
-      : 'Pick the accent color for the app.';
+      isPortuguese ? 'Cor de destaque' : 'Accent color';
   String get brandMint =>
       isPortuguese ? 'Verde-água' : 'Mint';
   String get brandPlum =>
@@ -141,31 +137,25 @@ class RoomiesStrings {
   String get defaultHouse =>
       isPortuguese ? 'Casa padrão' : 'Default house';
   String get defaultHouseHint => isPortuguese
-      ? 'Abre nesta casa nas próximas sessões.'
-      : 'Opens this house next time you sign in.';
+      ? 'A casa marcada abre quando você entra.'
+      : 'The selected house opens when you sign in.';
   String get noDefaultHouse => isPortuguese
       ? 'Nenhuma (Painel)'
       : 'None (Dashboard)';
-  String get goToHouse => isPortuguese ? 'Ir para' : 'Go to';
   String get houses => isPortuguese ? 'Casas' : 'Houses';
   String get renameHouse =>
       isPortuguese ? 'Renomear casa' : 'Rename house';
-  String get renameHouseHint => isPortuguese
-      ? 'Altere o nome da casa selecionada.'
-      : 'Change the name of the selected house.';
+  String renameHouseNamed(String name) =>
+      isPortuguese ? 'Renomear $name' : 'Rename $name';
   String get houseRenamed =>
       isPortuguese ? 'Nome salvo' : 'Name saved';
-  String get selectHouseToRename => isPortuguese
-      ? 'Selecione uma casa para renomear.'
-      : 'Select a house to rename.';
   String get logout => isPortuguese ? 'Sair' : 'Log out';
   String get back => isPortuguese ? 'Voltar' : 'Back';
   String get backToLogin =>
-      isPortuguese ? 'Voltar' : 'Back';
+      isPortuguese ? 'Voltar para entrar' : 'Back to sign in';
   String get loading => isPortuguese ? 'Carregando…' : 'Loading…';
   String get restoringSession =>
       isPortuguese ? 'Restaurando…' : 'Restoring…';
-  String get signingIn => isPortuguese ? 'Entrando' : 'Signing in';
   String get completingSignIn =>
       isPortuguese ? 'Concluindo…' : 'Finishing…';
   String signInFailed(String detail) => isPortuguese
@@ -177,6 +167,21 @@ class RoomiesStrings {
   String get redirectingToLogin => isPortuguese
       ? 'Redirecionando…'
       : 'Redirecting…';
+  String get checkingInvitation =>
+      isPortuguese ? 'Verificando convite…' : 'Checking invitation…';
+  String get joiningHouse =>
+      isPortuguese ? 'Entrando na casa…' : 'Joining house…';
+  String get invitationJoined => isPortuguese
+      ? 'Você entrou na casa. Atualizando…'
+      : 'You joined the house. Refreshing…';
+  String get invitationMissing => isPortuguese
+      ? 'Este convite não existe ou já foi usado.'
+      : 'This invitation link is missing or has already been used.';
+  String invitationFailed(String detail) => isPortuguese
+      ? 'Não foi possível aceitar o convite: $detail'
+      : 'Unable to accept this invitation: $detail';
+  String get retryInvitation =>
+      isPortuguese ? 'Tentar de novo' : 'Retry acceptance';
   String get navigation => isPortuguese ? 'Menu' : 'Menu';
   String get openMenu => isPortuguese ? 'Menu' : 'Menu';
   String get closeMenu => isPortuguese ? 'Fechar' : 'Close';
@@ -200,9 +205,8 @@ class RoomiesStrings {
       isPortuguese ? 'Calendário' : 'Calendar';
   String get tabBalances =>
       isPortuguese ? 'Saldos' : 'Balances';
-  String get tabNotifications => isPortuguese
-      ? 'Notificações / Agenda'
-      : 'Notifications / Schedule';
+  String get tabNotifications =>
+      isPortuguese ? 'Notificações' : 'Notifications';
   String get tabMembers =>
       isPortuguese ? 'Membros' : 'Members';
 
@@ -295,12 +299,6 @@ class RoomiesStrings {
       '$platform: $label ($when)';
 
   String get balances => isPortuguese ? 'Saldos' : 'Balances';
-  String get balancesRefreshHint => isPortuguese
-      ? 'Os saldos atualizam ao abrir esta aba.'
-      : 'Balances refresh when this tab is selected.';
-  String get selectTabToLoadBalances => isPortuguese
-      ? 'Abra esta aba para carregar os saldos. Ex-membros continuam identificados pelo nome.'
-      : 'Select this tab to load balances. Former users remain identified by name.';
   String paidOwedNet(String paid, String owed, String net) => isPortuguese
       ? 'Pagou $paid; deve $owed; líquido $net'
       : 'Paid $paid; owed $owed; net $net';

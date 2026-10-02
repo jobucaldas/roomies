@@ -10,7 +10,10 @@ void main() {
       deviceLocale: 'en',
     );
     appState.sessionReady = false;
+    final semantics = tester.ensureSemantics();
     await tester.pumpWidget(RoomiesApp(appState: appState));
-    expect(find.text('Restoring…'), findsOneWidget);
+    expect(find.text('Roomies'), findsOneWidget);
+    expect(find.bySemanticsLabel('Restoring…'), findsOneWidget);
+    semantics.dispose();
   });
 }

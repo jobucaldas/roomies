@@ -26,6 +26,7 @@ const (
 	oauthTransactionTTL  = 10 * time.Minute
 	oauthStateCookie     = "roomies_oauth_state"
 	oauthVerifierCookie  = "roomies_oauth_verifier"
+	workosSessionClaim   = "workos_sid"
 	defaultLoginLimit    = 40
 	defaultRegisterLimit = 90
 	defaultCallbackLimit = 15
@@ -177,7 +178,7 @@ func (h *AuthHandler) WorkOSCallback(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to persist authenticated user"})
 		return
 	}
-	h.finishAuth(w, r, user, http.StatusOK)
+	h.finishAuthWithSession(w, r, user, http.StatusOK, workosauth.SessionID(result.AccessToken))
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -275,11 +276,43 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	h.finishAuth(w, r, user, http.StatusOK)
 }
 
+// Logout clears the Roomies session. For AuthKit sessions it also returns the
+// hosted AuthKit logout URL so the client can end the WorkOS session too;
+// otherwise the next "Sign in" would silently reuse the old account.
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	logoutURL := ""
+	if h.workos != nil {
+		logoutURL = h.workos.LogoutURL(h.workosSessionID(r))
+	}
 	secure := h.secureCookie(r)
 	clearCookie(w, middleware.SessionCookieName, true, secure)
 	clearCookie(w, middleware.SessionHintCookieName, false, secure)
+	if logoutURL != "" {
+		writeJSON(w, http.StatusOK, map[string]string{"logout_url": logoutURL})
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// workosSessionID reads the AuthKit session id from a still-valid Roomies
+// session token. Expired or forged tokens yield "".
+func (h *AuthHandler) workosSessionID(r *http.Request) string {
+	raw, ok := middleware.SessionToken(r)
+	if !ok {
+		return ""
+	}
+	token, err := jwt.Parse(raw, func(*jwt.Token) (interface{}, error) {
+		return []byte(h.jwtSecret), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	if err != nil || !token.Valid {
+		return ""
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return ""
+	}
+	sid, _ := claims[workosSessionClaim].(string)
+	return sid
 }
 
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
@@ -292,19 +325,26 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, user)
 }
 
-func (h *AuthHandler) generateToken(user *models.User) (string, error) {
+func (h *AuthHandler) generateToken(user *models.User, workosSessionID string) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
 		"email":   user.Email,
 		"exp":     time.Now().Add(h.sessionTTL).Unix(),
 		"iat":     time.Now().Unix(),
 	}
+	if workosSessionID != "" {
+		claims[workosSessionClaim] = workosSessionID
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(h.jwtSecret))
 }
 
 func (h *AuthHandler) finishAuth(w http.ResponseWriter, r *http.Request, user *models.User, status int) {
-	token, err := h.generateToken(user)
+	h.finishAuthWithSession(w, r, user, status, "")
+}
+
+func (h *AuthHandler) finishAuthWithSession(w http.ResponseWriter, r *http.Request, user *models.User, status int, workosSessionID string) {
+	token, err := h.generateToken(user, workosSessionID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to generate token"})
 		return

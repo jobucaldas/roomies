@@ -33,6 +33,11 @@ func GetUserEmail(ctx context.Context) string {
 	return v
 }
 
+// SessionToken returns the raw session JWT from the request, if any.
+func SessionToken(r *http.Request) (string, bool) {
+	return sessionToken(r)
+}
+
 // sessionToken prefers an Authorization bearer so API clients and tests keep
 // working, and otherwise reads the HttpOnly session cookie used by Flutter web.
 func sessionToken(r *http.Request) (string, bool) {

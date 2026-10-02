@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../api/api_error.dart';
+import '../../core/datetime_format.dart';
 import '../../core/money.dart';
 import '../../core/roles.dart';
 import '../../models/models.dart';
@@ -275,18 +276,27 @@ class _ExpensesSectionState extends State<ExpensesSection> {
                   children: [
                     RoomiesHeading(expense.description, level: 3),
                     Text(
-                      '${expense.date} · ${formatMoney(expense.amount, localeCode: locale)} · ${expense.payerName} · ${expense.visibility}',
+                      [
+                        formatDisplayDate(expense.date, localeCode: locale),
+                        formatMoney(expense.amount, localeCode: locale),
+                        expense.payerName,
+                        expense.visibility == 'private'
+                            ? s.privateLabel
+                            : s.shared,
+                      ].join(' · '),
                     ),
-                    if (_editable(expense)) ...[
-                      RoomiesPrimaryButton(
-                        label: s.detailsEdit,
-                        onPressed: () => _openDetail(expense),
-                      ),
-                      RoomiesPrimaryButton(
-                        label: s.delete,
-                        onPressed: () => _confirmDelete(expense.id),
-                      ),
-                    ],
+                    if (_editable(expense))
+                      RoomiesItemActions([
+                        RoomiesItemAction(
+                          label: s.detailsEdit,
+                          onPressed: () => _openDetail(expense),
+                        ),
+                        RoomiesItemAction(
+                          label: s.delete,
+                          destructive: true,
+                          onPressed: () => _confirmDelete(expense.id),
+                        ),
+                      ]),
                   ],
                 ),
               );

@@ -1,82 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/roomies_theme.dart';
 import '../widgets/app_shell.dart';
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends State<SettingsScreen> {
-  final _rename = TextEditingController();
-  String? _renameHouseId;
-  var _renaming = false;
-  var _renameSeeded = false;
-  String? _renameStatus;
-
-  @override
-  void dispose() {
-    _rename.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_renameSeeded) return;
-    final app = context.read<AppState>();
-    final id = app.defaultHouseId ??
-        (app.houses.isNotEmpty ? app.houses.first.id : null);
-    _renameHouseId = id;
-    if (id != null) {
-      for (final house in app.houses) {
-        if (house.id == id) {
-          _rename.text = house.name;
-          break;
-        }
-      }
-    }
-    _renameSeeded = true;
-  }
-
-  void _selectHouseForRename(House house) {
-    setState(() {
-      _renameHouseId = house.id;
-      _rename.text = house.name;
-      _renameStatus = null;
-    });
-  }
-
-  Future<void> _saveRename(AppState app) async {
-    final id = _renameHouseId;
-    final name = _rename.text.trim();
-    if (id == null || name.isEmpty) {
-      setState(() => _renameStatus = app.strings.selectHouseToRename);
-      return;
-    }
-    setState(() => _renaming = true);
+  Future<void> _rename(BuildContext context, AppState app, House house) async {
+    final s = app.strings;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _RenameHouseDialog(strings: s, initial: house.name),
+    );
+    if (name == null || name.isEmpty || name == house.name) return;
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      await app.api.updateHouse(id, name);
+      await app.api.updateHouse(house.id, name);
       await app.refreshHouses();
-      if (!mounted) return;
-      setState(() {
-        _renaming = false;
-        _renameStatus = app.strings.houseRenamed;
-      });
+      messenger.showSnackBar(SnackBar(content: Text(s.houseRenamed)));
     } catch (error) {
-      if (mounted) {
-        setState(() {
-          _renaming = false;
-          _renameStatus = error.toString();
-        });
-      }
+      messenger.showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
@@ -86,91 +34,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final s = app.strings;
 
     return AppShell(
-      title: s.settings,
-      showBrand: false,
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
             children: [
-              _Section(
-                title: s.language,
-                child: Column(
-                  children: [
-                    _ChoiceTile(
-                      label: s.languageSystem,
-                      selected: app.localeOverride == null,
-                      trailing: app.localeOverride == null
-                          ? Text(
-                              app.localeCode == 'pt'
-                                  ? s.languagePortuguese
-                                  : s.languageEnglish,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: RoomiesPalette.of(context).inkMuted),
-                            )
-                          : null,
-                      onTap: () => app.setLocaleOverride(null),
-                    ),
-                    _ChoiceTile(
-                      label: s.languageEnglish,
-                      selected: app.localeOverride == 'en',
-                      onTap: () => app.setLocaleOverride('en'),
-                    ),
-                    _ChoiceTile(
-                      label: s.languagePortuguese,
-                      selected: app.localeOverride == 'pt',
-                      onTap: () => app.setLocaleOverride('pt'),
-                    ),
-                  ],
+              Semantics(
+                header: true,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Text(
+                    s.settings,
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
                 ),
               ),
+              if (app.user != null) _AccountCard(user: app.user!, strings: s),
               _Section(
-                title: s.brandTheme,
-                subtitle: s.brandThemeHint,
-                child: Column(
-                  children: [
-                    _BrandTile(
-                      label: s.brandMint,
-                      color: BrandAccent.mint.seed,
-                      selected: app.brandAccent == BrandAccent.mint,
-                      onTap: () => app.setBrandAccent(BrandAccent.mint),
-                    ),
-                    _BrandTile(
-                      label: s.brandPlum,
-                      color: BrandAccent.plum.seed,
-                      selected: app.brandAccent == BrandAccent.plum,
-                      onTap: () => app.setBrandAccent(BrandAccent.plum),
-                    ),
+                title: s.language,
+                child: _Segmented<String?>(
+                  selected: app.localeOverride,
+                  onChanged: app.setLocaleOverride,
+                  options: [
+                    (null, s.languageSystem),
+                    ('en', s.languageEnglish),
+                    ('pt', s.languagePortuguese),
                   ],
                 ),
               ),
               _Section(
                 title: s.appearance,
-                child: Column(
-                  children: [
-                    _ChoiceTile(
-                      label: s.themeSystem,
-                      selected: app.themeOverride == null,
-                      onTap: () => app.setThemeOverride(null),
-                    ),
-                    _ChoiceTile(
-                      label: s.themeLight,
-                      selected: app.themeOverride == 'light',
-                      onTap: () => app.setThemeOverride('light'),
-                    ),
-                    _ChoiceTile(
-                      label: s.themeDark,
-                      selected: app.themeOverride == 'dark',
-                      onTap: () => app.setThemeOverride('dark'),
-                    ),
+                child: _Segmented<String?>(
+                  selected: app.themeOverride,
+                  onChanged: app.setThemeOverride,
+                  options: [
+                    (null, s.themeSystem),
+                    ('light', s.themeLight),
+                    ('dark', s.themeDark),
                   ],
                 ),
               ),
               _Section(
-                title: s.defaultHouse,
+                title: s.brandTheme,
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final accent in BrandAccent.values)
+                      _AccentChip(
+                        label: accent == BrandAccent.mint
+                            ? s.brandMint
+                            : s.brandPlum,
+                        color: RoomiesPalette.forBrand(
+                          accent,
+                          Theme.of(context).brightness,
+                        ).teal,
+                        selected: app.brandAccent == accent,
+                        onTap: () => app.setBrandAccent(accent),
+                      ),
+                  ],
+                ),
+              ),
+              _Section(
+                title: s.houses,
                 subtitle: s.defaultHouseHint,
                 child: Column(
                   children: [
@@ -179,71 +106,79 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       selected: app.defaultHouseId == null,
                       onTap: () => app.setDefaultHouseId(null),
                     ),
-                    ...app.houses.map(
-                      (house) => _ChoiceTile(
+                    for (final house in app.houses)
+                      _ChoiceTile(
                         label: house.name,
                         selected: app.defaultHouseId == house.id,
                         onTap: () => app.setDefaultHouseId(house.id),
-                        trailing: TextButton(
-                          onPressed: () => context.go('/house/${house.id}'),
-                          child: Text(s.goToHouse),
+                        trailing: IconButton(
+                          tooltip: s.renameHouseNamed(house.name),
+                          icon: const Icon(Icons.edit_outlined, size: 20),
+                          onPressed: () => _rename(context, app, house),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
-              if (app.houses.isNotEmpty)
-                _Section(
-                  title: s.renameHouse,
-                  subtitle: s.renameHouseHint,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ...app.houses.map(
-                        (house) => _ChoiceTile(
-                          label: house.name,
-                          selected: _renameHouseId == house.id,
-                          onTap: () => _selectHouseForRename(house),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _rename,
-                        decoration: InputDecoration(labelText: s.houseName),
-                      ),
-                      const SizedBox(height: 16),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: FilledButton(
-                          onPressed: _renaming ? null : () => _saveRename(app),
-                          child: Text(s.save),
-                        ),
-                      ),
-                      if (_renameStatus != null) ...[
-                        const SizedBox(height: 8),
-                        Text(_renameStatus!),
-                      ],
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                minVerticalPadding: 16,
-                leading:
-                    Icon(Icons.logout_rounded, color: RoomiesPalette.of(context).danger),
-                title: Text(
-                  s.logout,
-                  style: TextStyle(color: RoomiesPalette.of(context).danger),
-                ),
-                onTap: () async {
-                  await app.logout();
-                  if (context.mounted) context.go('/');
-                },
-              ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountCard extends StatelessWidget {
+  const _AccountCard({required this.user, required this.strings});
+
+  final User user;
+  final RoomiesStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = RoomiesPalette.of(context);
+    final initial = user.name.trim().isEmpty
+        ? '?'
+        : user.name.trim().characters.first.toUpperCase();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 28),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: p.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: p.line),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: p.tealSoft,
+              foregroundColor: p.onTealSoft,
+              child: Text(
+                initial,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  Text(
+                    user.email,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -264,13 +199,13 @@ class _Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.only(bottom: 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: Theme.of(context).textTheme.titleLarge),
           if (subtitle != null) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               subtitle!,
               style: Theme.of(context).textTheme.bodyMedium,
@@ -278,6 +213,70 @@ class _Section extends StatelessWidget {
           ],
           const SizedBox(height: 12),
           child,
+        ],
+      ),
+    );
+  }
+}
+
+class _Segmented<T> extends StatelessWidget {
+  const _Segmented({
+    required this.selected,
+    required this.onChanged,
+    required this.options,
+  });
+
+  final T selected;
+  final ValueChanged<T> onChanged;
+  final List<(T, String)> options;
+
+  @override
+  Widget build(BuildContext context) {
+    // Plain ToggleButtons-style row: SegmentedButton cannot hold a null value,
+    // and "Device" is modelled as no override.
+    final p = RoomiesPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: p.mist,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          for (final (value, label) in options)
+            Expanded(
+              child: Semantics(
+                button: true,
+                selected: value == selected,
+                label: label,
+                excludeSemantics: true,
+                child: Material(
+                  color: value == selected ? p.surface : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => onChanged(value),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 12,
+                      ),
+                      child: Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              color: value == selected ? p.ink : p.inkMuted,
+                              fontWeight: value == selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -299,37 +298,40 @@ class _ChoiceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = RoomiesPalette.of(context);
     return Material(
-      color: selected ? RoomiesPalette.of(context).tealSoft : Colors.transparent,
+      color: selected ? p.tealSoft : Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          child: Row(
-            children: [
-              Icon(
-                selected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-                size: 22,
-                color: selected
-                    ? RoomiesPalette.of(context).tealDeep
-                    : RoomiesPalette.of(context).inkMuted,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight:
-                            selected ? FontWeight.w700 : FontWeight.w500,
-                      ),
+          padding: EdgeInsets.fromLTRB(12, 4, trailing == null ? 12 : 0, 4),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Row(
+              children: [
+                Icon(
+                  selected
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_off,
+                  size: 22,
+                  color: selected ? p.onTealSoft : p.inkMuted,
                 ),
-              ),
-              if (trailing != null) trailing!,
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: selected ? p.onTealSoft : p.ink,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                  ),
+                ),
+                if (trailing != null) trailing!,
+              ],
+            ),
           ),
         ),
       ),
@@ -337,8 +339,8 @@ class _ChoiceTile extends StatelessWidget {
   }
 }
 
-class _BrandTile extends StatelessWidget {
-  const _BrandTile({
+class _AccentChip extends StatelessWidget {
+  const _AccentChip({
     required this.label,
     required this.color,
     required this.selected,
@@ -353,49 +355,93 @@ class _BrandTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = RoomiesPalette.of(context);
-    return Material(
-      color: selected ? p.tealSoft : Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: selected ? p.ink : p.line,
-                    width: selected ? 2 : 1,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: selected ? p.surface : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: selected ? p.tealDeep : p.line,
+            width: selected ? 1.6 : 1,
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 16, 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
+                const SizedBox(width: 10),
+                Text(
                   label,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight:
                             selected ? FontWeight.w700 : FontWeight.w500,
                       ),
                 ),
-              ),
-              Icon(
-                selected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-                size: 22,
-                color: selected ? p.tealDeep : p.inkMuted,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _RenameHouseDialog extends StatefulWidget {
+  const _RenameHouseDialog({required this.strings, required this.initial});
+
+  final RoomiesStrings strings;
+  final String initial;
+
+  @override
+  State<_RenameHouseDialog> createState() => _RenameHouseDialogState();
+}
+
+class _RenameHouseDialogState extends State<_RenameHouseDialog> {
+  late final _controller = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() => Navigator.of(context).pop(_controller.text.trim());
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.strings;
+    return AlertDialog(
+      title: Text(s.renameHouse),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: InputDecoration(labelText: s.houseName),
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(s.cancel),
+        ),
+        FilledButton(onPressed: _submit, child: Text(s.save)),
+      ],
     );
   }
 }

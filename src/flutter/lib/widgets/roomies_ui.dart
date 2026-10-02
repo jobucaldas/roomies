@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/strings.dart';
 import '../theme/roomies_theme.dart';
 
-/// Matches Dioxus `.card` / `article.card` layout for Playwright and visual parity.
+/// Outlined surface card used across house sections and the dashboard.
 class RoomiesCard extends StatelessWidget {
   const RoomiesCard({super.key, required this.child, this.semanticLabel});
 
@@ -23,13 +24,13 @@ class RoomiesCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: RoomiesPalette.of(context).surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(color: RoomiesPalette.of(context).line),
           boxShadow: [
             BoxShadow(
               color: RoomiesPalette.of(context).shadow,
-              blurRadius: 28,
-              offset: const Offset(0, 12),
+              blurRadius: 12,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
@@ -175,35 +176,56 @@ class RoomiesHeading extends StatelessWidget {
   }
 }
 
+/// The "Roomies" wordmark. Every surface that shows the brand (boot splash,
+/// sign-in, sidebar, drawer) goes through this so the typeface never drifts.
+class RoomiesWordmark extends StatelessWidget {
+  const RoomiesWordmark({super.key, this.size = 24});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'Roomies',
+      style: TextStyle(
+        fontFamily: roomiesDisplayFamily,
+        fontWeight: FontWeight.w700,
+        fontSize: size,
+        height: 1.0,
+        letterSpacing: -0.02 * size,
+        color: RoomiesPalette.of(context).tealDeep,
+      ),
+    );
+  }
+}
+
+/// Wordmark plus optional tagline for sign-in and callback screens.
 class RoomiesBrandMark extends StatelessWidget {
   const RoomiesBrandMark({
     super.key,
     this.compact = false,
+    this.centered = false,
     this.tagline,
   });
 
   final bool compact;
+  final bool centered;
   final String? tagline;
 
   @override
   Widget build(BuildContext context) {
-    final line = tagline ?? 'Shared homes, clearer money and chores.';
     return Semantics(
       header: true,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            centered ? CrossAxisAlignment.center : CrossAxisAlignment.start,
         children: [
-          Text(
-            'Roomies',
-            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                  fontSize: compact ? 34 : 52,
-                  height: 0.98,
-                ),
-          ),
-          if (!compact) ...[
-            const SizedBox(height: 12),
+          RoomiesWordmark(size: compact ? 34 : 52),
+          if (!compact && tagline != null) ...[
+            const SizedBox(height: 14),
             Text(
-              line,
+              tagline!,
+              textAlign: centered ? TextAlign.center : TextAlign.start,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: RoomiesPalette.of(context).inkMuted,
                   ),
@@ -279,66 +301,6 @@ class RoomiesLabeledField extends StatelessWidget {
   }
 }
 
-class RoomiesTabStrip extends StatelessWidget {
-  const RoomiesTabStrip({
-    super.key,
-    required this.tabs,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final List<String> tabs;
-  final String selected;
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      container: true,
-      explicitChildNodes: true,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final narrow = constraints.maxWidth < 600;
-          final children = tabs
-              .map(
-                (tab) => Expanded(
-                  flex: narrow ? 0 : 1,
-                  child: Semantics(
-                    button: true,
-                    selected: selected == tab,
-                    label: tab,
-                    child: Padding(
-                      padding: const EdgeInsets.all(2),
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          backgroundColor: selected == tab
-                              ? RoomiesPalette.of(context).teal
-                              : RoomiesPalette.of(context).mist,
-                          foregroundColor: selected == tab
-                              ? Theme.of(context).colorScheme.onPrimary
-                              : RoomiesPalette.of(context).inkMuted,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () => onSelected(tab),
-                        child: Text(tab, textAlign: TextAlign.center),
-                      ),
-                    ),
-                  ),
-                ),
-              )
-              .toList();
-          if (narrow) {
-            return Wrap(spacing: 4, runSpacing: 4, children: children);
-          }
-          return Row(children: children);
-        },
-      ),
-    );
-  }
-}
-
 class RoomiesTabPanel extends StatelessWidget {
   const RoomiesTabPanel({
     super.key,
@@ -356,6 +318,143 @@ class RoomiesTabPanel extends StatelessWidget {
       explicitChildNodes: true,
       label: name,
       child: child,
+    );
+  }
+}
+
+/// Shared layout for signed-out screens (sign-in, register, AuthKit callback,
+/// invitation): centered wordmark, tagline and one block of actions, so the
+/// hand-off to and from hosted AuthKit looks like one flow.
+class RoomiesAuthFrame extends StatelessWidget {
+  const RoomiesAuthFrame({
+    super.key,
+    required this.strings,
+    required this.child,
+    this.onToggleLanguage,
+    this.footer,
+    this.showTagline = true,
+  });
+
+  final RoomiesStrings strings;
+  final Widget child;
+  final VoidCallback? onToggleLanguage;
+  final String? footer;
+  final bool showTagline;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = RoomiesPalette.of(context);
+    return Material(
+      color: p.canvas,
+      child: SafeArea(
+        child: Column(
+          children: [
+            SizedBox(
+              height: 56,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: onToggleLanguage == null
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            foregroundColor: p.inkMuted,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          onPressed: onToggleLanguage,
+                          child: Text(strings.toggleLanguage),
+                        ),
+                      ),
+              ),
+            ),
+            Expanded(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 380),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        RoomiesBrandMark(
+                          centered: true,
+                          tagline: showTagline ? strings.brandTagline : null,
+                        ),
+                        const SizedBox(height: 36),
+                        child,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 56,
+              child: footer == null
+                  ? null
+                  : Center(
+                      child: Text(
+                        footer!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One secondary action on a list item (edit, toggle, delete…).
+class RoomiesItemAction {
+  const RoomiesItemAction({
+    required this.label,
+    required this.onPressed,
+    this.destructive = false,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool destructive;
+}
+
+/// Compact, right-aligned row of item actions. Primary filled buttons are
+/// reserved for the one main action of a section (add, save).
+class RoomiesItemActions extends StatelessWidget {
+  const RoomiesItemActions(this.actions, {super.key});
+
+  final List<RoomiesItemAction> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = RoomiesPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        alignment: WrapAlignment.end,
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          for (final action in actions)
+            action.destructive
+                ? TextButton(
+                    style: TextButton.styleFrom(foregroundColor: p.danger),
+                    onPressed: action.onPressed,
+                    child: Text(action.label),
+                  )
+                : OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(48, 40),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                    ),
+                    onPressed: action.onPressed,
+                    child: Text(action.label),
+                  ),
+        ],
+      ),
     );
   }
 }

@@ -203,12 +203,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> logout() async {
-    await api.logout();
+  /// Signs out locally. Returns the hosted AuthKit logout URL when the
+  /// session came from AuthKit; callers should open it so the WorkOS session
+  /// ends too and the next sign-in can pick a different account.
+  Future<String?> logout() async {
+    final logoutUrl = await api.logout();
     user = null;
     houses = const [];
     restoredExistingSession = false;
     notifyListeners();
+    return logoutUrl;
   }
 }
 

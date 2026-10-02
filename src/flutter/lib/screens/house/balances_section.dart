@@ -22,10 +22,11 @@ class BalancesSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           RoomiesHeading(s.balances, level: 2),
-          Text(s.balancesRefreshHint),
-          const SizedBox(height: 12),
           if (balances == null)
-            Text(s.selectTabToLoadBalances)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
+            )
           else if (balances!.balances.isEmpty)
             Text(s.noExpensesYet)
           else ...[

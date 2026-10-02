@@ -1,6 +1,6 @@
 # WorkOS AuthKit
 
-Roomies uses WorkOS **hosted AuthKit** for sign-in when `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` are set. The Flutter client shows a single **Sign in** action that redirects to AuthKit. Google and other enabled methods appear on the hosted AuthKit page. Without those variables, the app keeps local email/password (used by CI), collapsed behind **Use email and password**. When AuthKit is enabled, `POST /api/auth/login` and `POST /api/auth/register` return 403.
+Roomies uses WorkOS **hosted AuthKit** for sign-in when `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` are set. The Flutter client shows a single **Sign in** action that redirects to AuthKit; sign-up, Google and other enabled methods live on the hosted AuthKit page. Without those variables, the app keeps local email/password (used by CI), collapsed behind **Use email and password**. When AuthKit is enabled, `POST /api/auth/login` and `POST /api/auth/register` return 403.
 
 ## Staging AuthKit URLs (phone / Tailscale)
 
@@ -57,6 +57,21 @@ For local compose/CI without Tailscale, `http://localhost/callback` (or `:58000`
 5. Client `POST /api/auth/workos/callback` with the code and state. The browser sends the cookies. The server checks state and sends the PKCE verifier to WorkOS.
 6. Backend upserts the local user (`workos_user_id`) and sets an HttpOnly session cookie (`JWT_ACCESS_TTL_HOURS`, default 8h). The web client does not receive or store a bearer token. Native and API clients still receive a bearer token of the same lifetime.
 7. Login, register, and the code exchange are limited per client IP.
-8. Fresh sign-in lands on Dashboard. Creating a house stores it as the default house (client preference). Restored sessions open that house; switch via sidebar or Settings.
+8. **Log out** clears the Roomies session. When the session came from AuthKit, `POST /api/auth/logout` returns `{ "logout_url": "https://api.workos.com/user_management/sessions/logout?session_id=…" }` and the web client navigates there, so WorkOS ends its session and sends the browser to the dashboard's **Default logout return**. Without this, the next **Sign in** would silently reuse the previous account. Password and pre-existing sessions get `204` and stay in the app.
+9. Fresh sign-in lands on Dashboard. Creating a house stores it as the default house (client preference). Restored sessions open that house; switch via sidebar or Settings.
 
 Invitation acceptance matches the invite address to `users.email`.
+
+## AuthKit branding
+
+Match the hosted page to the app in WorkOS Dashboard → Branding so the hand-off looks like one flow:
+
+| Setting | Light | Dark |
+|---|---|---|
+| Page background | `#F5F5F4` | `#121212` |
+| Button / accent (mint) | `#0F7F5C` | `#21C68F` |
+| Button / accent (plum) | `#53134B` | `#D38AC7` |
+| Logo / wordmark | "Roomies" in Fraunces Bold, `#0D7353` | `#5FD6A8` |
+| Body font | Source Sans 3 | Source Sans 3 |
+
+The font files are bundled in `src/flutter/assets/fonts/` (SIL Open Font License).

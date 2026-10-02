@@ -227,8 +227,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _monthExpenses.fold<double>(0, (sum, e) => sum + e.amount);
 
     return AppShell(
-      title: s.home,
-      showBrand: false,
       currentHouseId: focusHouse?.id,
       onHouseSelected: (id) => _loadSummary(id),
       child: Center(
@@ -247,23 +245,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: child,
                   );
                 },
-                child: Text(
-                  user == null ? s.welcomeGuest : s.welcomeBack(user.name),
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontFamily: 'Fraunces',
-                      ),
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    user == null ? s.welcomeGuest : s.welcomeBack(user.name),
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                focusHouse == null
-                    ? s.noHousesYet
-                    : focusHouse.name,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: RoomiesPalette.of(context).inkMuted,
-                    ),
-              ),
-              const SizedBox(height: 20),
+              if (focusHouse == null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  s.noHousesYet,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: RoomiesPalette.of(context).inkMuted,
+                      ),
+                ),
+              ],
+              const SizedBox(height: 16),
               if (_error != null) RoomiesError(_error!),
               if (_loading)
                 const Padding(
@@ -372,13 +371,14 @@ class _MoneyGraphCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = RoomiesPalette.of(context);
-    final byDay = <int, double>{};
+    final now = DateTime.now();
+    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+    final byDay = List<double>.filled(daysInMonth, 0);
     for (final expense in expenses) {
       final day = int.tryParse(expense.date.split('-').last) ?? 1;
-      byDay[day] = (byDay[day] ?? 0) + expense.amount;
+      if (day >= 1 && day <= daysInMonth) byDay[day - 1] += expense.amount;
     }
-    final days = byDay.keys.toList()..sort();
-    final maxVal = byDay.values.fold<double>(0, math.max);
+    final maxVal = byDay.fold<double>(0, math.max);
 
     return RoomiesCard(
       child: Column(
@@ -391,18 +391,16 @@ class _MoneyGraphCard extends StatelessWidget {
           else ...[
             Text(
               totalLabel,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     color: p.tealDeep,
-                    fontWeight: FontWeight.w700,
-                    fontFamily: 'Fraunces',
                   ),
             ),
             const SizedBox(height: 16),
             SizedBox(
-              height: 120,
+              height: 96,
               child: CustomPaint(
                 painter: _SpendBarsPainter(
-                  values: [for (final d in days) byDay[d]!],
+                  values: byDay,
                   maxValue: maxVal <= 0 ? 1 : maxVal,
                   barColor: p.teal,
                   trackColor: p.mist,
@@ -452,28 +450,30 @@ class _SpendBarsPainter extends CustomPainter {
   final Color barColor;
   final Color trackColor;
 
+  /// One slim bar per day of the month; days without spend show a short
+  /// track so the month's shape stays readable.
   @override
   void paint(Canvas canvas, Size size) {
     if (values.isEmpty) return;
     final count = values.length;
-    final gap = size.width / (count * 2.6);
-    final barWidth = gap * 1.4;
+    final slot = size.width / count;
+    final barWidth = math.min(slot * 0.6, 14.0);
+    final radius = Radius.circular(barWidth / 2);
     final paint = Paint()..style = PaintingStyle.fill;
     for (var i = 0; i < count; i++) {
-      final x = gap + i * (barWidth + gap);
-      final h = (values[i] / maxValue) * size.height;
-      final track = RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, 0, barWidth, size.height),
-        const Radius.circular(8),
+      final x = i * slot + (slot - barWidth) / 2;
+      final value = values[i];
+      final h = value <= 0
+          ? barWidth
+          : math.max(barWidth, (value / maxValue) * size.height);
+      paint.color = value <= 0 ? trackColor : barColor;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, size.height - h, barWidth, h),
+          radius,
+        ),
+        paint,
       );
-      paint.color = trackColor;
-      canvas.drawRRect(track, paint);
-      final bar = RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, size.height - h, barWidth, h),
-        const Radius.circular(8),
-      );
-      paint.color = barColor;
-      canvas.drawRRect(bar, paint);
     }
   }
 
@@ -534,7 +534,11 @@ class _UpcomingCard extends StatelessWidget {
                         color: p.tealSoft,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(_iconFor(event.kind), color: p.tealDeep, size: 20),
+                      child: Icon(
+                        _iconFor(event.kind),
+                        color: p.onTealSoft,
+                        size: 20,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -638,10 +642,11 @@ class _NotesShowcaseCard extends StatelessWidget {
                 },
                 child: Container(
                   key: ValueKey(note.id),
+                  width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: p.mist.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(16),
+                    color: p.canvas,
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: p.line),
                   ),
                   child: Column(
@@ -649,9 +654,7 @@ class _NotesShowcaseCard extends StatelessWidget {
                     children: [
                       Text(
                         note.title,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontFamily: 'Fraunces',
-                            ),
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 8),
                       Text(

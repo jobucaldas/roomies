@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../auth/open_url.dart';
 import '../core/house_tabs.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
@@ -9,8 +11,10 @@ import '../state/app_state.dart';
 import '../theme/roomies_theme.dart';
 import 'roomies_ui.dart';
 
-/// Authenticated chrome: action sidebar (wide) / hamburger drawer (narrow),
-/// with a compact house switcher in the top bar.
+/// Authenticated chrome: one navigation list rendered as a sidebar (wide) or
+/// hamburger drawer (narrow), plus a top bar that only carries the house
+/// switcher and optional page actions. The nav is the single place to move
+/// between house sections; screens do not repeat it as tabs or titles.
 ///
 /// Breakpoint state is sticky across soft-keyboard height changes: depending on
 /// [MediaQuery.sizeOf] alone rebuilds the whole shell when only height changes,
@@ -21,18 +25,14 @@ class AppShell extends StatefulWidget {
     required this.child,
     this.currentHouseId,
     this.onHouseSelected,
-    this.title,
     this.actions = const [],
-    this.showBrand = true,
     this.activeTab,
   });
 
   final Widget child;
   final String? currentHouseId;
   final ValueChanged<String>? onHouseSelected;
-  final String? title;
   final List<Widget> actions;
-  final bool showBrand;
 
   /// Optional house-tab key for highlighting the matching action tile.
   final String? activeTab;
@@ -139,7 +139,11 @@ class _AppShellState extends State<AppShell> {
       onAction: (tab) => _openAction(context, app, s, activeHouseId, tab),
       onSettings: () => context.go('/settings'),
       onLogout: () async {
-        await app.logout();
+        final logoutUrl = await app.logout();
+        if (logoutUrl != null && kIsWeb) {
+          openExternalUrl(logoutUrl);
+          return;
+        }
         if (context.mounted) context.go('/');
       },
     );
@@ -161,15 +165,21 @@ class _AppShellState extends State<AppShell> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(width: 248, child: nav),
+                Container(
+                  width: 248,
+                  decoration: BoxDecoration(
+                    color: RoomiesPalette.of(context).surface,
+                    border: Border(
+                      right: BorderSide(color: RoomiesPalette.of(context).line),
+                    ),
+                  ),
+                  child: nav,
+                ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _ShellTopBar(
-                        title: widget.title,
-                        showBrand: widget.showBrand,
-                        strings: s,
                         houseSwitcher: houseSwitcher,
                         actions: widget.actions,
                       ),
@@ -191,7 +201,7 @@ class _AppShellState extends State<AppShell> {
       backgroundColor: Colors.transparent,
       resizeToAvoidBottomInset: false,
       drawer: Drawer(
-        backgroundColor: RoomiesPalette.of(context).surface,
+        backgroundColor: RoomiesPalette.of(context).canvas,
         child: SafeArea(child: nav),
       ),
       body: RoomiesAtmosphere(
@@ -201,9 +211,6 @@ class _AppShellState extends State<AppShell> {
             children: [
               Builder(
                 builder: (context) => _ShellTopBar(
-                  title: widget.title,
-                  showBrand: widget.showBrand,
-                  strings: s,
                   leading: IconButton(
                     tooltip: s.openMenu,
                     onPressed: () => Scaffold.of(context).openDrawer(),
@@ -224,19 +231,13 @@ class _AppShellState extends State<AppShell> {
 
 class _ShellTopBar extends StatelessWidget {
   const _ShellTopBar({
-    required this.strings,
     required this.actions,
     required this.houseSwitcher,
-    this.title,
-    this.showBrand = true,
     this.leading,
   });
 
-  final RoomiesStrings strings;
   final List<Widget> actions;
   final Widget houseSwitcher;
-  final String? title;
-  final bool showBrand;
   final Widget? leading;
 
   @override
@@ -245,44 +246,6 @@ class _ShellTopBar extends StatelessWidget {
     // chrome width; on desktop the top bar already lives only in the main
     // content column (sidebar is a sibling), so centering here matches
     // "center within the main content section".
-    final trailing = <Widget>[
-      if (title != null) ...[
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 140),
-          child: Semantics(
-            header: true,
-            child: Text(
-              title!,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.end,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: RoomiesPalette.of(context).inkMuted,
-                  ),
-            ),
-          ),
-        ),
-      ],
-      ...actions,
-    ];
-
-    final leadingSlot = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (leading != null) leading!,
-        if (showBrand)
-          Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: Text(
-              strings.brand,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: RoomiesPalette.of(context).tealDeep,
-                    fontFamily: 'Fraunces',
-                  ),
-            ),
-          ),
-      ],
-    );
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 12, 4),
       child: SizedBox(
@@ -292,12 +255,12 @@ class _ShellTopBar extends StatelessWidget {
           children: [
             Row(
               children: [
-                leadingSlot,
+                if (leading != null) leading!,
                 const Spacer(),
-                ...trailing,
+                ...actions,
               ],
             ),
-            // Keep clear of the menu button / trailing label so taps do not
+            // Keep clear of the menu button / trailing actions so taps do not
             // collide; the switcher itself stays visually centered.
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 52),
@@ -415,7 +378,7 @@ class _HouseSwitcher extends StatelessWidget {
             curve: Curves.easeOutCubic,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: p.surface.withValues(alpha: 0.92),
+              color: p.surface,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: p.line),
             ),
@@ -473,6 +436,7 @@ class _ActionNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = RoomiesPalette.of(context);
     final onDash = currentPath.startsWith('/dashboard');
     final onSettingsPath = currentPath.startsWith('/settings');
     final onHouse = currentPath.startsWith('/house/');
@@ -509,50 +473,51 @@ class _ActionNav extends StatelessWidget {
         label: strings.tabBalances,
         tab: HouseTabs.balances,
       ),
+      _ActionItem(
+        icon: Icons.notifications_none_rounded,
+        label: strings.tabNotifications,
+        tab: HouseTabs.notifications,
+      ),
+      _ActionItem(
+        icon: Icons.group_outlined,
+        label: strings.tabMembers,
+        tab: HouseTabs.members,
+      ),
     ];
 
-    return Container(
-      margin: const EdgeInsets.all(12),
-      padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
-      decoration: BoxDecoration(
-        color: RoomiesPalette.of(context).surface.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: RoomiesPalette.of(context).line),
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            strings.brand,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: RoomiesPalette.of(context).tealDeep,
-                  fontFamily: 'Fraunces',
-                ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(12, 4, 12, 20),
+            child: RoomiesWordmark(size: 26),
           ),
-          const SizedBox(height: 4),
-          Text(
-            strings.thingsToDo,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 16),
           _NavTile(
             selected: onDash,
             icon: Icons.grid_view_rounded,
             label: strings.home,
             onTap: () => _tap(context, onHome),
           ),
-          const SizedBox(height: 10),
-          Text(
-            strings.thingsToDo,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: RoomiesPalette.of(context).inkMuted,
-                ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 18, 12, 6),
+            child: ExcludeSemantics(
+              child: Text(
+                strings.navHouseSection.toUpperCase(),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: p.inkMuted,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                    ),
+              ),
+            ),
           ),
-          const SizedBox(height: 6),
           Expanded(
             child: ListView.separated(
+              padding: EdgeInsets.zero,
               itemCount: actions.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 4),
+              separatorBuilder: (_, __) => const SizedBox(height: 2),
               itemBuilder: (context, index) {
                 final item = actions[index];
                 final selected = onHouse && tab == item.tab;
@@ -565,13 +530,14 @@ class _ActionNav extends StatelessWidget {
               },
             ),
           ),
-          const Divider(height: 24),
+          const Divider(height: 20),
           _NavTile(
             selected: onSettingsPath,
             icon: Icons.settings_outlined,
             label: strings.settings,
             onTap: () => _tap(context, onSettings),
           ),
+          const SizedBox(height: 2),
           _NavTile(
             selected: false,
             icon: Icons.logout_rounded,
@@ -626,14 +592,14 @@ class _NavTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             child: Row(
               children: [
                 Icon(
                   icon,
                   size: 20,
                   color: selected
-                      ? RoomiesPalette.of(context).tealDeep
+                      ? RoomiesPalette.of(context).onTealSoft
                       : RoomiesPalette.of(context).inkMuted,
                 ),
                 const SizedBox(width: 10),
@@ -643,7 +609,7 @@ class _NavTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           color: selected
-                              ? RoomiesPalette.of(context).tealDeep
+                              ? RoomiesPalette.of(context).onTealSoft
                               : RoomiesPalette.of(context).ink,
                           fontWeight:
                               selected ? FontWeight.w700 : FontWeight.w500,

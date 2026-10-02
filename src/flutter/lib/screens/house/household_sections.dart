@@ -142,16 +142,18 @@ class _GroceriesSectionState extends State<GroceriesSection> {
                 children: [
                   RoomiesHeading(item.name, level: 3),
                   Text(item.checked ? s.checked : s.needed),
-                  if (canWrite) ...[
-                    RoomiesPrimaryButton(
-                      label: item.checked ? s.uncheck : s.check,
-                      onPressed: () => _toggle(item),
-                    ),
-                    RoomiesPrimaryButton(
-                      label: s.delete,
-                      onPressed: () => _delete(item),
-                    ),
-                  ],
+                  if (canWrite)
+                    RoomiesItemActions([
+                      RoomiesItemAction(
+                        label: item.checked ? s.uncheck : s.check,
+                        onPressed: () => _toggle(item),
+                      ),
+                      RoomiesItemAction(
+                        label: s.delete,
+                        destructive: true,
+                        onPressed: () => _delete(item),
+                      ),
+                    ]),
                 ],
               ),
             );
@@ -282,16 +284,18 @@ class _ChoresSectionState extends State<ChoresSection> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     RoomiesHeading(chore.title, level: 3),
-                    if (canWrite) ...[
-                      RoomiesPrimaryButton(
-                        label: chore.enabled ? s.disable : s.enable,
-                        onPressed: () => _toggle(chore),
-                      ),
-                      RoomiesPrimaryButton(
-                        label: s.delete,
-                        onPressed: () => _delete(chore),
-                      ),
-                    ],
+                    if (canWrite)
+                      RoomiesItemActions([
+                        RoomiesItemAction(
+                          label: chore.enabled ? s.disable : s.enable,
+                          onPressed: () => _toggle(chore),
+                        ),
+                        RoomiesItemAction(
+                          label: s.delete,
+                          destructive: true,
+                          onPressed: () => _delete(chore),
+                        ),
+                      ]),
                   ],
                 ),
               )),
@@ -410,10 +414,13 @@ class _CalendarSectionState extends State<CalendarSection> {
                   children: [
                     RoomiesHeading(event.title, level: 3),
                     if (canWrite)
-                      RoomiesPrimaryButton(
-                        label: s.delete,
-                        onPressed: () => _delete(event),
-                      ),
+                      RoomiesItemActions([
+                        RoomiesItemAction(
+                          label: s.delete,
+                          destructive: true,
+                          onPressed: () => _delete(event),
+                        ),
+                      ]),
                   ],
                 ),
               )),
