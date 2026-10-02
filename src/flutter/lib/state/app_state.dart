@@ -13,8 +13,11 @@ class AppState extends ChangeNotifier {
     this.api, {
     PreferencesStorage? preferences,
     String? deviceLocale,
+    List<String>? deviceLocales,
   })  : preferences = preferences ?? PreferencesStorage(),
-        _deviceLocale = RoomiesStrings.resolveDeviceLocale(deviceLocale);
+        _deviceLocale = RoomiesStrings.resolveDeviceLocale(
+          deviceLocales ?? [deviceLocale],
+        );
 
   final ApiClient api;
   final PreferencesStorage preferences;
@@ -22,7 +25,7 @@ class AppState extends ChangeNotifier {
   User? user;
   bool sessionReady = false;
 
-  /// Resolved locale code used by the UI (`en` or `pt`).
+  /// Resolved locale code used by the UI (`en`, `pt` or `es`).
   String localeCode = 'en';
 
   /// Explicit Settings override; `null` means follow the device.
@@ -68,16 +71,12 @@ class AppState extends ChangeNotifier {
   }
 
   void _applyLocale() {
-    final override = localeOverride;
-    if (override == 'pt' || override == 'en') {
-      localeCode = override!;
-    } else {
-      localeCode = _deviceLocale;
-    }
+    localeCode =
+        RoomiesStrings.normalizeOverride(localeOverride) ?? _deviceLocale;
   }
 
   Future<void> setLocaleOverride(String? code) async {
-    if (code != null && code != 'en' && code != 'pt') return;
+    if (code != null && RoomiesStrings.normalizeOverride(code) == null) return;
     localeOverride = code;
     await preferences.saveLocaleOverride(code);
     _applyLocale();
@@ -95,12 +94,6 @@ class AppState extends ChangeNotifier {
     brandAccent = accent;
     await preferences.saveBrandAccent(accent.id);
     notifyListeners();
-  }
-
-  void toggleLanguageQuick() {
-    final next = localeCode == 'pt' ? 'en' : 'pt';
-    // Fire-and-forget; callers that need await use [setLocaleOverride].
-    setLocaleOverride(next);
   }
 
   Future<void> setDefaultHouseId(String? houseId) async {
@@ -216,7 +209,9 @@ class AppState extends ChangeNotifier {
   }
 }
 
-/// Platform locale tag for bootstrap (e.g. `pt_BR`, `en_US`).
-String platformLocaleTag() {
-  return PlatformDispatcher.instance.locale.toLanguageTag();
-}
+/// The device's preferred locales in order (browser `navigator.languages`,
+/// OS language list), e.g. `[es-MX, en-US]`.
+List<String> platformLocaleTags() => [
+      for (final locale in PlatformDispatcher.instance.locales)
+        locale.toLanguageTag(),
+    ];

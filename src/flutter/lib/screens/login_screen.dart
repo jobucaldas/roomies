@@ -27,13 +27,14 @@ class _LoginScreenState extends State<LoginScreen> {
   AuthConfig? _config;
   var _loading = false;
   var _configLoading = true;
+  var _configFailed = false;
   var _showPasswordForm = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadConfig();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadConfig());
   }
 
   @override
@@ -44,6 +45,11 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _loadConfig() async {
+    setState(() {
+      _configLoading = true;
+      _configFailed = false;
+      _error = null;
+    });
     try {
       final config = await context.read<AppState>().api.getAuthConfig();
       if (!mounted) return;
@@ -55,11 +61,15 @@ class _LoginScreenState extends State<LoginScreen> {
       });
     } catch (error) {
       if (!mounted) return;
+      // Don't guess a sign-in method (AuthKit may be on); offer a retry.
       setState(() {
-        _config = AuthConfig(authkit: false, password: true);
         _configLoading = false;
+        _configFailed = true;
         _showPasswordForm = false;
-        _error = error.toString();
+        _error = describeError(
+          error,
+          unreachable: context.read<AppState>().strings.serverUnreachable,
+        );
       });
     }
   }
@@ -76,9 +86,15 @@ class _LoginScreenState extends State<LoginScreen> {
           .workosAuthorizeUrl(screenHint: screenHint);
       openExternalUrl(url);
     } on ApiError catch (error) {
-      setState(() => _error = error.message);
+      setState(() => _error = describeError(
+            error,
+            unreachable: context.read<AppState>().strings.serverUnreachable,
+          ));
     } catch (error) {
-      setState(() => _error = error.toString());
+      setState(() => _error = describeError(
+            error,
+            unreachable: context.read<AppState>().strings.serverUnreachable,
+          ));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -102,9 +118,15 @@ class _LoginScreenState extends State<LoginScreen> {
         navigator.go('/dashboard');
       }
     } on ApiError catch (error) {
-      setState(() => _error = error.message);
+      setState(() => _error = describeError(
+            error,
+            unreachable: context.read<AppState>().strings.serverUnreachable,
+          ));
     } catch (error) {
-      setState(() => _error = error.toString());
+      setState(() => _error = describeError(
+            error,
+            unreachable: context.read<AppState>().strings.serverUnreachable,
+          ));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -119,7 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return RoomiesAuthFrame(
       strings: s,
-      onToggleLanguage: app.toggleLanguageQuick,
+      onOpenSettings: () => context.go('/settings'),
       footer: s.privacyLine,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -130,6 +152,8 @@ class _LoginScreenState extends State<LoginScreen> {
               padding: EdgeInsets.symmetric(vertical: 12),
               child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
             )
+          else if (_configFailed)
+            OutlinedButton(onPressed: _loadConfig, child: Text(s.retry))
           else if (authkit)
             // AuthKit's hosted page handles sign-in, sign-up and social
             // providers, so Roomies shows one entry point.

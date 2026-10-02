@@ -23,5 +23,6 @@ void main() {
     expect(formatMoney(3, localeCode: 'en'), contains(r'$'));
     expect(formatMoney(3, localeCode: 'pt'), contains('3,00'));
     expect(formatMoney(3, localeCode: 'pt'), contains('R\$'));
+    expect(formatMoney(1234.5, localeCode: 'es'), r'$1,234.50');
   });
 }

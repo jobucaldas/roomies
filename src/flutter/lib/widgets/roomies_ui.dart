@@ -330,14 +330,15 @@ class RoomiesAuthFrame extends StatelessWidget {
     super.key,
     required this.strings,
     required this.child,
-    this.onToggleLanguage,
+    this.onOpenSettings,
     this.footer,
     this.showTagline = true,
   });
 
   final RoomiesStrings strings;
   final Widget child;
-  final VoidCallback? onToggleLanguage;
+  /// Shows a Settings gear (language, appearance) in the top-right corner.
+  final VoidCallback? onOpenSettings;
   final String? footer;
   final bool showTagline;
 
@@ -353,17 +354,14 @@ class RoomiesAuthFrame extends StatelessWidget {
               height: 56,
               child: Align(
                 alignment: Alignment.centerRight,
-                child: onToggleLanguage == null
+                child: onOpenSettings == null
                     ? null
                     : Padding(
-                        padding: const EdgeInsets.only(right: 12),
-                        child: TextButton(
-                          style: TextButton.styleFrom(
-                            foregroundColor: p.inkMuted,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          onPressed: onToggleLanguage,
-                          child: Text(strings.toggleLanguage),
+                        padding: const EdgeInsets.only(right: 8),
+                        child: IconButton(
+                          tooltip: strings.settings,
+                          onPressed: onOpenSettings,
+                          icon: const Icon(Icons.settings_outlined),
                         ),
                       ),
               ),

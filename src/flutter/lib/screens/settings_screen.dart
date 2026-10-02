@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
@@ -32,101 +33,150 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final s = app.strings;
+    final signedIn = app.api.isAuthenticated && app.user != null;
 
-    return AppShell(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+    final children = <Widget>[
+      Semantics(
+        header: true,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 20),
+          child: Text(
+            s.settings,
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+        ),
+      ),
+      if (signedIn) _AccountCard(user: app.user!, strings: s),
+      _Section(
+        title: s.language,
+        child: Column(
+          children: [
+            _ChoiceTile(
+              label: s.languageSystem,
+              selected: app.localeOverride == null,
+              onTap: () => app.setLocaleOverride(null),
+              // Show what "Device" resolved to, so the choice is legible.
+              trailing: app.localeOverride == null
+                  ? Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Text(
+                        _languageName(s, app.localeCode),
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    )
+                  : null,
+            ),
+            for (final code in RoomiesStrings.supported)
+              _ChoiceTile(
+                label: _languageName(s, code),
+                selected: app.localeOverride == code,
+                onTap: () => app.setLocaleOverride(code),
+              ),
+          ],
+        ),
+      ),
+      _Section(
+        title: s.appearance,
+        child: _Segmented<String?>(
+          selected: app.themeOverride,
+          onChanged: app.setThemeOverride,
+          options: [
+            (null, s.themeSystem),
+            ('light', s.themeLight),
+            ('dark', s.themeDark),
+          ],
+        ),
+      ),
+      _Section(
+        title: s.brandTheme,
+        child: Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (final accent in BrandAccent.values)
+              _AccentChip(
+                label: accent == BrandAccent.mint ? s.brandMint : s.brandPlum,
+                color: RoomiesPalette.forBrand(
+                  accent,
+                  Theme.of(context).brightness,
+                ).teal,
+                selected: app.brandAccent == accent,
+                onTap: () => app.setBrandAccent(accent),
+              ),
+          ],
+        ),
+      ),
+      if (signedIn)
+        _Section(
+          title: s.houses,
+          subtitle: s.defaultHouseHint,
+          child: Column(
             children: [
-              Semantics(
-                header: true,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 20),
-                  child: Text(
-                    s.settings,
-                    style: Theme.of(context).textTheme.headlineMedium,
+              _ChoiceTile(
+                label: s.noDefaultHouse,
+                selected: app.defaultHouseId == null,
+                onTap: () => app.setDefaultHouseId(null),
+              ),
+              for (final house in app.houses)
+                _ChoiceTile(
+                  label: house.name,
+                  selected: app.defaultHouseId == house.id,
+                  onTap: () => app.setDefaultHouseId(house.id),
+                  trailing: IconButton(
+                    tooltip: s.renameHouseNamed(house.name),
+                    icon: const Icon(Icons.edit_outlined, size: 20),
+                    onPressed: () => _rename(context, app, house),
                   ),
                 ),
-              ),
-              if (app.user != null) _AccountCard(user: app.user!, strings: s),
-              _Section(
-                title: s.language,
-                child: _Segmented<String?>(
-                  selected: app.localeOverride,
-                  onChanged: app.setLocaleOverride,
-                  options: [
-                    (null, s.languageSystem),
-                    ('en', s.languageEnglish),
-                    ('pt', s.languagePortuguese),
-                  ],
-                ),
-              ),
-              _Section(
-                title: s.appearance,
-                child: _Segmented<String?>(
-                  selected: app.themeOverride,
-                  onChanged: app.setThemeOverride,
-                  options: [
-                    (null, s.themeSystem),
-                    ('light', s.themeLight),
-                    ('dark', s.themeDark),
-                  ],
-                ),
-              ),
-              _Section(
-                title: s.brandTheme,
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    for (final accent in BrandAccent.values)
-                      _AccentChip(
-                        label: accent == BrandAccent.mint
-                            ? s.brandMint
-                            : s.brandPlum,
-                        color: RoomiesPalette.forBrand(
-                          accent,
-                          Theme.of(context).brightness,
-                        ).teal,
-                        selected: app.brandAccent == accent,
-                        onTap: () => app.setBrandAccent(accent),
-                      ),
-                  ],
-                ),
-              ),
-              _Section(
-                title: s.houses,
-                subtitle: s.defaultHouseHint,
-                child: Column(
-                  children: [
-                    _ChoiceTile(
-                      label: s.noDefaultHouse,
-                      selected: app.defaultHouseId == null,
-                      onTap: () => app.setDefaultHouseId(null),
-                    ),
-                    for (final house in app.houses)
-                      _ChoiceTile(
-                        label: house.name,
-                        selected: app.defaultHouseId == house.id,
-                        onTap: () => app.setDefaultHouseId(house.id),
-                        trailing: IconButton(
-                          tooltip: s.renameHouseNamed(house.name),
-                          icon: const Icon(Icons.edit_outlined, size: 20),
-                          onPressed: () => _rename(context, app, house),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
             ],
           ),
+        ),
+    ];
+
+    final body = Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+          children: children,
+        ),
+      ),
+    );
+
+    if (signedIn) return AppShell(child: body);
+
+    // Signed out (opened from the sign-in screen): no app chrome, just a way
+    // back to sign-in.
+    return Material(
+      color: RoomiesPalette.of(context).canvas,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: IconButton(
+                  tooltip: s.back,
+                  onPressed: () => context.go('/'),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+              ),
+            ),
+            Expanded(child: body),
+          ],
         ),
       ),
     );
   }
 }
+
+String _languageName(RoomiesStrings s, String code) => switch (code) {
+      'pt' => s.languagePortuguese,
+      'es' => s.languageSpanish,
+      _ => s.languageEnglish,
+    };
 
 class _AccountCard extends StatelessWidget {
   const _AccountCard({required this.user, required this.strings});

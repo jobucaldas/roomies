@@ -22,12 +22,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   AuthConfig? _config;
   var _loading = false;
   var _configLoading = true;
+  var _configFailed = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadConfig();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadConfig());
   }
 
   @override
@@ -39,6 +40,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _loadConfig() async {
+    setState(() {
+      _configLoading = true;
+      _configFailed = false;
+      _error = null;
+    });
     try {
       final config = await context.read<AppState>().api.getAuthConfig();
       if (!mounted) return;
@@ -52,9 +58,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _config = AuthConfig(authkit: false, password: true);
         _configLoading = false;
-        _error = error.toString();
+        _configFailed = true;
+        _error = describeError(
+          error,
+          unreachable: context.read<AppState>().strings.serverUnreachable,
+        );
       });
     }
   }
@@ -71,9 +80,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
           .workosAuthorizeUrl(screenHint: 'sign-up');
       openExternalUrl(url);
     } on ApiError catch (error) {
-      setState(() => _error = error.message);
+      setState(() => _error = describeError(
+            error,
+            unreachable: context.read<AppState>().strings.serverUnreachable,
+          ));
     } catch (error) {
-      setState(() => _error = error.toString());
+      setState(() => _error = describeError(
+            error,
+            unreachable: context.read<AppState>().strings.serverUnreachable,
+          ));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -98,9 +113,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
         navigator.go('/dashboard');
       }
     } on ApiError catch (error) {
-      setState(() => _error = error.message);
+      setState(() => _error = describeError(
+            error,
+            unreachable: context.read<AppState>().strings.serverUnreachable,
+          ));
     } catch (error) {
-      setState(() => _error = error.toString());
+      setState(() => _error = describeError(
+            error,
+            unreachable: context.read<AppState>().strings.serverUnreachable,
+          ));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -113,7 +134,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final authkit = _config?.authkit == true;
     return RoomiesAuthFrame(
       strings: s,
-      onToggleLanguage: app.toggleLanguageQuick,
+      onOpenSettings: () => context.go('/settings'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -123,6 +144,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
               padding: EdgeInsets.symmetric(vertical: 12),
               child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
             )
+          else if (_configFailed)
+            OutlinedButton(onPressed: _loadConfig, child: Text(s.retry))
           else if (authkit) ...[
             FilledButton(
               style: FilledButton.styleFrom(

@@ -21,7 +21,9 @@ GoRouter createRouter(AppState appState) {
       final public = path == '/' ||
           path == '/register' ||
           path == '/callback' ||
-          path == '/accept-invitation';
+          path == '/accept-invitation' ||
+          // Language and appearance are reachable before signing in.
+          path == '/settings';
       if (!authed && !public) return '/';
       if (authed && (path == '/' || path == '/register')) {
         // Fresh AuthKit/password login always goes to Dashboard via explicit

@@ -20,7 +20,7 @@ Future<void> main() async {
   usePathUrlStrategy();
   await ensureDateFormatting();
   final api = ApiClient(webOrigin: kIsWeb ? Uri.base.origin : null);
-  final appState = AppState(api, deviceLocale: platformLocaleTag());
+  final appState = AppState(api, deviceLocales: platformLocaleTags());
   await appState.restoreSession();
   runApp(RoomiesApp(appState: appState));
 }
@@ -43,9 +43,11 @@ class _RoomiesAppState extends State<RoomiesApp> {
       value: widget.appState,
       child: Consumer<AppState>(
         builder: (context, app, _) {
-          final locale = app.localeCode == 'pt'
-              ? const Locale('pt', 'BR')
-              : const Locale('en');
+          final locale = switch (app.localeCode) {
+            'pt' => const Locale('pt', 'BR'),
+            'es' => const Locale('es'),
+            _ => const Locale('en'),
+          };
           return MaterialApp.router(
             title: 'Roomies',
             theme: buildRoomiesTheme(
@@ -61,6 +63,7 @@ class _RoomiesAppState extends State<RoomiesApp> {
             supportedLocales: const [
               Locale('en'),
               Locale('pt', 'BR'),
+              Locale('es'),
             ],
             localizationsDelegates: const [
               GlobalMaterialLocalizations.delegate,

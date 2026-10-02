@@ -3,12 +3,13 @@ import 'package:intl/intl.dart';
 
 bool _dateFormattingReady = false;
 
-/// Load ICU date symbols for EN/pt-BR. Safe to call more than once.
+/// Load ICU date symbols for every UI language. Safe to call more than once.
 Future<void> ensureDateFormatting() async {
   if (_dateFormattingReady) return;
   await Future.wait([
     initializeDateFormatting('en_US'),
     initializeDateFormatting('pt_BR'),
+    initializeDateFormatting('es'),
   ]);
   _dateFormattingReady = true;
 }
@@ -29,8 +30,11 @@ DateTime? tryParseApiDateTime(String raw) {
   return null;
 }
 
-String _localeTag(String localeCode) =>
-    localeCode == 'pt' ? 'pt_BR' : 'en_US';
+String _localeTag(String localeCode) => switch (localeCode) {
+      'pt' => 'pt_BR',
+      'es' => 'es',
+      _ => 'en_US',
+    };
 
 String _fallbackDate(DateTime dt) =>
     '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';

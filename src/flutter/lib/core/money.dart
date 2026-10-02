@@ -28,12 +28,15 @@ int? parseMoneyCents(String value) {
 
 double centsToApiAmount(int cents) => cents / 100.0;
 
-/// Format money for display. Portuguese locale uses BRL (reais); English uses USD.
+/// Format money for display. Portuguese uses BRL (reais); English uses USD;
+/// Spanish uses Latin American number formatting with a `$` symbol.
 String formatMoney(double amount, {String localeCode = 'en'}) {
-  if (localeCode == 'pt') {
-    return NumberFormat.currency(locale: 'pt_BR', symbol: r'R$ ').format(amount);
-  }
-  return NumberFormat.currency(locale: 'en_US', symbol: r'$').format(amount);
+  return switch (localeCode) {
+    'pt' =>
+      NumberFormat.currency(locale: 'pt_BR', symbol: r'R$ ').format(amount),
+    'es' => NumberFormat.currency(locale: 'es_419', symbol: r'$').format(amount),
+    _ => NumberFormat.currency(locale: 'en_US', symbol: r'$').format(amount),
+  };
 }
 
 List<Map<String, dynamic>> parseSplitEntries(String value, int totalCents) {
