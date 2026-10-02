@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
 import '../api/api_error.dart';
+import '../core/money.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/preferences_storage.dart';
@@ -13,8 +14,11 @@ class AppState extends ChangeNotifier {
     this.api, {
     PreferencesStorage? preferences,
     String? deviceLocale,
+    List<String>? deviceLocales,
   })  : preferences = preferences ?? PreferencesStorage(),
-        _deviceLocale = RoomiesStrings.resolveDeviceLocale(deviceLocale);
+        _deviceLocale = RoomiesStrings.resolveDeviceLocale(
+          deviceLocales ?? [deviceLocale],
+        );
 
   final ApiClient api;
   final PreferencesStorage preferences;
@@ -22,7 +26,7 @@ class AppState extends ChangeNotifier {
   User? user;
   bool sessionReady = false;
 
-  /// Resolved locale code used by the UI (`en` or `pt`).
+  /// Resolved locale code used by the UI (`en`, `pt` or `es`).
   String localeCode = 'en';
 
   /// Explicit Settings override; `null` means follow the device.
@@ -30,6 +34,9 @@ class AppState extends ChangeNotifier {
 
   /// Theme override: `null` (system), `light`, or `dark`.
   String? themeOverride;
+
+  /// Explicit currency (ISO code); `null` follows the UI language.
+  String? currencyOverride;
 
   /// Brand accent family (`mint` / `plum`).
   BrandAccent brandAccent = BrandAccent.mint;
@@ -47,6 +54,13 @@ class AppState extends ChangeNotifier {
 
   RoomiesStrings get strings => RoomiesStrings(localeCode);
 
+  /// Currency used for display right now.
+  String get currencyCode => currencyOverride ?? currencyForLanguage(localeCode);
+
+  /// Formats [amount] with the current language and currency settings.
+  String money(double amount) =>
+      formatMoney(amount, localeCode: localeCode, currency: currencyCode);
+
   ThemeMode get themeMode {
     switch (themeOverride) {
       case 'light':
@@ -61,6 +75,9 @@ class AppState extends ChangeNotifier {
   Future<void> loadPreferences() async {
     localeOverride = await preferences.loadLocaleOverride();
     themeOverride = await preferences.loadThemeOverride();
+    final currency = await preferences.loadCurrencyOverride();
+    currencyOverride =
+        supportedCurrencies.contains(currency) ? currency : null;
     brandAccent = BrandAccentX.fromId(await preferences.loadBrandAccent());
     defaultHouseId = await preferences.loadDefaultHouseId();
     _applyLocale();
@@ -68,19 +85,22 @@ class AppState extends ChangeNotifier {
   }
 
   void _applyLocale() {
-    final override = localeOverride;
-    if (override == 'pt' || override == 'en') {
-      localeCode = override!;
-    } else {
-      localeCode = _deviceLocale;
-    }
+    localeCode =
+        RoomiesStrings.normalizeOverride(localeOverride) ?? _deviceLocale;
   }
 
   Future<void> setLocaleOverride(String? code) async {
-    if (code != null && code != 'en' && code != 'pt') return;
+    if (code != null && RoomiesStrings.normalizeOverride(code) == null) return;
     localeOverride = code;
     await preferences.saveLocaleOverride(code);
     _applyLocale();
+    notifyListeners();
+  }
+
+  Future<void> setCurrencyOverride(String? code) async {
+    if (code != null && !supportedCurrencies.contains(code)) return;
+    currencyOverride = code;
+    await preferences.saveCurrencyOverride(code);
     notifyListeners();
   }
 
@@ -95,12 +115,6 @@ class AppState extends ChangeNotifier {
     brandAccent = accent;
     await preferences.saveBrandAccent(accent.id);
     notifyListeners();
-  }
-
-  void toggleLanguageQuick() {
-    final next = localeCode == 'pt' ? 'en' : 'pt';
-    // Fire-and-forget; callers that need await use [setLocaleOverride].
-    setLocaleOverride(next);
   }
 
   Future<void> setDefaultHouseId(String? houseId) async {
@@ -203,16 +217,22 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> logout() async {
-    await api.logout();
+  /// Signs out locally. Returns the hosted AuthKit logout URL when the
+  /// session came from AuthKit; callers should open it so the WorkOS session
+  /// ends too and the next sign-in can pick a different account.
+  Future<String?> logout() async {
+    final logoutUrl = await api.logout();
     user = null;
     houses = const [];
     restoredExistingSession = false;
     notifyListeners();
+    return logoutUrl;
   }
 }
 
-/// Platform locale tag for bootstrap (e.g. `pt_BR`, `en_US`).
-String platformLocaleTag() {
-  return PlatformDispatcher.instance.locale.toLanguageTag();
-}
+/// The device's preferred locales in order (browser `navigator.languages`,
+/// OS language list), e.g. `[es-MX, en-US]`.
+List<String> platformLocaleTags() => [
+      for (final locale in PlatformDispatcher.instance.locales)
+        locale.toLanguageTag(),
+    ];

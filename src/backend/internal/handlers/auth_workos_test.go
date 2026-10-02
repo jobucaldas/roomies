@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -269,5 +270,65 @@ func enabledWorkOS(t *testing.T, userID string) *workosauth.Client {
 		RedirectURI: "http://localhost/callback",
 		APIBase:     server.URL,
 		HTTPClient:  server.Client(),
+	}
+}
+
+func TestLogoutEndsAuthKitSession(t *testing.T) {
+	env := newTestEnv(t)
+	claims, _ := json.Marshal(map[string]string{"sid": "session_01ABC"})
+	accessToken := "e30." + base64.RawURLEncoding.EncodeToString(claims) + ".sig"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"user": map[string]any{
+				"id":             "user_workos_logout",
+				"email":          "logout@example.test",
+				"email_verified": true,
+			},
+			"access_token": accessToken,
+		})
+	}))
+	t.Cleanup(server.Close)
+	workos := &workosauth.Client{
+		APIKey:      "sk_test",
+		ClientID:    "client_test",
+		RedirectURI: "http://localhost/callback",
+		APIBase:     server.URL,
+		HTTPClient:  server.Client(),
+	}
+	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, workos)
+	callback := httptest.NewRecorder()
+	handler.WorkOSCallback(callback, oauthCallbackRequest(t, handler, "abc"))
+	if callback.Code != http.StatusOK {
+		t.Fatalf("callback status = %d body = %s", callback.Code, callback.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	for _, cookie := range callback.Result().Cookies() {
+		req.AddCookie(cookie)
+	}
+	w := httptest.NewRecorder()
+	handler.Logout(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("logout status = %d body = %s", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	want := server.URL + "/user_management/sessions/logout?session_id=session_01ABC"
+	if body["logout_url"] != want {
+		t.Fatalf("logout_url = %q, want %q", body["logout_url"], want)
+	}
+}
+
+func TestLogoutWithoutAuthKitSessionReturnsNoContent(t *testing.T) {
+	env := newTestEnv(t)
+	handler := handlers.NewAuthHandler(env.UserRepo, env.JWTSecret, enabledWorkOS(t, "user_workos_x"))
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	req.AddCookie(&http.Cookie{Name: "roomies_session", Value: "not-a-jwt"})
+	w := httptest.NewRecorder()
+	handler.Logout(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("logout status = %d body = %s", w.Code, w.Body.String())
 	}
 }

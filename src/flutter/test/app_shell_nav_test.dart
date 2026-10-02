@@ -47,7 +47,6 @@ void main() {
         GoRoute(
           path: '/dashboard',
           builder: (context, state) => AppShell(
-            title: 'Home',
             currentHouseId: 'h1',
             child: const Text('dashboard-body'),
           ),
@@ -77,10 +76,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Things to do'), findsWidgets);
+    expect(find.text('HOUSE'), findsOneWidget);
     expect(find.text('Notes'), findsOneWidget);
     expect(find.text('Groceries'), findsOneWidget);
-    expect(find.text('Home'), findsWidgets);
+    expect(find.text('Notifications'), findsOneWidget);
+    expect(find.text('Members'), findsOneWidget);
+    // Nav labels and the brand appear once — the top bar does not repeat them.
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Roomies'), findsOneWidget);
     // House names appear in the top switcher, not as a sidebar list of many homes.
     expect(find.text('Casa João'), findsWidgets);
     expect(find.byTooltip('Menu'), findsNothing);
@@ -96,7 +99,6 @@ void main() {
         GoRoute(
           path: '/dashboard',
           builder: (context, state) => AppShell(
-            title: 'Home',
             currentHouseId: 'h1',
             child: const Text('dashboard-body'),
           ),
@@ -133,7 +135,7 @@ void main() {
     await tester.tap(find.byTooltip('Menu'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Things to do'), findsWidgets);
+    expect(find.text('HOUSE'), findsOneWidget);
     expect(find.text('Notes'), findsWidgets);
     expect(find.text('Groceries'), findsWidgets);
     expect(find.text('Expenses'), findsWidgets);
@@ -148,7 +150,6 @@ void main() {
         GoRoute(
           path: '/dashboard',
           builder: (context, state) => AppShell(
-            title: 'Home',
             currentHouseId: 'h1',
             child: const Text('dashboard-body'),
           ),
@@ -192,7 +193,6 @@ void main() {
         GoRoute(
           path: '/dashboard',
           builder: (context, state) => AppShell(
-            title: 'Home',
             currentHouseId: 'h1',
             child: const Text('dashboard-body'),
           ),

@@ -72,7 +72,7 @@ jobs:
         working-directory: src/flutter
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: '3.27.1'
           channel: stable
@@ -88,7 +88,7 @@ jobs:
         working-directory: src/flutter
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: '3.27.1'
           channel: stable
@@ -96,6 +96,37 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      # Install the SDK and accept licenses instead of relying on the runner
+      # image. Third-party actions are pinned to a commit because this job can
+      # hold the signing key.
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          # The default also requests the obsolete "tools" package, which
+          # current cmdline-tools no longer provide. Gradle fetches the
+          # platform and build-tools it needs once licenses are accepted.
+          packages: platform-tools
+      - name: Configure release signing
+        # Only pushes to main get the upload key; other branches and pull
+        # requests (including forks, which never see secrets) build with debug
+        # keys, so a release-signed APK is never published from unreviewed code.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "No ANDROID_KEYSTORE_BASE64 secret: release APK uses debug keys."
+            exit 0
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+          {
+            echo "storeFile=app/upload-keystore.jks"
+            echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "keyPassword=${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
+          } > android/key.properties
       - run: flutter pub get
       - run: flutter build apk --release --dart-define=ROOMIES_API_URL=
       - uses: actions/upload-artifact@v4
@@ -135,3 +166,60 @@ jobs:
           ROOMIES_BACKEND_PORT: 58080
           ROOMIES_HTTP_PORT: 58000
           ROOMIES_DB_PORT: 55432
+
+  # Main-only: publish backend + frontend images. The dev cluster pulls them
+  # itself (deploy/kustomize/overlays/dev, nightly-updater), so CI holds no
+  # cluster credentials.
+  ghcr-images:
+    name: GHCR images (nightly + datetime_sha)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [pre-commit, lint, backend, flutter, containers]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute image tags
+        id: tags
+        env:
+          COMMIT_TIMESTAMP: ${{ github.event.head_commit.timestamp }}
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA:0:7}"
+          if [ -n "${COMMIT_TIMESTAMP}" ]; then
+            dt="$(date -u -d "${COMMIT_TIMESTAMP}" +%Y%m%d%H%M%S)"
+          else
+            dt="$(date -u +%Y%m%d%H%M%S)"
+          fi
+          echo "datetime_sha=${dt}_${short_sha}" >> "${GITHUB_OUTPUT}"
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "${GITHUB_OUTPUT}"
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push backend
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: src/backend
+          file: src/backend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.tags.outputs.owner }}/roomies-backend:nightly
+            ghcr.io/${{ steps.tags.outputs.owner }}/roomies-backend:dev
+            ghcr.io/${{ steps.tags.outputs.owner }}/roomies-backend:${{ steps.tags.outputs.datetime_sha }}
+      - name: Build and push frontend
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: src/flutter/Dockerfile
+          push: true
+          build-args: |
+            ROOMIES_API_URL=/api
+            BUILD_SHA=${{ github.sha }}
+          tags: |
+            ghcr.io/${{ steps.tags.outputs.owner }}/roomies-frontend:nightly
+            ghcr.io/${{ steps.tags.outputs.owner }}/roomies-frontend:dev
+            ghcr.io/${{ steps.tags.outputs.owner }}/roomies-frontend:${{ steps.tags.outputs.datetime_sha }}

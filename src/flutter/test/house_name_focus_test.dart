@@ -45,8 +45,6 @@ void main() {
             GoRoute(
               path: '/dashboard',
               builder: (context, state) => AppShell(
-                title: 'Dashboard',
-                showBrand: false,
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
@@ -139,7 +137,6 @@ void main() {
           GoRoute(
             path: '/dashboard',
             builder: (context, state) => AppShell(
-              title: 'Dashboard',
               child: const SizedBox.expand(child: Text('body')),
             ),
           ),

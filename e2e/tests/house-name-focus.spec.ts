@@ -3,8 +3,8 @@ import { fillFlutterText, loginViaUiOrToken } from '../helpers/login';
 
 /**
  * Regression: empty-DB first house — house-name field must keep DOM focus on a
- * phone viewport across post-auth dashboard settle and layout churn (the bug
- * João hit: soft keyboard opens then immediately dismisses).
+ * phone viewport across post-auth dashboard settle and layout churn (the soft
+ * keyboard used to open and immediately dismiss).
  */
 test.use({ screenshot: 'on', trace: 'retain-on-failure' });
 

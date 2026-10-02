@@ -4,6 +4,7 @@ const localeOverrideKey = 'roomies.locale.override';
 const defaultHouseKey = 'roomies.default.house';
 const themeOverrideKey = 'roomies.theme.override';
 const brandAccentKey = 'roomies.brand.accent';
+const currencyOverrideKey = 'roomies.currency.override';
 
 /// Client preferences that survive sessions (locale, theme, default house).
 class PreferencesStorage {
@@ -20,6 +21,23 @@ class PreferencesStorage {
       await prefs.remove(localeOverrideKey);
     } else {
       await prefs.setString(localeOverrideKey, code);
+    }
+  }
+
+  /// ISO currency code, or `null` to follow the UI language.
+  Future<String?> loadCurrencyOverride() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(currencyOverrideKey);
+    if (value == null || value.isEmpty) return null;
+    return value;
+  }
+
+  Future<void> saveCurrencyOverride(String? code) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (code == null || code.isEmpty) {
+      await prefs.remove(currencyOverrideKey);
+    } else {
+      await prefs.setString(currencyOverrideKey, code);
     }
   }
 

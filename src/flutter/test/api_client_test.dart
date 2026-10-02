@@ -63,4 +63,23 @@ void main() {
         isWorkOSAuthorizeUrl('http://api.workos.com/user_management/authorize'),
         isFalse);
   });
+
+  test('workos logout urls are limited to the hosted logout endpoint', () {
+    expect(
+      isWorkOSLogoutUrl(
+        'https://api.workos.com/user_management/sessions/logout?session_id=s_1',
+      ),
+      isTrue,
+    );
+    expect(
+      isWorkOSLogoutUrl('https://evil.example/user_management/sessions/logout'),
+      isFalse,
+    );
+    expect(
+      isWorkOSLogoutUrl(
+        'https://api.workos.com/user_management/authorize?client_id=c',
+      ),
+      isFalse,
+    );
+  });
 }

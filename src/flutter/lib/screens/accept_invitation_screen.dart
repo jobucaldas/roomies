@@ -18,7 +18,7 @@ class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
   var _loading = false;
   var _attempted = false;
   var _retryable = false;
-  String _status = 'Checking invitation…';
+  String? _status;
 
   @override
   void initState() {
@@ -41,17 +41,17 @@ class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
 
   Future<void> _accept() async {
     if (_attempted && !_retryable) return;
+    final app = context.read<AppState>();
     setState(() {
       _attempted = true;
       _loading = true;
-      _status = 'Joining house…';
+      _status = app.strings.joiningHouse;
     });
-    final app = context.read<AppState>();
     final token = await app.api.loadPendingInvitation();
     if (token == null || token.isEmpty) {
       setState(() {
         _loading = false;
-        _status = 'This invitation link is missing or has already been used.';
+        _status = app.strings.invitationMissing;
       });
       return;
     }
@@ -60,7 +60,7 @@ class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
       await app.api.clearPendingInvitation();
       setState(() {
         _loading = false;
-        _status = 'You joined the house. Refreshing your membership…';
+        _status = app.strings.invitationJoined;
       });
       if (mounted) {
         context.go('/house/${response.invitation.houseId}');
@@ -73,34 +73,46 @@ class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
       setState(() {
         _loading = false;
         _retryable = true;
-        _status = 'Unable to accept this invitation: ${error.message}';
+        _status = app.strings.invitationFailed(error.message);
       });
     } catch (error) {
       setState(() {
         _loading = false;
         _retryable = true;
-        _status = 'Unable to accept this invitation: $error';
+        _status = app.strings.invitationFailed('$error');
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return RoomiesPage(
+    final s = context.watch<AppState>().strings;
+    return RoomiesAuthFrame(
+      strings: s,
+      showTagline: false,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const RoomiesHeading('Roomies invitation', level: 2),
+          if (_loading) ...[
+            const Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
+            const SizedBox(height: 16),
+          ],
           Semantics(
             liveRegion: true,
-            child: Text(_status),
+            child: Text(
+              _status ?? s.checkingInvitation,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
           ),
-          if (_retryable)
+          if (_retryable) ...[
+            const SizedBox(height: 16),
             RoomiesPrimaryButton(
-              label: _loading ? 'Retrying invitation acceptance…' : 'Retry acceptance',
+              label: s.retryInvitation,
               enabled: !_loading,
               onPressed: _accept,
             ),
+          ],
         ],
       ),
     );

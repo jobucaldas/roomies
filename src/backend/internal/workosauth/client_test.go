@@ -2,6 +2,7 @@ package workosauth
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -120,4 +121,29 @@ func contains(value, part string) bool {
 			}
 			return false
 		})())
+}
+
+func TestSessionIDReadsSidClaim(t *testing.T) {
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sid":"session_123","sub":"user_1"}`))
+	if got := SessionID("e30." + payload + ".sig"); got != "session_123" {
+		t.Fatalf("SessionID = %q", got)
+	}
+	for _, bad := range []string{"", "tok", "a.b.c", "e30.e30.sig"} {
+		if got := SessionID(bad); got != "" {
+			t.Fatalf("SessionID(%q) = %q, want empty", bad, got)
+		}
+	}
+}
+
+func TestLogoutURLRequiresSessionAndConfig(t *testing.T) {
+	c := &Client{APIKey: "sk", ClientID: "client", RedirectURI: "http://localhost/callback"}
+	if got := c.LogoutURL(""); got != "" {
+		t.Fatalf("LogoutURL(empty) = %q", got)
+	}
+	if got := c.LogoutURL("session_1"); got != "https://api.workos.com/user_management/sessions/logout?session_id=session_1" {
+		t.Fatalf("LogoutURL = %q", got)
+	}
+	if got := (&Client{}).LogoutURL("session_1"); got != "" {
+		t.Fatalf("disabled LogoutURL = %q", got)
+	}
 }

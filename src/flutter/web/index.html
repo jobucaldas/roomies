@@ -35,28 +35,34 @@
   <title>Roomies</title>
   <meta name="referrer" content="no-referrer">
   <link rel="manifest" href="manifest.json">
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
+    /* Same file Flutter bundles (pubspec.yaml → fonts), so the splash and the
+       app share one wordmark typeface without a third-party font request. */
+    @font-face {
+      font-family: "Fraunces";
+      font-weight: 700;
+      font-display: block;
+      src: url("assets/assets/fonts/Fraunces-Bold.ttf") format("truetype");
+    }
     html, body {
       height: 100%;
       margin: 0;
-      background: #f3f8f6;
-      font-family: "Source Sans 3", "Segoe UI", sans-serif;
-      color: #14212b;
+      background: #f5f5f4;
+      color: #0d7353;
     }
     @media (prefers-color-scheme: dark) {
       html, body {
-        background: #0b1412;
-        color: #e6eef1;
+        background: #121212;
+        color: #5fd6a8;
       }
     }
     .roomies-boot {
       min-height: 100%;
       display: grid;
       place-items: center;
-      letter-spacing: -0.03em;
+      letter-spacing: -0.02em;
       font-family: Fraunces, Georgia, serif;
-      font-size: 2.4rem;
+      font-size: 52px;
       font-weight: 700;
     }
   </style>

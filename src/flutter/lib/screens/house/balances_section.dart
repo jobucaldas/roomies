@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/money.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../../widgets/roomies_ui.dart';
@@ -15,17 +14,17 @@ class BalancesSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final s = app.strings;
-    final locale = app.localeCode;
     return RoomiesTabPanel(
       name: s.balances,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           RoomiesHeading(s.balances, level: 2),
-          Text(s.balancesRefreshHint),
-          const SizedBox(height: 12),
           if (balances == null)
-            Text(s.selectTabToLoadBalances)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
+            )
           else if (balances!.balances.isEmpty)
             Text(s.noExpensesYet)
           else ...[
@@ -37,9 +36,9 @@ class BalancesSection extends StatelessWidget {
                     RoomiesHeading(entry.userName, level: 3),
                     Text(
                       s.paidOwedNet(
-                        formatMoney(entry.paid, localeCode: locale),
-                        formatMoney(entry.owed, localeCode: locale),
-                        formatMoney(entry.net, localeCode: locale),
+                        app.money(entry.paid),
+                        app.money(entry.owed),
+                        app.money(entry.net),
                       ),
                     ),
                   ],
@@ -53,7 +52,7 @@ class BalancesSection extends StatelessWidget {
                   s.paysAmount(
                     settlement.fromUserName,
                     settlement.toUserName,
-                    formatMoney(settlement.amount, localeCode: locale),
+                    app.money(settlement.amount),
                   ),
                 ),
               ),

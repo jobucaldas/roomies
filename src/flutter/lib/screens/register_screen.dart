@@ -6,7 +6,6 @@ import '../api/api_error.dart';
 import '../auth/open_url.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
-import '../theme/roomies_theme.dart';
 import '../widgets/roomies_ui.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -23,12 +22,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   AuthConfig? _config;
   var _loading = false;
   var _configLoading = true;
+  var _configFailed = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadConfig();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadConfig());
   }
 
   @override
@@ -40,6 +40,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _loadConfig() async {
+    setState(() {
+      _configLoading = true;
+      _configFailed = false;
+      _error = null;
+    });
     try {
       final config = await context.read<AppState>().api.getAuthConfig();
       if (!mounted) return;
@@ -53,9 +58,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _config = AuthConfig(authkit: false, password: true);
         _configLoading = false;
-        _error = error.toString();
+        _configFailed = true;
+        _error = describeError(
+          error,
+          unreachable: context.read<AppState>().strings.serverUnreachable,
+        );
       });
     }
   }
@@ -72,9 +80,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
           .workosAuthorizeUrl(screenHint: 'sign-up');
       openExternalUrl(url);
     } on ApiError catch (error) {
-      setState(() => _error = error.message);
+      setState(() => _error = describeError(
+            error,
+            unreachable: context.read<AppState>().strings.serverUnreachable,
+          ));
     } catch (error) {
-      setState(() => _error = error.toString());
+      setState(() => _error = describeError(
+            error,
+            unreachable: context.read<AppState>().strings.serverUnreachable,
+          ));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -99,9 +113,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
         navigator.go('/dashboard');
       }
     } on ApiError catch (error) {
-      setState(() => _error = error.message);
+      setState(() => _error = describeError(
+            error,
+            unreachable: context.read<AppState>().strings.serverUnreachable,
+          ));
     } catch (error) {
-      setState(() => _error = error.toString());
+      setState(() => _error = describeError(
+            error,
+            unreachable: context.read<AppState>().strings.serverUnreachable,
+          ));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -112,75 +132,66 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final app = context.watch<AppState>();
     final s = app.strings;
     final authkit = _config?.authkit == true;
-    return RoomiesPage(
-      maxWidth: 400,
-      centered: true,
+    return RoomiesAuthFrame(
+      strings: s,
+      onOpenSettings: () => context.go('/settings'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              style: TextButton.styleFrom(
-                foregroundColor: RoomiesPalette.of(context).inkMuted,
-                visualDensity: VisualDensity.compact,
-              ),
-              onPressed: app.toggleLanguageQuick,
-              child: Text(s.toggleLanguage),
-            ),
-          ),
-          const SizedBox(height: 24),
-          RoomiesBrandMark(tagline: s.brandTagline),
-          const SizedBox(height: 40),
           if (_error != null) RoomiesError(_error!),
           if (_configLoading || (authkit && _loading))
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
+              padding: EdgeInsets.symmetric(vertical: 12),
               child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
             )
+          else if (_configFailed)
+            OutlinedButton(onPressed: _loadConfig, child: Text(s.retry))
           else if (authkit) ...[
-            SizedBox(
-              height: 48,
-              child: FilledButton(
-                onPressed: _loading ? null : _startAuthKit,
-                child: Text(s.createAccount),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
               ),
+              onPressed: _loading ? null : _startAuthKit,
+              child: Text(s.createAccount),
             ),
-            Center(
-              child: TextButton(
-                onPressed: () => context.go('/'),
-                child: Text(s.haveAccountLogin),
-              ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => context.go('/'),
+              child: Text(s.haveAccountLogin),
             ),
           ] else ...[
             TextField(
               controller: _name,
-              decoration: InputDecoration(hintText: s.name),
+              decoration: InputDecoration(labelText: s.name),
+              autofillHints: const [AutofillHints.name],
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _email,
-              decoration: InputDecoration(hintText: s.email),
+              decoration: InputDecoration(labelText: s.email),
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _password,
-              decoration: InputDecoration(hintText: s.password),
+              decoration: InputDecoration(labelText: s.password),
               obscureText: true,
+              autofillHints: const [AutofillHints.newPassword],
+              onSubmitted: (_) => _submit(),
             ),
-            const SizedBox(height: 14),
-            SizedBox(
-              height: 48,
-              child: FilledButton(
-                onPressed: _loading ? null : _submit,
-                child: Text(_loading ? s.registering : s.createAccount),
+            const SizedBox(height: 16),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
               ),
+              onPressed: _loading ? null : _submit,
+              child: Text(_loading ? s.registering : s.createAccount),
             ),
-            Center(
-              child: TextButton(
-                onPressed: () => context.go('/'),
-                child: Text(s.haveAccountLogin),
-              ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => context.go('/'),
+              child: Text(s.haveAccountLogin),
             ),
           ],
         ],

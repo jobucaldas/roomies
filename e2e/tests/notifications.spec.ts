@@ -100,8 +100,7 @@ async function login(page: Page, email: string, token?: string) {
 }
 
 async function notifications(page: Page, id: string) {
-  await page.goto(`${web}/house/${id}`);
-  await page.getByRole('tab', { name: 'Notifications / Schedule' }).click();
+  await page.goto(`${web}/house/${id}?tab=notifications`);
   await expect(page.getByRole('heading', { name: 'Notifications & schedule' })).toBeVisible();
   await expect(page.getByText('Loading notification settings…')).toHaveCount(0);
   await expect(page.getByLabel('Shared expense alerts')).toBeChecked();
@@ -117,8 +116,8 @@ test('preferences reload and public VAPID unavailable state are explicit', async
   await expect(page.getByLabel('Scheduled reminder alerts')).not.toBeChecked();
   await page.getByRole('button', { name: 'Save preferences' }).click();
   await expect(page.getByText('Notification preferences saved.')).toBeVisible();
+  // The section is part of the URL, so a reload lands back on it.
   await page.reload();
-  await page.getByRole('tab', { name: 'Notifications / Schedule' }).click();
   await expect(page.getByLabel('Shared expense alerts')).not.toBeChecked();
   await expect(page.getByLabel('Scheduled reminder alerts')).not.toBeChecked();
   const serviceWorker = await page.request.get(`${web}/roomies-sw.js`);

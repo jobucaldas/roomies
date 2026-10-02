@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../l10n/strings.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
+import '../../theme/roomies_theme.dart';
 import '../../widgets/roomies_ui.dart';
 
 class MembersSection extends StatefulWidget {
@@ -121,7 +123,13 @@ class _MembersSectionState extends State<MembersSection> {
     }
   }
 
-  List<DropdownMenuItem<String>> _roleItems(dynamic s) => [
+  String _roleLabel(RoomiesStrings s, String role) => switch (role) {
+        'admin' => s.roleAdmin,
+        'monitor' => s.roleMonitor,
+        _ => s.roleMember,
+      };
+
+  List<DropdownMenuItem<String>> _roleItems(RoomiesStrings s) => [
         DropdownMenuItem(value: 'member', child: Text(s.roleMember)),
         DropdownMenuItem(value: 'admin', child: Text(s.roleAdmin)),
         DropdownMenuItem(value: 'monitor', child: Text(s.roleMonitor)),
@@ -199,7 +207,7 @@ class _MembersSectionState extends State<MembersSection> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 RoomiesHeading(member.userName, level: 3),
-                Text('${member.userEmail} · ${member.role}'),
+                Text('${member.userEmail} · ${_roleLabel(s, member.role)}'),
                 if (widget.admin)
                   Wrap(
                     crossAxisAlignment: WrapCrossAlignment.center,
@@ -223,6 +231,9 @@ class _MembersSectionState extends State<MembersSection> {
                         child: Text(s.changeRole),
                       ),
                       TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: RoomiesPalette.of(context).danger,
+                        ),
                         onPressed: () => _remove(member),
                         child: Text(s.remove),
                       ),

@@ -187,18 +187,20 @@ class _NotesSectionState extends State<NotesSection> {
                           localeCode: app.localeCode,
                         ),
                       ),
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    if (_canEdit(note)) ...[
-                      RoomiesPrimaryButton(
-                        label: s.edit,
-                        onPressed: () => _editNote(note),
-                      ),
-                      RoomiesPrimaryButton(
-                        label: s.delete,
-                        onPressed: () => _confirmDelete(note.id),
-                      ),
-                    ],
+                    if (_canEdit(note))
+                      RoomiesItemActions([
+                        RoomiesItemAction(
+                          label: s.edit,
+                          onPressed: () => _editNote(note),
+                        ),
+                        RoomiesItemAction(
+                          label: s.delete,
+                          destructive: true,
+                          onPressed: () => _confirmDelete(note.id),
+                        ),
+                      ]),
                   ],
                 ),
               );

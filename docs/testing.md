@@ -1,5 +1,7 @@
 # Testing
 
+CI runs these checks on GitHub Actions; see [ci.md](ci.md).
+
 ## Backend
 ```bash
 cd src/backend

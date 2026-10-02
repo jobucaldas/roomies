@@ -3,6 +3,7 @@ package workosauth
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -163,4 +164,39 @@ func DisplayName(user User) string {
 		return name
 	}
 	return user.Email
+}
+
+// SessionID returns the AuthKit session id (`sid` claim) carried by a WorkOS
+// access token, or "" when absent. The token comes straight from the
+// authenticate response over TLS and is only used to end that session later,
+// so its signature is not checked here.
+func SessionID(accessToken string) string {
+	parts := strings.Split(accessToken, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return ""
+	}
+	var claims struct {
+		SID string `json:"sid"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(claims.SID)
+}
+
+// LogoutURL builds the hosted AuthKit logout URL for sessionID. WorkOS ends
+// the session and redirects to the logout redirect configured in the
+// dashboard. Returns "" when AuthKit is off or there is no session.
+func (c *Client) LogoutURL(sessionID string) string {
+	sessionID = strings.TrimSpace(sessionID)
+	if !c.Enabled() || sessionID == "" {
+		return ""
+	}
+	values := url.Values{}
+	values.Set("session_id", sessionID)
+	return c.apiBase() + "/user_management/sessions/logout?" + values.Encode()
 }

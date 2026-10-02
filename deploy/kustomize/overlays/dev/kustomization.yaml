@@ -7,19 +7,21 @@ resources:
   - ../../base
   - namespace.yaml
   - ingress.yaml
+  - nightly-updater.yaml
 
 images:
   - name: roomies-backend
     newName: ghcr.io/jobucaldas/roomies-backend
-    newTag: latest
+    newTag: nightly
   - name: roomies-frontend
     newName: ghcr.io/jobucaldas/roomies-frontend
-    newTag: latest
+    newTag: nightly
 
 patches:
   - path: image-pull-secrets.yaml
     target:
       kind: Deployment
+  - path: pull-always.yaml
 
 configMapGenerator:
   - name: roomies-backend-config
