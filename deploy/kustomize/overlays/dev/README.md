@@ -10,7 +10,7 @@ Development deployment applied by the manual **Deploy Dev** workflow (`.github/w
 4. Postgres reachable at `DATABASE_URL`.
 5. Public hostname (`ingress.yaml`) routed to the cluster's ingress controller.
 
-The workflow needs repository secrets `TS_OAUTH_CLIENT_ID`, `TS_AUDIENCE` and `KUBE_CONFIG`, and the repository variable `KUBE_API_SERVER` (the kubeconfig server URL it is allowed to deploy to).
+The workflow needs repository secrets `TS_OAUTH_CLIENT_ID`, `TS_AUDIENCE` and `KUBE_CONFIG`. It only deploys to an HTTPS Tailscale (`*.ts.net`) API server; set the optional repository variable `KUBE_API_SERVER` to pin the exact URL.
 
 ## Render
 

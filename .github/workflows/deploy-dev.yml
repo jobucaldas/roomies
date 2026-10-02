@@ -7,9 +7,9 @@ name: Deploy Dev
 #   TS_OAUTH_CLIENT_ID  Tailscale OAuth client for the GitHub OIDC identity
 #   TS_AUDIENCE         Tailscale OIDC audience
 #   KUBE_CONFIG         base64 kubeconfig (namespace-scoped service account)
-# Repository variable:
-#   KUBE_API_SERVER     expected kubeconfig server URL; the deploy refuses
-#                       any other cluster
+# Optional repository variable:
+#   KUBE_API_SERVER     exact kubeconfig server URL to allow; without it any
+#                       https://<host>.<tailnet>.ts.net server is accepted
 #
 # Third-party actions are pinned to commits because these jobs hold
 # credentials.
@@ -108,15 +108,18 @@ jobs:
           fi
           echo "${KUBE_CONFIG_B64}" | base64 -d > "${KUBECONFIG}"
           chmod 600 "${KUBECONFIG}"
-          # Refuse any cluster other than the expected one (e.g. a LAN-only
-          # URL the runner cannot reach, or the wrong context).
-          if [ -z "${KUBE_API_SERVER}" ]; then
-            echo "Missing repository variable KUBE_API_SERVER." >&2
-            exit 1
-          fi
+          # Refuse clusters the runner can't or shouldn't reach: with
+          # KUBE_API_SERVER set, the kubeconfig must match it exactly;
+          # otherwise it must at least be an HTTPS Tailscale (*.ts.net) URL,
+          # never a LAN-only address.
           server="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
-          if [ "${server}" != "${KUBE_API_SERVER}" ]; then
-            echo "KUBE_CONFIG server does not match KUBE_API_SERVER." >&2
+          if [ -n "${KUBE_API_SERVER}" ]; then
+            if [ "${server}" != "${KUBE_API_SERVER}" ]; then
+              echo "KUBE_CONFIG server does not match KUBE_API_SERVER." >&2
+              exit 1
+            fi
+          elif ! printf '%s' "${server}" | grep -Eq '^https://[a-z0-9-]+\.[a-z0-9-]+\.ts\.net(:[0-9]+)?$'; then
+            echo "KUBE_CONFIG server must be an https://<host>.<tailnet>.ts.net URL (or set KUBE_API_SERVER)." >&2
             exit 1
           fi
 
