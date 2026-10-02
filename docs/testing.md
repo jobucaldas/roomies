@@ -1,5 +1,7 @@
 # Testing
 
+CI runs these checks on Depot CI; see [ci.md](ci.md).
+
 ## Backend
 ```bash
 cd src/backend

@@ -1,10 +1,12 @@
+# Depot CI — the required checks for Roomies (see docs/ci.md).
+# Same jobs as .github/workflows/ci.yml, which is now manual-only so pushes
+# and pull requests don't run twice. Runs on Depot compute, not GitHub-hosted
+# runners. Keep the two files in sync when changing a job.
 name: CI
 
-# Pushes and pull requests run on Depot CI (.depot/workflows/ci.yml, see
-# docs/ci.md). This copy stays as a manual fallback on GitHub-hosted runners:
-# Actions → CI → Run workflow.
 on:
-  workflow_dispatch:
+  push:
+  pull_request:
 
 permissions:
   contents: read
@@ -15,7 +17,7 @@ concurrency:
 
 jobs:
   pre-commit:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,7 +27,7 @@ jobs:
       - run: pre-commit run --show-diff-on-failure --color=always --all-files
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -39,7 +41,7 @@ jobs:
   backend:
     env:
       GOTOOLCHAIN: local
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest
     services:
       postgres:
         image: postgres:16
@@ -68,7 +70,7 @@ jobs:
           JWT_SECRET: ci-only-secret
 
   flutter:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest
     defaults:
       run:
         working-directory: src/flutter
@@ -84,7 +86,7 @@ jobs:
       - run: flutter build web --release --no-web-resources-cdn --dart-define=ROOMIES_API_URL=/api
 
   android:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest
     defaults:
       run:
         working-directory: src/flutter
@@ -108,7 +110,7 @@ jobs:
           retention-days: 14
 
   containers:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Configure ephemeral secrets
