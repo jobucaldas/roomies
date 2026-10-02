@@ -72,3 +72,33 @@ func TestProductionConfigRejectsWeakSecretAndWildcardCORS(t *testing.T) {
 		t.Fatalf("expected valid production configuration: %v", err)
 	}
 }
+
+func TestDevelopmentSecretOnlyAllowedOnLoopback(t *testing.T) {
+	base := func(publicURL, secret string) *Config {
+		return &Config{
+			Environment:        "development",
+			JWTSecret:          secret,
+			CORSAllowedOrigins: []string{publicURL},
+			Port:               "8080",
+			WorkerHealthPort:   "8081",
+			PublicBaseURL:      publicURL,
+			InvitationTTL:      168,
+			JWTAccessTTLHours:  8,
+			JobPollInterval:    2,
+			JobLeaseSeconds:    30,
+		}
+	}
+	for _, local := range []string{"http://localhost:8080", "http://127.0.0.1:8787", "http://[::1]:8080"} {
+		if err := base(local, developmentJWTSecret).Validate(); err != nil {
+			t.Fatalf("%s: dev secret should be allowed locally: %v", local, err)
+		}
+	}
+	for _, public := range []string{"https://roomies-dev.example.com", "http://192.168.1.20:8080", "not a url"} {
+		if err := base(public, developmentJWTSecret).Validate(); err == nil {
+			t.Fatalf("%s: dev secret must be rejected off loopback", public)
+		}
+	}
+	if err := base("https://roomies-dev.example.com", "an-explicit-dev-secret").Validate(); err != nil {
+		t.Fatalf("explicit secret should be accepted: %v", err)
+	}
+}

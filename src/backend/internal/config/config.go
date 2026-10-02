@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/base64"
 	"errors"
+	"net"
 	"net/mail"
 	"net/url"
 	"os"
@@ -97,6 +98,11 @@ func (c *Config) WorkOSEnabled() bool {
 }
 
 func (c *Config) Validate() error {
+	// The built-in development secret is public (it is in the source), so it
+	// may only sign sessions for a deployment reachable on loopback.
+	if c.JWTSecret == developmentJWTSecret && !isLoopbackURL(c.PublicBaseURL) {
+		return errors.New("JWT_SECRET must be set unless ROOMIES_PUBLIC_BASE_URL is a localhost URL")
+	}
 	if c.Environment == "production" {
 		if c.JWTSecret == developmentJWTSecret || len(c.JWTSecret) < 32 {
 			return errors.New("production JWT_SECRET must be set to at least 32 characters")
@@ -213,4 +219,17 @@ func getEnvInt(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func isLoopbackURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

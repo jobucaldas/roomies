@@ -50,6 +50,7 @@ make android
 - `docs/authkit.md` — WorkOS AuthKit
 - `docs/credentials.example.env` — secret template
 - `docs/testing.md` — unit/lint/build checks
+- `docs/ci.md` — GitHub Actions jobs and Android release signing
 - `docs/release.md` — images and manifests
 - `deploy/kustomize/overlays/dev` and `…/production`
 
@@ -57,3 +58,9 @@ make android
 ```bash
 make clean
 ```
+
+## Security
+Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
+
+## License
+[GPL-3.0](LICENSE).
