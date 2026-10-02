@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
 import '../api/api_error.dart';
+import '../core/money.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/preferences_storage.dart';
@@ -34,6 +35,9 @@ class AppState extends ChangeNotifier {
   /// Theme override: `null` (system), `light`, or `dark`.
   String? themeOverride;
 
+  /// Explicit currency (ISO code); `null` follows the UI language.
+  String? currencyOverride;
+
   /// Brand accent family (`mint` / `plum`).
   BrandAccent brandAccent = BrandAccent.mint;
 
@@ -50,6 +54,13 @@ class AppState extends ChangeNotifier {
 
   RoomiesStrings get strings => RoomiesStrings(localeCode);
 
+  /// Currency used for display right now.
+  String get currencyCode => currencyOverride ?? currencyForLanguage(localeCode);
+
+  /// Formats [amount] with the current language and currency settings.
+  String money(double amount) =>
+      formatMoney(amount, localeCode: localeCode, currency: currencyCode);
+
   ThemeMode get themeMode {
     switch (themeOverride) {
       case 'light':
@@ -64,6 +75,9 @@ class AppState extends ChangeNotifier {
   Future<void> loadPreferences() async {
     localeOverride = await preferences.loadLocaleOverride();
     themeOverride = await preferences.loadThemeOverride();
+    final currency = await preferences.loadCurrencyOverride();
+    currencyOverride =
+        supportedCurrencies.contains(currency) ? currency : null;
     brandAccent = BrandAccentX.fromId(await preferences.loadBrandAccent());
     defaultHouseId = await preferences.loadDefaultHouseId();
     _applyLocale();
@@ -80,6 +94,13 @@ class AppState extends ChangeNotifier {
     localeOverride = code;
     await preferences.saveLocaleOverride(code);
     _applyLocale();
+    notifyListeners();
+  }
+
+  Future<void> setCurrencyOverride(String? code) async {
+    if (code != null && !supportedCurrencies.contains(code)) return;
+    currencyOverride = code;
+    await preferences.saveCurrencyOverride(code);
     notifyListeners();
   }
 

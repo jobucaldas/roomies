@@ -28,15 +28,39 @@ int? parseMoneyCents(String value) {
 
 double centsToApiAmount(int cents) => cents / 100.0;
 
-/// Format money for display. Portuguese uses BRL (reais); English uses USD;
-/// Spanish uses Latin American number formatting with a `$` symbol.
-String formatMoney(double amount, {String localeCode = 'en'}) {
-  return switch (localeCode) {
-    'pt' =>
-      NumberFormat.currency(locale: 'pt_BR', symbol: r'R$ ').format(amount),
-    'es' => NumberFormat.currency(locale: 'es_419', symbol: r'$').format(amount),
-    _ => NumberFormat.currency(locale: 'en_US', symbol: r'$').format(amount),
+/// Currencies offered in Settings (ISO 4217).
+const supportedCurrencies = <String>[
+  'USD',
+  'BRL',
+  'EUR',
+  'GBP',
+  'MXN',
+  'ARS',
+  'CLP',
+  'COP',
+];
+
+/// Currency used when Settings follows the UI language.
+String currencyForLanguage(String localeCode) =>
+    localeCode == 'pt' ? 'BRL' : 'USD';
+
+/// Format money for display. Number style (separators, symbol placement)
+/// follows the UI language; [currency] picks the symbol and decimals and
+/// defaults to [currencyForLanguage].
+String formatMoney(
+  double amount, {
+  String localeCode = 'en',
+  String? currency,
+}) {
+  final locale = switch (localeCode) {
+    'pt' => 'pt_BR',
+    'es' => 'es_419',
+    _ => 'en_US',
   };
+  return NumberFormat.simpleCurrency(
+    locale: locale,
+    name: currency ?? currencyForLanguage(localeCode),
+  ).format(amount);
 }
 
 List<Map<String, dynamic>> parseSplitEntries(String value, int totalCents) {

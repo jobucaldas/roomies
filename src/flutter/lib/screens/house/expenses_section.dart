@@ -278,7 +278,7 @@ class _ExpensesSectionState extends State<ExpensesSection> {
                     Text(
                       [
                         formatDisplayDate(expense.date, localeCode: locale),
-                        formatMoney(expense.amount, localeCode: locale),
+                        app.money(expense.amount),
                         expense.payerName,
                         expense.visibility == 'private'
                             ? s.privateLabel

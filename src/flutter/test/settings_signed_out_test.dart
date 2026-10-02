@@ -44,6 +44,14 @@ void main() {
     expect(find.text('Houses'), findsNothing);
     expect(find.byTooltip('Menu'), findsNothing);
 
+    // Currency: defaults to following the language, can be pinned.
+    expect(find.text('Follow language'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('currency-picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Euro').last);
+    await tester.pumpAndSettle();
+    expect(appState.currencyOverride, 'EUR');
+
     await tester.tap(find.text('Español'));
     await tester.pumpAndSettle();
     expect(appState.localeCode, 'es');

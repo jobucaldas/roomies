@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../core/money.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
@@ -73,6 +74,15 @@ class SettingsScreen extends StatelessWidget {
                 onTap: () => app.setLocaleOverride(code),
               ),
           ],
+        ),
+      ),
+      _Section(
+        title: s.currency,
+        child: _CurrencyPicker(
+          strings: s,
+          selected: app.currencyOverride,
+          followLanguageCode: currencyForLanguage(app.localeCode),
+          onChanged: app.setCurrencyOverride,
         ),
       ),
       _Section(
@@ -329,6 +339,57 @@ class _Segmented<T> extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Currency dropdown: "Follow language" (shows what it resolves to) plus
+/// each supported currency with its code and a sample amount.
+class _CurrencyPicker extends StatelessWidget {
+  const _CurrencyPicker({
+    required this.strings,
+    required this.selected,
+    required this.followLanguageCode,
+    required this.onChanged,
+  });
+
+  final RoomiesStrings strings;
+  final String? selected;
+  final String followLanguageCode;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = strings;
+    final muted = Theme.of(context).textTheme.bodyMedium;
+    Widget row(String label, String code) => Row(
+          children: [
+            Expanded(child: Text(label, overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: 12),
+            Text(
+              '$code · ${formatMoney(9.5, localeCode: s.localeCode, currency: code)}',
+              style: muted,
+            ),
+          ],
+        );
+    return DropdownButtonFormField<String?>(
+      key: const ValueKey('currency-picker'),
+      value: selected,
+      isExpanded: true,
+      decoration: const InputDecoration(),
+      borderRadius: BorderRadius.circular(14),
+      onChanged: onChanged,
+      items: [
+        DropdownMenuItem<String?>(
+          value: null,
+          child: row(s.currencyFollowLanguage, followLanguageCode),
+        ),
+        for (final code in supportedCurrencies)
+          DropdownMenuItem<String?>(
+            value: code,
+            child: row(s.currencyName(code), code),
+          ),
+      ],
     );
   }
 }

@@ -118,6 +118,20 @@ class RoomiesStrings {
   String get languagePortuguese => 'Português';
   String get languageSpanish => 'Español';
   String get appearance => _t('Appearance', 'Aparência', 'Apariencia');
+  String get currency => _t('Currency', 'Moeda', 'Moneda');
+  String get currencyFollowLanguage =>
+      _t('Follow language', 'Seguir o idioma', 'Según el idioma');
+  String currencyName(String code) => switch (code) {
+        'USD' => _t('US dollar', 'Dólar americano', 'Dólar estadounidense'),
+        'BRL' => _t('Brazilian real', 'Real brasileiro', 'Real brasileño'),
+        'EUR' => _t('Euro', 'Euro', 'Euro'),
+        'GBP' => _t('British pound', 'Libra esterlina', 'Libra esterlina'),
+        'MXN' => _t('Mexican peso', 'Peso mexicano', 'Peso mexicano'),
+        'ARS' => _t('Argentine peso', 'Peso argentino', 'Peso argentino'),
+        'CLP' => _t('Chilean peso', 'Peso chileno', 'Peso chileno'),
+        'COP' => _t('Colombian peso', 'Peso colombiano', 'Peso colombiano'),
+        _ => code,
+      };
   String get brandTheme =>
       _t('Accent color', 'Cor de destaque', 'Color de acento');
   String get brandMint => _t('Mint', 'Verde-água', 'Menta');

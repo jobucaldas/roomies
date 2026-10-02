@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../core/datetime_format.dart';
-import '../core/money.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/roomies_theme.dart';
@@ -306,11 +305,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     _MoneyGraphCard(
                       title: s.moneyGraph,
                       totalLabel: s.monthSpendTotal(
-                        formatMoney(monthTotal, localeCode: app.localeCode),
+                        app.money(monthTotal),
                       ),
                       emptyLabel: s.noMonthExpenses,
                       expenses: _monthExpenses,
-                      localeCode: app.localeCode,
+                      money: app.money,
                     ),
                     const SizedBox(height: 12),
                     _UpcomingCard(
@@ -359,14 +358,14 @@ class _MoneyGraphCard extends StatelessWidget {
     required this.totalLabel,
     required this.emptyLabel,
     required this.expenses,
-    required this.localeCode,
+    required this.money,
   });
 
   final String title;
   final String totalLabel;
   final String emptyLabel;
   final List<Expense> expenses;
-  final String localeCode;
+  final String Function(double amount) money;
 
   @override
   Widget build(BuildContext context) {
@@ -422,7 +421,7 @@ class _MoneyGraphCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      formatMoney(expense.amount, localeCode: localeCode),
+                      money(expense.amount),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: p.inkMuted,
                           ),

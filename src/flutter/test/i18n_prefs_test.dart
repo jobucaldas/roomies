@@ -90,6 +90,36 @@ void main() {
     expect(app.localeCode, 'en');
   });
 
+  test('currency follows language until overridden, and persists', () async {
+    final app = AppState(
+      ApiClient(baseUrl: 'http://example/api'),
+      preferences: PreferencesStorage(),
+      deviceLocale: 'en-US',
+    );
+    await app.loadPreferences();
+    expect(app.currencyOverride, isNull);
+    expect(app.currencyCode, 'USD');
+    await app.setLocaleOverride('pt');
+    expect(app.currencyCode, 'BRL');
+    expect(app.money(3), contains(r'R$'));
+
+    await app.setCurrencyOverride('EUR');
+    await app.setCurrencyOverride('XYZ'); // unsupported codes are ignored
+    expect(app.currencyCode, 'EUR');
+    expect(app.money(3), contains('€'));
+
+    final reloaded = AppState(
+      ApiClient(baseUrl: 'http://example/api'),
+      preferences: PreferencesStorage(),
+      deviceLocale: 'en-US',
+    );
+    await reloaded.loadPreferences();
+    expect(reloaded.currencyCode, 'EUR');
+
+    await reloaded.setCurrencyOverride(null);
+    expect(reloaded.currencyCode, 'BRL', reason: 'back to following pt');
+  });
+
   test('default house preference persists', () async {
     final prefs = PreferencesStorage();
     await prefs.saveDefaultHouseId('house-1');

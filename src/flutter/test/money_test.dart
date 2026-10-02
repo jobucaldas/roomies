@@ -25,4 +25,27 @@ void main() {
     expect(formatMoney(3, localeCode: 'pt'), contains('R\$'));
     expect(formatMoney(1234.5, localeCode: 'es'), r'$1,234.50');
   });
+
+  test('explicit currency keeps the language number style', () {
+    expect(formatMoney(1234.5, localeCode: 'en', currency: 'EUR'), '€1,234.50');
+    // pt-BR separates the symbol with a non-breaking space.
+    expect(
+      formatMoney(1234.5, localeCode: 'pt', currency: 'USD'),
+      '\$\u00A01.234,50',
+    );
+    expect(formatMoney(1234.5, localeCode: 'es', currency: 'BRL'), r'R$1,234.50');
+    expect(formatMoney(1234.5, localeCode: 'en', currency: 'CLP'), r'$1,235');
+  });
+
+  test('following the language matches the per-language default', () {
+    expect(currencyForLanguage('en'), 'USD');
+    expect(currencyForLanguage('pt'), 'BRL');
+    expect(currencyForLanguage('es'), 'USD');
+    for (final lang in ['en', 'pt', 'es']) {
+      expect(
+        formatMoney(42, localeCode: lang),
+        formatMoney(42, localeCode: lang, currency: currencyForLanguage(lang)),
+      );
+    }
+  });
 }
