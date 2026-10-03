@@ -2,7 +2,7 @@
 
 `.github/workflows/ci.yml` runs on every push and pull request. The jobs are pre-commit, lint, backend (SQLite and Postgres), flutter (analyze, test, web build), android (release APK artifact) and containers (Compose build and health smoke). None of them needs secrets, so pull requests from forks run the full suite.
 
-On pushes to `main`, once the checks pass, `ghcr-images` publishes `ghcr.io/jobucaldas/roomies-backend` and `roomies-frontend` as `:nightly`, `:dev` and an immutable `YYYYMMDDHHMMSS_<shortsha>` tag. Deployments pull those images themselves; see [deploy/kustomize/overlays/dev/README.md](../deploy/kustomize/overlays/dev/README.md). CI holds no cluster credentials.
+On pushes to `main`, once the checks pass, `ghcr-images` publishes `ghcr.io/jobucaldas/roomies-backend` and `roomies-frontend` as `:nightly`, `:dev` and an immutable `YYYYMMDDHHMMSS_<shortsha>` tag. Deployments pull those images themselves; the maintainer's dev cluster is managed outside this repo and rolls `:nightly` out on its own. CI holds no cluster credentials.
 
 Third-party actions in jobs that can hold secrets are pinned to a commit SHA, with the version in a trailing comment. Update them by resolving the new tag to its commit.
 

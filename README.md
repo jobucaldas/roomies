@@ -52,7 +52,7 @@ make android
 - `docs/testing.md` — unit/lint/build checks
 - `docs/ci.md` — GitHub Actions jobs and Android release signing
 - `docs/release.md` — images and manifests
-- `deploy/kustomize/overlays/dev` and `…/production`
+- `deploy/kustomize/overlays/production`
 
 ## Cleanup
 ```bash
