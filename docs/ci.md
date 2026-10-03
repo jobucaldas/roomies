@@ -1,6 +1,6 @@
 # CI
 
-`.github/workflows/ci.yml` runs on every push and pull request. The jobs are pre-commit, lint, backend (SQLite and Postgres), flutter (analyze, test, web build), android (release APK artifact) and containers (Compose build and health smoke). None of them needs secrets, so pull requests from forks run the full suite.
+`.github/workflows/ci.yml` runs on every push and pull request. The jobs are pre-commit, lint, backend (SQLite and Postgres), flutter (analyze, test, web build), android (release APK artifact), windows (release folder artifact), linux-appimage (AppImage artifact) and containers (Compose build and health smoke). None of them needs secrets, so pull requests from forks run the full suite.
 
 On pushes to `main`, once the checks pass, `ghcr-images` publishes `ghcr.io/jobucaldas/roomies-backend` and `roomies-frontend` as `:nightly`, `:dev` and an immutable `YYYYMMDDHHMMSS_<shortsha>` tag. Deployments pull those images themselves; see [deploy/kustomize/overlays/dev/README.md](../deploy/kustomize/overlays/dev/README.md). CI holds no cluster credentials.
 
