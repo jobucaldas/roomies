@@ -6,6 +6,8 @@ CI publishes both images to GHCR on every push to `main` (see `docs/ci.md`). To 
 - Backend image: `podman build -f src/backend/Dockerfile -t <registry>/roomies-backend:<tag> src/backend`
 - Frontend image: `podman build -f src/flutter/Dockerfile -t <registry>/roomies-frontend:<tag> .`
 - Android APK: `cd src/flutter && flutter build apk --release --dart-define=ROOMIES_API_URL=` (debug-signed unless you configure signing)
+- Windows: `make windows` (on Windows; output in `src/flutter/build/windows/x64/runner/Release/`)
+- Linux AppImage: `make linux-appimage` (needs `clang cmake ninja-build pkg-config libgtk-3-dev` and `appimagetool`; output `src/flutter/build/linux/Roomies-x86_64.AppImage`)
 
 ## Render manifests
 ```bash

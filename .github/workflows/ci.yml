@@ -136,6 +136,57 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: src/flutter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.27.1'
+          channel: stable
+      - run: flutter pub get
+      - run: flutter build windows --release --dart-define=ROOMIES_API_URL=
+      - uses: actions/upload-artifact@v4
+        with:
+          name: roomies-windows-x64-${{ github.sha }}
+          path: src/flutter/build/windows/x64/runner/Release/
+          if-no-files-found: error
+          retention-days: 14
+
+  linux-appimage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.27.1'
+          channel: stable
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+          curl -fsSLo "$RUNNER_TEMP/appimagetool" \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
+          chmod +x "$RUNNER_TEMP/appimagetool"
+      - run: flutter pub get
+        working-directory: src/flutter
+      - run: flutter build linux --release --dart-define=ROOMIES_API_URL=
+        working-directory: src/flutter
+      - run: bash scripts/package-appimage.sh
+        env:
+          APPIMAGETOOL: ${{ runner.temp }}/appimagetool
+          # Runners have no FUSE; unpack appimagetool instead of mounting it.
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: roomies-linux-appimage-${{ github.sha }}
+          path: src/flutter/build/linux/Roomies-x86_64.AppImage
+          if-no-files-found: error
+          retention-days: 14
+
   containers:
     runs-on: ubuntu-latest
     steps:
