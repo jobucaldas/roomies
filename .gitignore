@@ -13,7 +13,6 @@ env/
 src/backend/vendor/
 node_modules/
 **/node_modules/
-e2e/artifacts/
 
 # Flutter
 **/build/
@@ -48,9 +47,4 @@ coverage.out
 *.html
 !src/flutter/web/index.html
 
-artifacts/release/
 .worktrees/
-
-# Python
-__pycache__/
-*.pyc

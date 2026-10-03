@@ -167,9 +167,8 @@ jobs:
           ROOMIES_HTTP_PORT: 58000
           ROOMIES_DB_PORT: 55432
 
-  # Main-only: publish backend + frontend images. The dev cluster pulls them
-  # itself (deploy/kustomize/overlays/dev, nightly-updater), so CI holds no
-  # cluster credentials.
+  # Main-only: publish backend + frontend images. The cluster pulls :nightly
+  # itself (an in-cluster updater CronJob), so CI holds no cluster credentials.
   ghcr-images:
     name: GHCR images (nightly + datetime_sha)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
