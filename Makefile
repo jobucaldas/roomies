@@ -2,7 +2,7 @@ DOCKER := docker
 COMPOSE := docker compose
 DB_URL ?= postgres://roomies:roomies@localhost:5432/roomies?sslmode=disable
 
-.PHONY: dev-backend build build-backend build-frontend test test-backend test-flutter check-compose smoke android lint-backend lint-flutter clean clean-generated clean-containers
+.PHONY: dev-backend build build-backend build-frontend test test-backend test-flutter check-compose smoke android windows linux lint-backend lint-flutter clean clean-generated clean-containers
 
 dev-backend:
 	cd src/backend && DATABASE_URL="$(DB_URL)" go run ./main.go
@@ -44,6 +44,12 @@ smoke:
 
 android:
 	cd src/flutter && flutter build apk --release --dart-define=ROOMIES_API_URL=
+
+windows:
+	cd src/flutter && flutter build windows --release --dart-define=ROOMIES_API_URL=
+
+linux:
+	cd src/flutter && flutter build linux --release --dart-define=ROOMIES_API_URL=
 
 clean-generated:
 	rm -rf src/backend/bin src/flutter/build

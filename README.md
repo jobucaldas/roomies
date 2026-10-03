@@ -35,14 +35,16 @@ cd src/flutter && flutter pub get && flutter run -d chrome \
   --dart-define=ROOMIES_API_URL=http://localhost:8080/api
 ```
 
-Android release APK (debug-signed unless signing is configured):
+Release builds (the Android APK is debug-signed unless signing is configured):
 
 ```bash
 make android
+make windows   # on Windows
+make linux     # CI also packages this bundle as an AppImage
 ```
 
 ## CI and deploys
-CI runs on every push and pull request: pre-commit, `go vet`, backend tests (SQLite and Postgres), Flutter analyze/test/web build, Android APK, and a Compose health smoke.
+CI runs on every push and pull request: pre-commit, `go vet`, backend tests (SQLite and Postgres), Flutter analyze/test/web build, Android APK, Windows build, Linux AppImage, and a Compose health smoke. The app builds are uploaded as workflow artifacts.
 
 On pushes to `main`, CI publishes `ghcr.io/jobucaldas/roomies-backend` and `roomies-frontend` as `:nightly`, `:dev`, and an immutable `YYYYMMDDHHMMSS_<shortsha>` tag. The cluster pulls `:nightly` on its own; CI holds no cluster credentials.
 
