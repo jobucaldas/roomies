@@ -187,10 +187,19 @@ jobs:
           rm -rf Roomies.AppDir
           cp -a x64/release/bundle Roomies.AppDir
           cp ../../web/icons/Icon-512.png Roomies.AppDir/roomies.png
-          printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Roomies' \
-            'Exec=roomies' 'Icon=roomies' 'Categories=Office;' > Roomies.AppDir/roomies.desktop
-          printf '%s\n' '#!/bin/sh' 'here="$(dirname "$(readlink -f "$0")")"' \
-            'exec "$here/roomies" "$@"' > Roomies.AppDir/AppRun
+          cat > Roomies.AppDir/roomies.desktop <<'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Name=Roomies
+          Exec=roomies
+          Icon=roomies
+          Categories=Office;
+          DESKTOP
+          cat > Roomies.AppDir/AppRun <<'APPRUN'
+          #!/bin/sh
+          here="$(dirname "$(readlink -f "$0")")"
+          exec "$here/roomies" "$@"
+          APPRUN
           chmod +x Roomies.AppDir/AppRun
           ARCH=x86_64 "$APPIMAGETOOL" Roomies.AppDir Roomies-x86_64.AppImage
       - uses: actions/upload-artifact@v4
