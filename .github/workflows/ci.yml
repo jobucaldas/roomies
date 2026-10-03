@@ -176,11 +176,32 @@ jobs:
         working-directory: src/flutter
       - run: flutter build linux --release --dart-define=ROOMIES_API_URL=
         working-directory: src/flutter
-      - run: bash scripts/package-appimage.sh
+      - name: Package AppImage
+        working-directory: src/flutter/build/linux
         env:
           APPIMAGETOOL: ${{ runner.temp }}/appimagetool
           # Runners have no FUSE; unpack appimagetool instead of mounting it.
           APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: |
+          set -euo pipefail
+          rm -rf Roomies.AppDir
+          cp -a x64/release/bundle Roomies.AppDir
+          cp ../../web/icons/Icon-512.png Roomies.AppDir/roomies.png
+          cat > Roomies.AppDir/roomies.desktop <<'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Name=Roomies
+          Exec=roomies
+          Icon=roomies
+          Categories=Office;
+          DESKTOP
+          cat > Roomies.AppDir/AppRun <<'APPRUN'
+          #!/bin/sh
+          here="$(dirname "$(readlink -f "$0")")"
+          exec "$here/roomies" "$@"
+          APPRUN
+          chmod +x Roomies.AppDir/AppRun
+          ARCH=x86_64 "$APPIMAGETOOL" Roomies.AppDir Roomies-x86_64.AppImage
       - uses: actions/upload-artifact@v4
         with:
           name: roomies-linux-appimage-${{ github.sha }}
@@ -219,9 +240,8 @@ jobs:
           ROOMIES_HTTP_PORT: 58000
           ROOMIES_DB_PORT: 55432
 
-  # Main-only: publish backend + frontend images. The dev cluster pulls them
-  # itself (deploy/kustomize/overlays/dev, nightly-updater), so CI holds no
-  # cluster credentials.
+  # Main-only: publish backend + frontend images. The cluster pulls :nightly
+  # itself (an in-cluster updater CronJob), so CI holds no cluster credentials.
   ghcr-images:
     name: GHCR images (nightly + datetime_sha)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

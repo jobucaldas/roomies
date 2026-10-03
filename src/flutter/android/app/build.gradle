@@ -6,7 +6,7 @@ plugins {
 }
 
 // Release signing comes from android/key.properties (gitignored). CI writes it
-// from the ANDROID_KEYSTORE_* secrets (see docs/ci.md); without it, release
+// from the ANDROID_KEYSTORE_* secrets (see README); without it, release
 // builds fall back to the debug keys so local and CI builds still work.
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file("key.properties")
