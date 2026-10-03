@@ -137,7 +137,8 @@ jobs:
           retention-days: 14
 
   windows:
-    runs-on: windows-latest
+    # Flutter 3.27 only detects Visual Studio up to 2022.
+    runs-on: windows-2022
     defaults:
       run:
         working-directory: src/flutter
