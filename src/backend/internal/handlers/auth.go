@@ -89,7 +89,6 @@ func (h *AuthHandler) SetRateLimit(limit int) {
 	h.callbackLimit = limit
 }
 
-
 func (h *AuthHandler) Config(w http.ResponseWriter, r *http.Request) {
 	enabled := h.workos != nil && h.workos.Enabled()
 	redirectURI := ""
