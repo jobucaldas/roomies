@@ -7,6 +7,7 @@ import '../../core/money.dart';
 import '../../core/roles.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
+import '../../widgets/roomies_date_field.dart';
 import '../../widgets/roomies_ui.dart';
 
 class ExpensesSection extends StatefulWidget {
@@ -236,7 +237,7 @@ class _ExpensesSectionState extends State<ExpensesSection> {
                     ),
                     RoomiesLabeledField(
                       label: s.date,
-                      child: TextField(controller: _date),
+                      child: RoomiesDateField(controller: _date),
                     ),
                     RoomiesLabeledField(
                       label: s.visibility,

@@ -5,6 +5,7 @@ import '../../api/api_error.dart';
 import '../../core/roles.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
+import '../../widgets/roomies_date_field.dart';
 import '../../widgets/roomies_ui.dart';
 
 bool _writable(HouseRole? role) => role != null && role != HouseRole.monitor;
@@ -274,7 +275,10 @@ class _ChoresSectionState extends State<ChoresSection> {
             ),
             RoomiesLabeledField(
               label: s.dueLocal,
-              child: TextField(controller: _dueLocal),
+              child: RoomiesDateField(
+                controller: _dueLocal,
+                kind: RoomiesDateFieldKind.dateTime,
+              ),
             ),
             RoomiesPrimaryButton(label: s.createChore, onPressed: _create),
           ],
@@ -326,7 +330,20 @@ class _CalendarSectionState extends State<CalendarSection> {
   @override
   void initState() {
     super.initState();
+    _start.addListener(_defaultEnd);
     _load();
+  }
+
+  /// Picking a start moves an empty or earlier end to one hour later.
+  void _defaultEnd() {
+    final start = DateTime.tryParse(_start.text);
+    if (start == null) return;
+    final end = DateTime.tryParse(_end.text);
+    if (end != null && end.isAfter(start)) return;
+    final next = start.add(const Duration(hours: 1));
+    String two(int v) => v.toString().padLeft(2, '0');
+    _end.text = '${next.year.toString().padLeft(4, '0')}-${two(next.month)}-'
+        '${two(next.day)}T${two(next.hour)}:${two(next.minute)}';
   }
 
   @override
@@ -353,18 +370,30 @@ class _CalendarSectionState extends State<CalendarSection> {
 
   Future<void> _create() async {
     final s = context.read<AppState>().strings;
-    await context.read<AppState>().api.createCalendarEvent(widget.houseId, {
-      'title': _title.text.trim(),
-      'description': '',
-      'timezone': 'UTC',
-      'start_local': _local(_start.text),
-      'end_local': _local(_end.text),
-      'all_day': false,
-      'rrule': _defaultRrule(),
-      'exdates': <String>[],
-    });
-    setState(() => _status = s.calendarEventSaved);
-    await _load();
+    if (_start.text.isEmpty || _end.text.isEmpty) {
+      setState(() => _status = s.pickStartAndEnd);
+      return;
+    }
+    if (_local(_end.text).compareTo(_local(_start.text)) <= 0) {
+      setState(() => _status = s.endAfterStart);
+      return;
+    }
+    try {
+      await context.read<AppState>().api.createCalendarEvent(widget.houseId, {
+        'title': _title.text.trim(),
+        'description': '',
+        'timezone': 'UTC',
+        'start_local': _local(_start.text),
+        'end_local': _local(_end.text),
+        'all_day': false,
+        'rrule': _defaultRrule(),
+        'exdates': <String>[],
+      });
+      setState(() => _status = s.calendarEventSaved);
+      await _load();
+    } on ApiError catch (error) {
+      setState(() => _status = error.message);
+    }
   }
 
   Future<void> _delete(CalendarEvent event) async {
@@ -396,11 +425,17 @@ class _CalendarSectionState extends State<CalendarSection> {
             ),
             RoomiesLabeledField(
               label: s.startLocal,
-              child: TextField(controller: _start),
+              child: RoomiesDateField(
+                controller: _start,
+                kind: RoomiesDateFieldKind.dateTime,
+              ),
             ),
             RoomiesLabeledField(
               label: s.endLocal,
-              child: TextField(controller: _end),
+              child: RoomiesDateField(
+                controller: _end,
+                kind: RoomiesDateFieldKind.dateTime,
+              ),
             ),
             RoomiesPrimaryButton(
               label: s.createCalendarEvent,
