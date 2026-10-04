@@ -45,7 +45,8 @@ Future<void> _pump(
         home: Scaffold(
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
-            child: NotificationsSection(houseId: 'h1', role: role, userId: 'u1'),
+            child:
+                NotificationsSection(houseId: 'h1', role: role, userId: 'u1'),
           ),
         ),
       ),

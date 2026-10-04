@@ -1,3 +1,5 @@
+import 'datetime_format.dart';
+
 class ScheduledEventRequest {
   ScheduledEventRequest({
     required this.title,
@@ -45,6 +47,15 @@ class ScheduledEventRequest {
     field('UNTIL='),
   );
 }
+
+/// RRULE parts the form cannot edit (BYDAY, BYMONTHDAY, ...), kept verbatim
+/// so a summary never hides a qualifier that changes when events occur.
+String recurrenceExtras(String rule) => rule
+    .split(';')
+    .where((part) => part.isNotEmpty)
+    .where((part) =>
+        !const ['FREQ=', 'INTERVAL=', 'COUNT=', 'UNTIL='].any(part.startsWith))
+    .join(';');
 
 String minutesTime(int? minutes) {
   if (minutes == null) return '';
@@ -102,6 +113,20 @@ ScheduledEventRequest buildScheduledEventRequest({
   }
   if (start.length != 16 || zone.trim().isEmpty) {
     throw FormatException('Local start and IANA timezone are required.');
+  }
+  if (count.trim().isEmpty) {
+    final untilAt = tryParseApiDateTime(until);
+    if (untilAt == null) {
+      throw FormatException('Until must be a valid date.');
+    }
+    // A trailing Z is an instant; without a timezone database it can only be
+    // compared against the local start when the event zone is UTC.
+    final comparable = !untilAt.isUtc || zone.trim().toUpperCase() == 'UTC';
+    final naive = DateTime(untilAt.year, untilAt.month, untilAt.day,
+        untilAt.hour, untilAt.minute, untilAt.second);
+    if (comparable && !naive.isAfter(DateTime.parse(start))) {
+      throw FormatException('Until must be after the local start.');
+    }
   }
   return ScheduledEventRequest(
     title: trimmedTitle,

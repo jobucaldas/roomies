@@ -12,8 +12,8 @@ import '../../state/app_state.dart';
 import '../../widgets/roomies_date_field.dart';
 import '../../widgets/roomies_ui.dart';
 
-const _fieldGap = 14.0;
-const _sectionGap = 20.0;
+const _fieldGap = 16.0;
+const _sectionGap = 24.0;
 
 /// Spaces [children] evenly so form fields and buttons never touch.
 List<Widget> _spaced(List<Widget> children, {double gap = _fieldGap}) => [
@@ -49,6 +49,37 @@ class _FieldRow extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Captioned block of fields; blocks sit a full section gap apart so a long
+/// form reads as a few small groups instead of one wall of inputs.
+class _Group extends StatelessWidget {
+  const _Group(this.title, this.children);
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text(
+            title.toUpperCase(),
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        ..._spaced(children),
+      ],
     );
   }
 }
@@ -164,7 +195,8 @@ class _NotificationsSectionState extends State<NotificationsSection> {
             ),
           ),
         ] else if (_prefs != null &&
-            notificationControlsReady(loading: _loading, error: _loadError)) ...[
+            notificationControlsReady(
+                loading: _loading, error: _loadError)) ...[
           _PreferencesCard(
             prefs: _prefs!,
             onSaved: (value) => setState(() => _prefs = value),
@@ -232,10 +264,11 @@ class _PreferencesCardState extends State<_PreferencesCard> {
       return;
     }
     try {
-      final saved = await context.read<AppState>().api.putNotificationPreferences(
-            widget.prefs.houseId,
-            _value,
-          );
+      final saved =
+          await context.read<AppState>().api.putNotificationPreferences(
+                widget.prefs.houseId,
+                _value,
+              );
       if (!mounted) return;
       setState(() => _status = s.notificationPreferencesSaved);
       widget.onSaved(saved);
@@ -257,28 +290,33 @@ class _PreferencesCardState extends State<_PreferencesCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             RoomiesHeading(s.yourNotificationPreferences, level: 3),
-            const SizedBox(height: 4),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              title: Text(s.sharedExpenseAlerts),
-              value: _value.expenseCreatedEnabled,
-              onChanged: (checked) => setState(
-                () => _value =
-                    _value.copyWith(expenseCreatedEnabled: checked ?? true),
-              ),
-            ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              title: Text(s.scheduledReminderAlerts),
-              value: _value.reminderEnabled,
-              onChanged: (checked) => setState(
-                () => _value = _value.copyWith(reminderEnabled: checked ?? true),
-              ),
-            ),
+            const SizedBox(height: 12),
+            _Group(s.groupAlerts, [
+              Column(children: [
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(s.sharedExpenseAlerts),
+                  value: _value.expenseCreatedEnabled,
+                  onChanged: (checked) => setState(
+                    () => _value =
+                        _value.copyWith(expenseCreatedEnabled: checked ?? true),
+                  ),
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(s.scheduledReminderAlerts),
+                  value: _value.reminderEnabled,
+                  onChanged: (checked) => setState(
+                    () => _value =
+                        _value.copyWith(reminderEnabled: checked ?? true),
+                  ),
+                ),
+              ]),
+            ]),
             const SizedBox(height: _sectionGap),
-            ..._spaced([
+            _Group(s.groupDelivery, [
               _FieldRow([
                 DropdownButtonFormField<String>(
                   value: _value.cadence,
@@ -310,6 +348,9 @@ class _PreferencesCardState extends State<_PreferencesCard> {
                   ),
                 ),
               ]),
+            ]),
+            const SizedBox(height: _sectionGap),
+            _Group(s.groupQuietHours, [
               _FieldRow([
                 RoomiesTimeField(
                   label: s.quietStartLocal,
@@ -390,8 +431,8 @@ class _BrowserPushCardState extends State<_BrowserPushCard> {
     _status = widget.initialStatus;
   }
 
-  bool get _enabled =>
-      widget.subscriptions.any((subscription) => subscription.platform == 'web_push');
+  bool get _enabled => widget.subscriptions
+      .any((subscription) => subscription.platform == 'web_push');
 
   Future<void> _enable() async {
     setState(() => _busy = true);
@@ -408,8 +449,7 @@ class _BrowserPushCardState extends State<_BrowserPushCard> {
       return;
     }
     try {
-      final refreshed =
-          await api.getNotificationSubscriptions(widget.houseId);
+      final refreshed = await api.getNotificationSubscriptions(widget.houseId);
       if (!mounted) return;
       widget.onSubscriptionsChanged(refreshed);
       final message = s.browserPushEnabled;
@@ -616,8 +656,32 @@ class _ScheduleCardState extends State<_ScheduleCard> {
     });
   }
 
+  String _draftSignature() => [
+        _editingId,
+        _title.text,
+        _start.text,
+        _zone.text,
+        _frequency,
+        _interval.text,
+        _count.text,
+        _until.text,
+        _exdates.text,
+      ].join('\u0000');
+
+  void _resetForm() {
+    _title.clear();
+    _start.clear();
+    _zone.text = 'UTC';
+    _frequency = 'DAILY';
+    _interval.text = '1';
+    _count.text = '1';
+    _until.clear();
+    _exdates.clear();
+  }
+
   void _cancelEdit() {
     final s = context.read<AppState>().strings;
+    _resetForm();
     setState(() {
       _editingId = null;
       _status = s.eventEditingCancelled;
@@ -645,6 +709,7 @@ class _ScheduleCardState extends State<_ScheduleCard> {
   Future<void> _save() async {
     final request = _buildRequest();
     if (request == null) return;
+    final submitted = _draftSignature();
     setState(() => _saving = true);
     final api = context.read<AppState>().api;
     final s = context.read<AppState>().strings;
@@ -673,9 +738,12 @@ class _ScheduleCardState extends State<_ScheduleCard> {
         _status = s.scheduledEventCreated;
       }
       widget.onEventsChanged(items);
+      // Only clear the form if nothing was typed or opened while saving.
+      final untouched = _draftSignature() == submitted;
+      if (untouched) _resetForm();
       setState(() {
         _items = items;
-        _editingId = null;
+        if (untouched) _editingId = null;
         _saving = false;
       });
     } catch (error) {
@@ -710,9 +778,32 @@ class _ScheduleCardState extends State<_ScheduleCard> {
     }
   }
 
-  String _eventWhenLine(ScheduledHouseEvent event, RoomiesStrings s, String locale) {
+  String _eventWhenLine(
+      ScheduledHouseEvent event, RoomiesStrings s, String locale) {
     final when = formatDisplayDateTime(event.dtstartLocal, localeCode: locale);
-    return '$when · ${event.timezone} · ${event.rrule}';
+    final rule = recurrenceFields(event.rrule);
+    final freq = switch (rule.$1) {
+      'DAILY' => s.frequencyDaily,
+      'WEEKLY' => s.frequencyWeekly,
+      'MONTHLY' => s.frequencyMonthly,
+      _ => rule.$1,
+    };
+    final until = tryParseApiDateTime(rule.$4);
+    return [
+      when,
+      event.timezone,
+      [
+        freq,
+        if (rule.$2 != '1') s.everyInterval(int.tryParse(rule.$2) ?? 1),
+        if (rule.$3.isNotEmpty) s.timesCount(rule.$3),
+        if (rule.$4.isNotEmpty)
+          s.untilDate(until == null
+              ? rule.$4
+              : formatDisplayDate(rule.$4, localeCode: locale)),
+        if (recurrenceExtras(event.rrule).isNotEmpty)
+          recurrenceExtras(event.rrule),
+      ].join(', '),
+    ].join(' · ');
   }
 
   @override
@@ -762,7 +853,8 @@ class _ScheduleCardState extends State<_ScheduleCard> {
                           spacing: 8,
                           children: [
                             TextButton(
-                              onPressed: () => _beginEdit(event),
+                              onPressed:
+                                  _saving ? null : () => _beginEdit(event),
                               child: Text(s.edit),
                             ),
                             TextButton(
@@ -785,7 +877,7 @@ class _ScheduleCardState extends State<_ScheduleCard> {
                 level: 4,
               ),
               const SizedBox(height: 4),
-              ..._spaced([
+              _Group(s.groupEvent, [
                 TextFormField(
                   controller: _title,
                   decoration: InputDecoration(labelText: s.title),
@@ -801,6 +893,9 @@ class _ScheduleCardState extends State<_ScheduleCard> {
                     decoration: InputDecoration(labelText: s.ianaTimezone),
                   ),
                 ]),
+              ]),
+              const SizedBox(height: _sectionGap),
+              _Group(s.groupRepeat, [
                 _FieldRow([
                   DropdownButtonFormField<String>(
                     value: _frequency,
@@ -836,6 +931,9 @@ class _ScheduleCardState extends State<_ScheduleCard> {
                     keyboardType: TextInputType.number,
                   ),
                 ]),
+              ]),
+              const SizedBox(height: _sectionGap),
+              _Group(s.groupExceptions, [
                 _FieldRow([
                   RoomiesDateField(
                     controller: _until,

@@ -332,10 +332,8 @@ class RoomiesStrings {
   String get enable => _t('Enable', 'Ativar', 'Activar');
   String get createCalendarEvent =>
       _t('Create calendar event', 'Criar evento', 'Crear evento');
-  String get pickStartAndEnd => _t(
-      'Pick a start and an end.',
-      'Escolha início e fim.',
-      'Elige inicio y fin.');
+  String get pickStartAndEnd => _t('Pick a start and an end.',
+      'Escolha início e fim.', 'Elige inicio y fin.');
   String get endAfterStart => _t(
       'End must be after the start.',
       'O fim deve ser depois do início.',
@@ -459,6 +457,18 @@ class RoomiesStrings {
       'Editar evento agendado', 'Editar evento programado');
   String get localStart => _t('Local start', 'Início local', 'Inicio local');
   String get frequency => _t('Frequency', 'Frequência', 'Frecuencia');
+  String get groupAlerts => _t('Alerts', 'Alertas', 'Alertas');
+  String get groupDelivery => _t('Timing', 'Horário', 'Horario');
+  String get groupQuietHours =>
+      _t('Quiet hours and digest', 'Silêncio e resumo', 'Silencio y resumen');
+  String get groupEvent => _t('Event', 'Evento', 'Evento');
+  String get groupRepeat => _t('Repeats', 'Repetição', 'Repetición');
+  String get groupExceptions =>
+      _t('Until and exceptions', 'Até e exceções', 'Hasta y excepciones');
+  String everyInterval(int n) => _t('every $n', 'a cada $n', 'cada $n');
+  String timesCount(String n) => _t('$n times', '$n vezes', '$n veces');
+  String untilDate(String date) =>
+      _t('until $date', 'até $date', 'hasta $date');
   String get frequencyDaily => _t('Daily', 'Diária', 'Diaria');
   String get frequencyWeekly => _t('Weekly', 'Semanal', 'Semanal');
   String get frequencyMonthly => _t('Monthly', 'Mensal', 'Mensual');
@@ -468,11 +478,10 @@ class RoomiesStrings {
       'Count (1–366; leave blank to use until)',
       'Contagem (1–366; deixe em branco para usar até)',
       'Cantidad (1–366; deja en blanco para usar hasta)');
-  String get untilOptional => _t('Until (optional)', 'Até (opcional)', 'Hasta (opcional)');
-  String get exdateLocalTimes => _t(
-      'Skipped occurrences (optional)',
-      'Ocorrências ignoradas (opcional)',
-      'Ocurrencias omitidas (opcional)');
+  String get untilOptional =>
+      _t('Until (optional)', 'Até (opcional)', 'Hasta (opcional)');
+  String get exdateLocalTimes =>
+      _t('Skipped dates', 'Datas ignoradas', 'Fechas omitidas');
   String get createScheduledEvent => _t('Create scheduled event',
       'Criar evento agendado', 'Crear evento programado');
   String get saveScheduledEvent => _t('Save scheduled event',
