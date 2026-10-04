@@ -12,6 +12,67 @@ import '../../state/app_state.dart';
 import '../../widgets/roomies_date_field.dart';
 import '../../widgets/roomies_ui.dart';
 
+const _fieldGap = 14.0;
+const _sectionGap = 20.0;
+
+/// Spaces [children] evenly so form fields and buttons never touch.
+List<Widget> _spaced(List<Widget> children, {double gap = _fieldGap}) => [
+      for (var i = 0; i < children.length; i++) ...[
+        if (i > 0) SizedBox(height: gap),
+        children[i],
+      ],
+    ];
+
+/// Two fields side by side on wide layouts, stacked on narrow ones.
+class _FieldRow extends StatelessWidget {
+  const _FieldRow(this.children);
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 520) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: _spaced(children),
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const SizedBox(width: _fieldGap),
+              Expanded(child: children[i]),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _StatusText extends StatelessWidget {
+  const _StatusText(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    if (text.isEmpty) return const SizedBox.shrink();
+    return Semantics(
+      liveRegion: true,
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+      ),
+    );
+  }
+}
+
 class NotificationsSection extends StatefulWidget {
   const NotificationsSection({
     super.key,
@@ -83,6 +144,7 @@ class _NotificationsSectionState extends State<NotificationsSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         RoomiesHeading(s.notificationsSchedule, level: 2),
+        const SizedBox(height: 4),
         if (_loading)
           Semantics(
             liveRegion: true,
@@ -93,9 +155,13 @@ class _NotificationsSectionState extends State<NotificationsSection> {
             liveRegion: true,
             child: Text(s.unableToLoadNotificationSettings(_loadError!)),
           ),
-          FilledButton(
-            onPressed: _load,
-            child: Text(s.retryNotificationSettings),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton(
+              onPressed: _load,
+              child: Text(s.retryNotificationSettings),
+            ),
           ),
         ] else if (_prefs != null &&
             notificationControlsReady(loading: _loading, error: _loadError)) ...[
@@ -184,15 +250,17 @@ class _PreferencesCardState extends State<_PreferencesCard> {
   Widget build(BuildContext context) {
     final s = context.watch<AppState>().strings;
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 10),
+      margin: const EdgeInsets.only(top: _sectionGap),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             RoomiesHeading(s.yourNotificationPreferences, level: 3),
+            const SizedBox(height: 4),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
               title: Text(s.sharedExpenseAlerts),
               value: _value.expenseCreatedEnabled,
               onChanged: (checked) => setState(
@@ -202,74 +270,90 @@ class _PreferencesCardState extends State<_PreferencesCard> {
             ),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
               title: Text(s.scheduledReminderAlerts),
               value: _value.reminderEnabled,
               onChanged: (checked) => setState(
                 () => _value = _value.copyWith(reminderEnabled: checked ?? true),
               ),
             ),
-            DropdownButtonFormField<String>(
-              value: _value.cadence,
-              decoration: InputDecoration(labelText: s.delivery),
-              items: [
-                DropdownMenuItem(
-                  value: 'immediate',
-                  child: Text(s.deliveryImmediate),
+            const SizedBox(height: _sectionGap),
+            ..._spaced([
+              _FieldRow([
+                DropdownButtonFormField<String>(
+                  value: _value.cadence,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: s.delivery),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'immediate',
+                      child: Text(s.deliveryImmediate),
+                    ),
+                    DropdownMenuItem(
+                      value: 'daily_digest',
+                      child: Text(s.deliveryDailyDigest),
+                    ),
+                  ],
+                  onChanged: (cadence) {
+                    if (cadence == null) return;
+                    setState(() => _value = _value.copyWith(cadence: cadence));
+                  },
                 ),
-                DropdownMenuItem(
-                  value: 'daily_digest',
-                  child: Text(s.deliveryDailyDigest),
+                TextFormField(
+                  initialValue: _value.timezone,
+                  decoration: InputDecoration(
+                    labelText: s.ianaTimezone,
+                    hintText: 'Europe/Lisbon',
+                  ),
+                  onChanged: (timezone) => setState(
+                    () => _value = _value.copyWith(timezone: timezone),
+                  ),
                 ),
-              ],
-              onChanged: (cadence) {
-                if (cadence == null) return;
-                setState(() => _value = _value.copyWith(cadence: cadence));
-              },
-            ),
-            TextFormField(
-              initialValue: _value.timezone,
-              decoration: InputDecoration(
-                labelText: s.ianaTimezone,
-                hintText: 'Europe/Lisbon',
-              ),
-              onChanged: (timezone) =>
-                  setState(() => _value = _value.copyWith(timezone: timezone)),
-            ),
-            RoomiesTimeField(
-              label: s.quietStartLocal,
-              minutes: _value.quietStartMinutes,
-              clearable: true,
-              onChanged: (minutes) => setState(
-                () => _value = minutes == null
-                    ? _value.copyWith(clearQuietStart: true)
-                    : _value.copyWith(quietStartMinutes: minutes),
-              ),
-            ),
-            RoomiesTimeField(
-              label: s.quietEndLocal,
-              minutes: _value.quietEndMinutes,
-              clearable: true,
-              onChanged: (minutes) => setState(
-                () => _value = minutes == null
-                    ? _value.copyWith(clearQuietEnd: true)
-                    : _value.copyWith(quietEndMinutes: minutes),
-              ),
-            ),
-            RoomiesTimeField(
-              label: s.dailyDigestTimeLocal,
-              minutes: _value.digestMinutes,
-              onChanged: (minutes) => setState(
-                () => _value = _value.copyWith(
-                  digestMinutes: minutes ?? _value.digestMinutes,
+              ]),
+              _FieldRow([
+                RoomiesTimeField(
+                  label: s.quietStartLocal,
+                  minutes: _value.quietStartMinutes,
+                  clearable: true,
+                  onChanged: (minutes) => setState(
+                    () => _value = minutes == null
+                        ? _value.copyWith(clearQuietStart: true)
+                        : _value.copyWith(quietStartMinutes: minutes),
+                  ),
                 ),
+                RoomiesTimeField(
+                  label: s.quietEndLocal,
+                  minutes: _value.quietEndMinutes,
+                  clearable: true,
+                  onChanged: (minutes) => setState(
+                    () => _value = minutes == null
+                        ? _value.copyWith(clearQuietEnd: true)
+                        : _value.copyWith(quietEndMinutes: minutes),
+                  ),
+                ),
+                RoomiesTimeField(
+                  label: s.dailyDigestTimeLocal,
+                  minutes: _value.digestMinutes,
+                  onChanged: (minutes) => setState(
+                    () => _value = _value.copyWith(
+                      digestMinutes: minutes ?? _value.digestMinutes,
+                    ),
+                  ),
+                ),
+              ]),
+            ]),
+            const SizedBox(height: _sectionGap),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton(
+                onPressed: _save,
+                child: Text(s.savePreferences),
               ),
             ),
-            FilledButton(
-              onPressed: _save,
-              child: Text(s.savePreferences),
-            ),
-            if (_status.isNotEmpty)
-              Semantics(liveRegion: true, child: Text(_status)),
+            if (_status.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _StatusText(_status),
+            ],
           ],
         ),
       ),
@@ -379,16 +463,23 @@ class _BrowserPushCardState extends State<_BrowserPushCard> {
     final app = context.watch<AppState>();
     final s = app.strings;
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 10),
+      margin: const EdgeInsets.only(top: _sectionGap),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             RoomiesHeading(s.browserPush, level: 3),
-            Text(s.browserPushOnlyWeb),
+            const SizedBox(height: 4),
+            Text(
+              s.browserPushOnlyWeb,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: _fieldGap),
             if (_enabled)
-              FilledButton(
+              OutlinedButton(
                 onPressed: _busy ? null : _disable,
                 child: Text(s.disableBrowserPush),
               )
@@ -397,19 +488,45 @@ class _BrowserPushCardState extends State<_BrowserPushCard> {
                 onPressed: _busy ? null : _enable,
                 child: Text(s.enableBrowserPush),
               ),
-            Semantics(liveRegion: true, child: Text(_status)),
+            if (_status.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _StatusText(_status),
+            ],
+            const SizedBox(height: _sectionGap),
+            const Divider(height: 1),
+            const SizedBox(height: _sectionGap),
             RoomiesHeading(s.yourDevices, level: 4),
+            const SizedBox(height: 4),
             for (final subscription in widget.subscriptions)
-              Text(
-                s.deviceLine(
-                  subscription.platform,
-                  subscription.deviceLabel,
-                  s.lastSeen(
-                    formatDisplayDateTime(
-                      subscription.lastSeenAt,
-                      localeCode: app.localeCode,
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2, right: 10),
+                      child: Icon(
+                        subscription.platform == 'web_push'
+                            ? Icons.language
+                            : Icons.smartphone,
+                        size: 18,
+                      ),
                     ),
-                  ),
+                    Expanded(
+                      child: Text(
+                        s.deviceLine(
+                          subscription.platform,
+                          subscription.deviceLabel,
+                          s.lastSeen(
+                            formatDisplayDateTime(
+                              subscription.lastSeenAt,
+                              localeCode: app.localeCode,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
           ],
@@ -603,128 +720,171 @@ class _ScheduleCardState extends State<_ScheduleCard> {
     final app = context.watch<AppState>();
     final s = app.strings;
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 10),
+      margin: const EdgeInsets.only(top: _sectionGap),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             RoomiesHeading(s.scheduledEvents, level: 3),
+            const SizedBox(height: 4),
             for (final event in _items)
-              RoomiesArticleCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(event.title, style: Theme.of(context).textTheme.titleMedium),
-                    Text(_eventWhenLine(event, s, app.localeCode)),
-                    if (event.exdates.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: RoomiesArticleCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        s.exceptionsList(
-                          event.exdates
-                              .map(
-                                (d) => formatDisplayDateTime(
-                                  d,
-                                  localeCode: app.localeCode,
-                                ),
-                              )
-                              .join(', '),
+                        event.title,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(_eventWhenLine(event, s, app.localeCode)),
+                      if (event.exdates.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          s.exceptionsList(
+                            event.exdates
+                                .map(
+                                  (d) => formatDisplayDateTime(
+                                    d,
+                                    localeCode: app.localeCode,
+                                  ),
+                                )
+                                .join(', '),
+                          ),
                         ),
-                      ),
-                    if (event.creatorId == widget.userId || widget.admin) ...[
-                      TextButton(
-                        onPressed: () => _beginEdit(event),
-                        child: Text(s.edit),
-                      ),
-                      TextButton(
-                        onPressed: () => _delete(event.id),
-                        child: Text(s.delete),
-                      ),
+                      ],
+                      if (event.creatorId == widget.userId || widget.admin) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            TextButton(
+                              onPressed: () => _beginEdit(event),
+                              child: Text(s.edit),
+                            ),
+                            TextButton(
+                              onPressed: () => _delete(event.id),
+                              child: Text(s.delete),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             if (widget.canCreate) ...[
+              const SizedBox(height: _sectionGap),
+              const Divider(height: 1),
+              const SizedBox(height: _sectionGap),
               RoomiesHeading(
                 _editingId != null ? s.editScheduledEvent : s.addScheduledEvent,
                 level: 4,
               ),
-              TextFormField(
-                controller: _title,
-                decoration: InputDecoration(labelText: s.title),
-              ),
-              RoomiesDateField(
-                controller: _start,
-                kind: RoomiesDateFieldKind.dateTime,
-                label: s.localStart,
-              ),
-              TextFormField(
-                controller: _zone,
-                decoration: InputDecoration(labelText: s.ianaTimezone),
-              ),
-              DropdownButtonFormField<String>(
-                value: _frequency,
-                decoration: InputDecoration(labelText: s.frequency),
-                items: [
-                  DropdownMenuItem(value: 'DAILY', child: Text(s.frequencyDaily)),
-                  DropdownMenuItem(
-                    value: 'WEEKLY',
-                    child: Text(s.frequencyWeekly),
+              const SizedBox(height: 4),
+              ..._spaced([
+                TextFormField(
+                  controller: _title,
+                  decoration: InputDecoration(labelText: s.title),
+                ),
+                _FieldRow([
+                  RoomiesDateField(
+                    controller: _start,
+                    kind: RoomiesDateFieldKind.dateTime,
+                    label: s.localStart,
                   ),
-                  DropdownMenuItem(
-                    value: 'MONTHLY',
-                    child: Text(s.frequencyMonthly),
+                  TextFormField(
+                    controller: _zone,
+                    decoration: InputDecoration(labelText: s.ianaTimezone),
                   ),
+                ]),
+                _FieldRow([
+                  DropdownButtonFormField<String>(
+                    value: _frequency,
+                    isExpanded: true,
+                    decoration: InputDecoration(labelText: s.frequency),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'DAILY',
+                        child: Text(s.frequencyDaily),
+                      ),
+                      DropdownMenuItem(
+                        value: 'WEEKLY',
+                        child: Text(s.frequencyWeekly),
+                      ),
+                      DropdownMenuItem(
+                        value: 'MONTHLY',
+                        child: Text(s.frequencyMonthly),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _frequency = value);
+                    },
+                  ),
+                  TextFormField(
+                    controller: _interval,
+                    decoration: InputDecoration(labelText: s.intervalRange),
+                    keyboardType: TextInputType.number,
+                  ),
+                  TextFormField(
+                    controller: _count,
+                    decoration: InputDecoration(labelText: s.countRange),
+                    keyboardType: TextInputType.number,
+                  ),
+                ]),
+                _FieldRow([
+                  RoomiesDateField(
+                    controller: _until,
+                    kind: RoomiesDateFieldKind.dateTime,
+                    label: s.untilOptional,
+                    compact: true,
+                    clearable: true,
+                    timeFrom: _start,
+                  ),
+                  RoomiesDateField(
+                    controller: _exdates,
+                    kind: RoomiesDateFieldKind.dateTime,
+                    label: s.exdateLocalTimes,
+                    multiple: true,
+                    clearable: true,
+                    timeFrom: _start,
+                  ),
+                ]),
+              ]),
+              const SizedBox(height: _sectionGap),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton(
+                    onPressed: _saving ? null : _save,
+                    child: Text(
+                      _saving
+                          ? s.savingEllipsis
+                          : _editingId != null
+                              ? s.saveScheduledEvent
+                              : s.createScheduledEvent,
+                    ),
+                  ),
+                  if (_editingId != null)
+                    TextButton(
+                      onPressed: _saving ? null : _cancelEdit,
+                      child: Text(s.cancelEdit),
+                    ),
                 ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _frequency = value);
-                },
               ),
-              TextFormField(
-                controller: _interval,
-                decoration: InputDecoration(labelText: s.intervalRange),
-                keyboardType: TextInputType.number,
-              ),
-              TextFormField(
-                controller: _count,
-                decoration: InputDecoration(labelText: s.countRange),
-                keyboardType: TextInputType.number,
-              ),
-              RoomiesDateField(
-                controller: _until,
-                kind: RoomiesDateFieldKind.dateTime,
-                label: s.untilOptional,
-                compact: true,
-                clearable: true,
-                timeFrom: _start,
-              ),
-              RoomiesDateField(
-                controller: _exdates,
-                kind: RoomiesDateFieldKind.dateTime,
-                label: s.exdateLocalTimes,
-                multiple: true,
-                clearable: true,
-                timeFrom: _start,
-              ),
-              FilledButton(
-                onPressed: _saving ? null : _save,
-                child: Text(
-                  _saving
-                      ? s.savingEllipsis
-                      : _editingId != null
-                          ? s.saveScheduledEvent
-                          : s.createScheduledEvent,
-                ),
-              ),
-              if (_editingId != null)
-                TextButton(
-                  onPressed: _saving ? null : _cancelEdit,
-                  child: Text(s.cancelEdit),
-                ),
-            ] else
+            ] else ...[
+              const SizedBox(height: 12),
               Text(s.monitorsViewOnlySchedule),
-            if (_status.isNotEmpty)
-              Semantics(liveRegion: true, child: Text(_status)),
+            ],
+            if (_status.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _StatusText(_status),
+            ],
           ],
         ),
       ),

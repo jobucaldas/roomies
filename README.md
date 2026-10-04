@@ -2,62 +2,141 @@
 
 Roomies helps roommates manage shared expenses, notes, balances, and house-scoped household workflows.
 
-## Layout
+- **Apps:** web, Android, Windows, Linux (Flutter)
+- **Server:** Go API + worker, PostgreSQL, behind Caddy
+- **Sign-in:** local email/password, or WorkOS AuthKit
+
+You only need Docker (Podman works too); no clone of this repo.
+
+## Self-hosting
+
+**1. Save this as `compose.yaml`:**
+
+```yaml
+name: roomies
+
+x-backend: &backend
+  image: ghcr.io/jobucaldas/roomies-backend:nightly
+  environment:
+    DATABASE_URL: postgres://roomies:${POSTGRES_PASSWORD}@db:5432/roomies?sslmode=disable
+    APP_ENV: production
+    JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+    ROOMIES_PUBLIC_BASE_URL: ${ROOMIES_PUBLIC_BASE_URL:?set ROOMIES_PUBLIC_BASE_URL in .env}
+    CORS_ALLOWED_ORIGINS: ${ROOMIES_PUBLIC_BASE_URL}
+    WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
+    WORKOS_API_KEY: ${WORKOS_API_KEY:-}
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: roomies
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: roomies
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roomies -d roomies"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    <<: *backend
+    command: ["serve"]
+
+  worker:
+    <<: *backend
+    command: ["worker"]
+
+  web:
+    image: ghcr.io/jobucaldas/roomies-frontend:nightly
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:8080}
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+      # Automatic HTTPS on your own domain: set SITE_ADDRESS=roomies.example.com
+      # in .env and publish these two instead of the line above.
+      # - "80:80"
+      # - "443:443"
+    volumes:
+      - caddy:/data
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  caddy:
+```
+
+**2. Save this as `.env` next to it** (keep it private):
+
+```sh
+POSTGRES_PASSWORD=          # openssl rand -hex 24
+JWT_SECRET=                 # openssl rand -hex 48
+ROOMIES_PUBLIC_BASE_URL=https://roomies.example.com   # or http://localhost:8080 to try it
+# SITE_ADDRESS=roomies.example.com                    # see the comment in compose.yaml
+# WORKOS_CLIENT_ID=client_...                         # optional, see below
+# WORKOS_API_KEY=sk_...
+```
+
+**3. Start it:**
+
+```sh
+docker compose up -d
+curl -i http://localhost:8080/api/auth/me   # 401 means it is up
+```
+
+Open `ROOMIES_PUBLIC_BASE_URL`. Update with `docker compose pull && docker compose up -d`; pin `:nightly` to a `YYYYMMDDHHMMSS_<shortsha>` tag to stay on a fixed version. Data lives in the `pgdata` volume.
+
+Optional backend variables (email invitations, Web Push, FCM) are listed with comments in [`.env.example`](.env.example); add the ones you set to the `x-backend` environment.
+
+**WorkOS AuthKit (optional).** Without it, people sign up with email and password. To use hosted sign-in, create a [WorkOS](https://workos.com/docs/authkit) project, set `WORKOS_CLIENT_ID` and `WORKOS_API_KEY`, and register `{ROOMIES_PUBLIC_BASE_URL}/callback` as a redirect URI.
+
+## Apps
+
+CI builds the Android APK, Windows bundle and Linux AppImage on every push as workflow artifacts. The native apps ask for your server's address on first launch. The web app is served by your server.
+
+Android release signing on `main` uses these repository secrets when present: `ANDROID_KEYSTORE_BASE64` (`base64 -w0 upload-keystore.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Otherwise APKs use debug keys. Locally, put the same values in `src/frontend/android/key.properties` (gitignored).
+
+## Development
+
+Everything runs through Docker Compose; no Go or Flutter install needed. The root `docker-compose.yml` builds **your checkout**, unlike the compose file above, which runs the published images.
+
+```sh
+docker compose up --build    # optional: cp .env.example .env first
+```
+
+Open <http://localhost:8080/> and sign up with any email and password. This starts Postgres, the Go API and worker (`go run` on the mounted `src/backend/`), and `web`, which builds the Flutter web app from `src/frontend/` and serves it with Caddy next to the API. Change the port with `HTTP_PORT` and a matching `ROOMIES_PUBLIC_BASE_URL`. Stop with `docker compose down` (`-v` also wipes the database).
+
+| Changed | Do |
+|---|---|
+| `src/backend/` | `docker compose restart backend worker` |
+| `src/frontend/` | `docker compose up --build -d web` |
+
+Checks and tools:
+
+```sh
+docker compose run --rm test-backend    # gofmt, vet, tests (SQLite + Postgres)
+docker compose run --rm test-frontend   # flutter analyze + test
+docker compose run --rm apk             # debug APK -> src/frontend/build/app/outputs/flutter-apk/
+```
+
+Windows and Linux builds need their own OS: `flutter build windows|linux --release` inside `src/frontend/`.
+
 | Path | Role |
-|------|------|
-| `src/flutter/` | App client (web + Android) |
-| `src/backend/` | Go API and worker |
-| `.github/workflows/ci.yml` | CI and GHCR image publishing |
-| `docker-compose.yml`, `Caddyfile` | Self-hosted stack |
+|---|---|
+| `src/backend/` | Go API and worker. `Dockerfile`: `dev` stage (toolchain used by compose) and the production image |
+| `src/frontend/` | Flutter app. `Dockerfile`: `local` builds the web bundle from source, `prebuilt` (default, what CI publishes) copies `build/web`; both serve it with Caddy and proxy `/api/*` (`SITE_ADDRESS`, `BACKEND_UPSTREAM`) |
+| `docker-compose.yml` | Development stack and tooling |
 | `.env.example` | Every config variable, with comments |
-
-## Quick start
-1. Copy `.env.example` to `.env` and fill in secrets.
-2. Run what you need:
-
-```bash
-make check-compose
-make test-backend
-make test-flutter
-make build
-```
-
-Local backend without Compose:
-
-```bash
-cd src/backend && DATABASE_URL=sqlite://roomies.db JWT_SECRET=dev-secret go run ./main.go
-```
-
-Flutter web:
-
-```bash
-cd src/flutter && flutter pub get && flutter run -d chrome \
-  --dart-define=ROOMIES_API_URL=http://localhost:8080/api
-```
-
-Release builds (the Android APK is debug-signed unless signing is configured):
-
-```bash
-make android
-make windows   # on Windows
-make linux     # CI also packages this bundle as an AppImage
-```
-
-## CI and deploys
-CI runs on every push and pull request: pre-commit, `go vet`, backend tests (SQLite and Postgres), Flutter analyze/test/web build, Android APK, Windows build, Linux AppImage, and a Compose health smoke. The app builds are uploaded as workflow artifacts.
-
-On pushes to `main`, CI publishes `ghcr.io/jobucaldas/roomies-backend` and `roomies-frontend` as `:nightly`, `:dev`, and an immutable `YYYYMMDDHHMMSS_<shortsha>` tag. The cluster pulls `:nightly` on its own; CI holds no cluster credentials.
-
-### Android signing
-On pushes to `main`, CI signs the APK when these repository secrets exist: `ANDROID_KEYSTORE_BASE64` (`base64 -w0 upload-keystore.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Everything else builds with debug keys. Locally, put the same values in `src/flutter/android/key.properties` (gitignored).
-
-## WorkOS AuthKit
-Set `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` to sign in through hosted AuthKit; leave them empty to keep local email/password (used by CI). The redirect URI is `WORKOS_REDIRECT_URI` or `{ROOMIES_PUBLIC_BASE_URL}/callback`. In the WorkOS Dashboard, register that `/callback` URL for every origin you sign in from, and set the login and logout-return URLs to the app's public origin.
-
-## Cleanup
-```bash
-make clean
-```
+| `.github/workflows/ci.yml` | Checks on every push; on `main`, publishes `ghcr.io/jobucaldas/roomies-backend` and `roomies-frontend` as `:nightly` and `YYYYMMDDHHMMSS_<shortsha>` |
 
 ## Security
 Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
