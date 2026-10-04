@@ -1,5 +1,7 @@
 package models
 
+import "github.com/roomies/backend/internal/secret"
+
 import "time"
 
 type CreateInvitationRequest struct {
@@ -12,19 +14,19 @@ type AcceptInvitationRequest struct {
 }
 
 type HouseInvitation struct {
-	ID                  string     `db:"id" json:"id"`
-	HouseID             string     `db:"house_id" json:"house_id"`
-	Email               string     `db:"email_normalized" json:"email"`
-	Role                string     `db:"role" json:"role"`
-	Status              string     `db:"status" json:"status"`
-	CreatedBy           string     `db:"created_by" json:"created_by"`
-	CreatedAt           time.Time  `db:"created_at" json:"created_at"`
-	ExpiresAt           time.Time  `db:"expires_at" json:"expires_at"`
-	AcceptedBy          *string    `db:"accepted_by" json:"accepted_by,omitempty"`
-	AcceptedAt          *time.Time `db:"accepted_at" json:"accepted_at,omitempty"`
-	RevokedBy           *string    `db:"revoked_by" json:"revoked_by,omitempty"`
-	RevokedAt           *time.Time `db:"revoked_at" json:"revoked_at,omitempty"`
-	ManualAcceptanceURL string     `json:"manual_acceptance_url,omitempty"`
+	ID                  string        `db:"id" json:"id"`
+	HouseID             string        `db:"house_id" json:"house_id"`
+	Email               secret.String `db:"email_normalized" json:"email"`
+	Role                string        `db:"role" json:"role"`
+	Status              string        `db:"status" json:"status"`
+	CreatedBy           string        `db:"created_by" json:"created_by"`
+	CreatedAt           time.Time     `db:"created_at" json:"created_at"`
+	ExpiresAt           time.Time     `db:"expires_at" json:"expires_at"`
+	AcceptedBy          *string       `db:"accepted_by" json:"accepted_by,omitempty"`
+	AcceptedAt          *time.Time    `db:"accepted_at" json:"accepted_at,omitempty"`
+	RevokedBy           *string       `db:"revoked_by" json:"revoked_by,omitempty"`
+	RevokedAt           *time.Time    `db:"revoked_at" json:"revoked_at,omitempty"`
+	ManualAcceptanceURL string        `json:"manual_acceptance_url,omitempty"`
 }
 
 type InvitationAcceptanceResponse struct {
@@ -47,12 +49,12 @@ type HouseEventsResponse struct {
 }
 
 type AuditEvent struct {
-	ID         string    `db:"id" json:"id"`
-	ActorID    *string   `db:"actor_id" json:"actor_id,omitempty"`
-	HouseID    *string   `db:"house_id" json:"house_id,omitempty"`
-	Action     string    `db:"action" json:"action"`
-	TargetType string    `db:"target_type" json:"target_type"`
-	TargetID   string    `db:"target_id" json:"target_id"`
-	Metadata   string    `db:"metadata" json:"metadata"`
-	CreatedAt  time.Time `db:"created_at" json:"created_at"`
+	ID         string        `db:"id" json:"id"`
+	ActorID    *string       `db:"actor_id" json:"actor_id,omitempty"`
+	HouseID    *string       `db:"house_id" json:"house_id,omitempty"`
+	Action     string        `db:"action" json:"action"`
+	TargetType string        `db:"target_type" json:"target_type"`
+	TargetID   string        `db:"target_id" json:"target_id"`
+	Metadata   secret.String `db:"metadata" json:"metadata"`
+	CreatedAt  time.Time     `db:"created_at" json:"created_at"`
 }

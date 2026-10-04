@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/roomies/backend/internal/models"
+	"github.com/roomies/backend/internal/secret"
 )
 
 var (
@@ -24,7 +25,7 @@ type IdempotencyRecord struct {
 	BodyHash            string         `db:"body_hash"`
 	State               string         `db:"state"`
 	StatusCode          sql.NullInt64  `db:"status_code"`
-	ResponseBody        sql.NullString `db:"response_body"`
+	ResponseBody        *secret.String `db:"response_body"`
 	ResponseContentType sql.NullString `db:"response_content_type"`
 	CreatedAt           time.Time      `db:"created_at"`
 	UpdatedAt           time.Time      `db:"updated_at"`
@@ -65,7 +66,7 @@ func (r *ReliabilityRepository) StartIdempotentRequest(ctx context.Context, user
 	}
 	return &StoredHTTPResponse{
 		StatusCode:  int(record.StatusCode.Int64),
-		Body:        record.ResponseBody.String,
+		Body:        record.ResponseBody.Plain(),
 		ContentType: record.ResponseContentType.String,
 	}, nil
 }
@@ -76,7 +77,7 @@ func (r *ReliabilityRepository) CompleteIdempotentRequest(ctx context.Context, u
 		SET state = 'completed', status_code = $1, response_body = $2, response_content_type = $3,
 			updated_at = $4, completed_at = $5
 		WHERE user_id = $6 AND idempotency_key = $7`,
-		response.StatusCode, response.Body, response.ContentType, now, now, userID, key)
+		response.StatusCode, secret.String(response.Body), response.ContentType, now, now, userID, key)
 	return err
 }
 

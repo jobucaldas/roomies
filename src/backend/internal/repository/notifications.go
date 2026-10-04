@@ -17,6 +17,7 @@ import (
 	"github.com/roomies/backend/internal/models"
 	"github.com/roomies/backend/internal/providers"
 	"github.com/roomies/backend/internal/recurrence"
+	"github.com/roomies/backend/internal/secret"
 )
 
 var ErrNotificationNotFound = errors.New("notification resource not found")
@@ -102,7 +103,7 @@ func (r *NotificationRepository) CreateSubscription(ctx context.Context, houseID
 		return nil, invalidInput("notification delivery encryption is not configured")
 	}
 	identity := ""
-	secret := subscriptionSecret{}
+	creds := subscriptionSecret{}
 	switch req.Platform {
 	case "web_push":
 		if req.Endpoint == "" || req.P256DH == "" || req.Auth == "" {
@@ -113,13 +114,13 @@ func (r *NotificationRepository) CreateSubscription(ctx context.Context, houseID
 			return nil, invalidInput("web push subscription is invalid")
 		}
 		identity = req.Endpoint
-		secret = subscriptionSecret{Endpoint: req.Endpoint, P256DH: req.P256DH, Auth: req.Auth}
+		creds = subscriptionSecret{Endpoint: req.Endpoint, P256DH: req.P256DH, Auth: req.Auth}
 	case "android_fcm":
 		if req.Token == "" || len(req.Token) > 4096 {
 			return nil, invalidInput("valid FCM token is required")
 		}
 		identity = req.Token
-		secret.Token = req.Token
+		creds.Token = req.Token
 	default:
 		return nil, invalidInput("platform must be web_push or android_fcm")
 	}
@@ -132,12 +133,12 @@ func (r *NotificationRepository) CreateSubscription(ctx context.Context, houseID
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
-	encrypted, err := r.cipher.Encrypt(id, secret)
+	encrypted, err := r.cipher.Encrypt(id, creds)
 	if err != nil {
 		return nil, err
 	}
 	now := r.clock.Now()
-	_, err = r.db.ExecContext(ctx, `INSERT INTO notification_subscriptions(id,house_id,user_id,platform,identity_hash,key_id,ciphertext,device_label,created_at,last_seen_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9) ON CONFLICT(house_id,user_id,platform,identity_hash) DO UPDATE SET ciphertext=excluded.ciphertext,key_id=excluded.key_id,device_label=excluded.device_label,last_seen_at=excluded.last_seen_at,revoked_at=NULL`, id, houseID, userID, req.Platform, hash, r.cipher.CurrentKeyID(), encrypted, truncate(strings.TrimSpace(req.DeviceLabel), 120), now)
+	_, err = r.db.ExecContext(ctx, `INSERT INTO notification_subscriptions(id,house_id,user_id,platform,identity_hash,key_id,ciphertext,device_label,created_at,last_seen_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9) ON CONFLICT(house_id,user_id,platform,identity_hash) DO UPDATE SET ciphertext=excluded.ciphertext,key_id=excluded.key_id,device_label=excluded.device_label,last_seen_at=excluded.last_seen_at,revoked_at=NULL`, id, houseID, userID, req.Platform, hash, r.cipher.CurrentKeyID(), encrypted, secret.String(truncate(strings.TrimSpace(req.DeviceLabel), 120)), now)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +390,7 @@ func (r *NotificationRepository) quarantineInvalidTarget(ctx context.Context, tx
 		return err
 	}
 	metadata, _ := json.Marshal(map[string]string{"key_id": keyID, "reason": "decrypt_failed"})
-	_, err := tx.ExecContext(ctx, `INSERT INTO audit_events(id,actor_id,house_id,action,target_type,target_id,metadata,created_at) VALUES($1,NULL,$2,'notification.subscription.quarantined','notification_subscription',$3,$4,$5)`, models.NewID(), houseID, targetID, string(metadata), r.clock.Now())
+	_, err := tx.ExecContext(ctx, `INSERT INTO audit_events(id,actor_id,house_id,action,target_type,target_id,metadata,created_at) VALUES($1,NULL,$2,'notification.subscription.quarantined','notification_subscription',$3,$4,$5)`, models.NewID(), houseID, targetID, secret.String(metadata), r.clock.Now())
 	return err
 }
 
@@ -468,7 +469,7 @@ func (r *NotificationRepository) EnqueueTx(ctx context.Context, tx *sqlx.Tx, hou
 		// an already-completed daily dedupe key.
 		dedupe := "notification:" + id
 		messageID := models.NewID()
-		result, err := tx.ExecContext(ctx, `INSERT INTO outbox_messages(id,topic,dedupe_key,payload,status,available_at,created_at,updated_at) VALUES($1,'notification.delivery',$2,$3,'pending',$4,$5,$5) ON CONFLICT(dedupe_key) DO NOTHING`, messageID, dedupe, string(body), available, r.clock.Now())
+		result, err := tx.ExecContext(ctx, `INSERT INTO outbox_messages(id,topic,dedupe_key,payload,status,available_at,created_at,updated_at) VALUES($1,'notification.delivery',$2,$3,'pending',$4,$5,$5) ON CONFLICT(dedupe_key) DO NOTHING`, messageID, dedupe, secret.String(body), available, r.clock.Now())
 		if err != nil {
 			return err
 		}

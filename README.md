@@ -21,6 +21,7 @@ x-backend: &backend
     DATABASE_URL: postgres://roomies:${POSTGRES_PASSWORD}@db:5432/roomies?sslmode=verify-full&sslrootcert=/tls/ca.crt
     APP_ENV: production
     JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+    DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?set DATA_ENCRYPTION_KEY in .env}
     ROOMIES_PUBLIC_BASE_URL: ${ROOMIES_PUBLIC_BASE_URL:?set ROOMIES_PUBLIC_BASE_URL in .env}
     CORS_ALLOWED_ORIGINS: ${ROOMIES_PUBLIC_BASE_URL}
     TLS_CERT_FILE: /tls/backend.crt
@@ -101,6 +102,7 @@ volumes:
 ```sh
 POSTGRES_PASSWORD=          # openssl rand -hex 24
 JWT_SECRET=                 # openssl rand -hex 48
+DATA_ENCRYPTION_KEY=        # openssl rand -base64 32 — back it up: without it the data is unreadable
 ROOMIES_PUBLIC_BASE_URL=https://roomies.example.com   # or http://localhost:8080 to try it
 # SITE_ADDRESS=roomies.example.com                    # see the comment in compose.yaml
 # WORKOS_CLIENT_ID=client_...                         # optional, see below
@@ -119,6 +121,8 @@ Open `ROOMIES_PUBLIC_BASE_URL`. With `APP_ENV: production` the server refuses to
 Optional backend variables (email invitations, Web Push, FCM) are listed with comments in [`.env.example`](.env.example); add the ones you set to the `x-backend` environment.
 
 **Encryption in transit.** Browsers and apps reach Caddy over HTTPS when `SITE_ADDRESS` is a domain (HSTS is sent). Between containers, `tls-init` issues a private CA (kept across restarts, key readable by root only): Caddy reaches the API, and the API and worker reach PostgreSQL, over TLS with certificate checks; PostgreSQL rejects plaintext TCP connections. Invitation email requires STARTTLS or TLS (`SMTP_TLS`). Using an external PostgreSQL? Point `DATABASE_URL` at it with `sslmode=verify-full` (plus `sslrootcert=` for a private CA); production refuses any weaker mode, since only `verify-full` checks the server's certificate and hostname.
+
+**Encryption at rest.** Names, email addresses, house names, notes, expense descriptions, groceries, chores, calendar and reminder titles, device labels, audit metadata, and stored API replies are encrypted with AES-256-GCM under `DATA_ENCRYPTION_KEY` before they reach PostgreSQL; emails are looked up through a keyed hash. Existing rows are encrypted on the next start. To rotate, move the current key to `DATA_ENCRYPTION_OLD_KEYS=<id>:<key>`, set a new `DATA_ENCRYPTION_KEY` and `DATA_ENCRYPTION_KEY_ID`, and restart; everything is re-encrypted at startup. Native apps keep the session token in OS-protected storage (Android Keystore, libsecret on Linux, DPAPI on Windows) and opt out of Android backups. Disk or volume encryption for the database and backups remains the host's job.
 
 **WorkOS AuthKit (optional).** Without it, people sign up with email and password. To use hosted sign-in, create a [WorkOS](https://workos.com/docs/authkit) project, set `WORKOS_CLIENT_ID` and `WORKOS_API_KEY`, and register `{ROOMIES_PUBLIC_BASE_URL}/callback` as a redirect URI.
 

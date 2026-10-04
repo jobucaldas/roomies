@@ -10,6 +10,7 @@ import (
 	"github.com/roomies/backend/internal/middleware"
 	"github.com/roomies/backend/internal/models"
 	"github.com/roomies/backend/internal/repository"
+	"github.com/roomies/backend/internal/secret"
 )
 
 type HouseHandler struct {
@@ -52,7 +53,7 @@ func (h *HouseHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	house := &models.House{
 		ID:        models.NewID(),
-		Name:      req.Name,
+		Name:      secret.String(req.Name),
 		CreatedAt: time.Now(),
 	}
 
@@ -119,14 +120,14 @@ func (h *HouseHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "house not found"})
 		return
 	}
-	house.Name = req.Name
+	house.Name = secret.String(req.Name)
 
 	if err := h.houseRepo.Update(r.Context(), house); err != nil {
 		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to update house"})
 		return
 	}
 	if h.reliabilityRepo != nil {
-		_ = h.reliabilityRepo.AppendHouseEvent(r.Context(), houseID, "house.updated", &userID, "house", houseID, map[string]any{"name": house.Name})
+		_ = h.reliabilityRepo.AppendHouseEvent(r.Context(), houseID, "house.updated", &userID, "house", houseID, nil)
 	}
 
 	writeJSON(w, http.StatusOK, house)

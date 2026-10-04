@@ -18,6 +18,7 @@ import (
 	"github.com/roomies/backend/internal/middleware"
 	"github.com/roomies/backend/internal/models"
 	"github.com/roomies/backend/internal/repository"
+	"github.com/roomies/backend/internal/secret"
 	"github.com/roomies/backend/internal/workosauth"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -240,8 +241,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	user := &models.User{
 		ID:           models.NewID(),
-		Name:         req.Name,
-		Email:        req.Email,
+		Name:         secret.String(req.Name),
+		Email:        secret.String(req.Email),
 		PasswordHash: string(hash),
 		CreatedAt:    time.Now(),
 	}

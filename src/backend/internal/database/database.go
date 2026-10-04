@@ -137,6 +137,9 @@ func applyMigrations(ctx context.Context, exec migrationRunner, driver string) e
 			return fmt.Errorf("record migration %d: %w", migration.version, err)
 		}
 	}
+	if err := EncryptExistingData(ctx, exec); err != nil {
+		return fmt.Errorf("encrypt stored data: %w", err)
+	}
 	return nil
 }
 

@@ -1,6 +1,9 @@
 package repository
 
 import (
+	"github.com/jmoiron/sqlx"
+	"github.com/roomies/backend/internal/secret"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,4 +40,44 @@ func seedHouseFixture(t *testing.T, repo *ReliabilityRepository) (houseID, admin
 		t.Fatal(err)
 	}
 	return houseID, adminID
+}
+
+type storedOutboxRow struct {
+	Topic       string        `db:"topic"`
+	Payload     secret.String `db:"payload"`
+	AvailableAt time.Time     `db:"available_at"`
+}
+
+// outboxRows returns decrypted outbox rows whose payload contains every
+// needle. Payloads are encrypted at rest, so SQL LIKE cannot match them.
+func outboxRows(t *testing.T, db *sqlx.DB, needles ...string) []storedOutboxRow {
+	t.Helper()
+	var rows []storedOutboxRow
+	if err := db.Select(&rows, `SELECT topic, payload, available_at FROM outbox_messages ORDER BY created_at, id`); err != nil {
+		t.Fatal(err)
+	}
+	var matched []storedOutboxRow
+	for _, row := range rows {
+		ok := true
+		for _, needle := range needles {
+			if !strings.Contains(row.Payload.Plain(), needle) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			matched = append(matched, row)
+		}
+	}
+	return matched
+}
+
+// oneOutboxPayload returns the single decrypted payload containing every needle.
+func oneOutboxPayload(t *testing.T, db *sqlx.DB, needles ...string) string {
+	t.Helper()
+	rows := outboxRows(t, db, needles...)
+	if len(rows) == 0 {
+		t.Fatalf("no outbox payload contains %q", needles)
+	}
+	return rows[0].Payload.Plain()
 }

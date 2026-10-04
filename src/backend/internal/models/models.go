@@ -2,6 +2,7 @@ package models
 
 import (
 	"crypto/rand"
+	"github.com/roomies/backend/internal/secret"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -12,42 +13,43 @@ func NewID() string {
 }
 
 type User struct {
-	ID           string    `db:"id" json:"id"`
-	Name         string    `db:"name" json:"name"`
-	Email        string    `db:"email" json:"email"`
-	PasswordHash string    `db:"password_hash" json:"-"`
-	WorkOSUserID string    `db:"workos_user_id" json:"-"`
-	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+	ID           string        `db:"id" json:"id"`
+	Name         secret.String `db:"name" json:"name"`
+	Email        secret.String `db:"email" json:"email"`
+	EmailHash    *string       `db:"email_hash" json:"-"`
+	PasswordHash string        `db:"password_hash" json:"-"`
+	WorkOSUserID string        `db:"workos_user_id" json:"-"`
+	CreatedAt    time.Time     `db:"created_at" json:"created_at"`
 }
 
 type House struct {
-	ID        string    `db:"id" json:"id"`
-	Name      string    `db:"name" json:"name"`
-	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	ID        string        `db:"id" json:"id"`
+	Name      secret.String `db:"name" json:"name"`
+	CreatedAt time.Time     `db:"created_at" json:"created_at"`
 }
 
 type HouseMember struct {
-	ID        string    `db:"id" json:"id"`
-	HouseID   string    `db:"house_id" json:"house_id"`
-	UserID    string    `db:"user_id" json:"user_id"`
-	Role      string    `db:"role" json:"role"`
-	JoinedAt  time.Time `db:"joined_at" json:"joined_at"`
-	UserName  string    `db:"user_name" json:"user_name,omitempty"`
-	UserEmail string    `db:"user_email" json:"user_email,omitempty"`
+	ID        string        `db:"id" json:"id"`
+	HouseID   string        `db:"house_id" json:"house_id"`
+	UserID    string        `db:"user_id" json:"user_id"`
+	Role      string        `db:"role" json:"role"`
+	JoinedAt  time.Time     `db:"joined_at" json:"joined_at"`
+	UserName  secret.String `db:"user_name" json:"user_name,omitempty"`
+	UserEmail secret.String `db:"user_email" json:"user_email,omitempty"`
 }
 
 type Expense struct {
-	ID          string    `db:"id" json:"id"`
-	HouseID     string    `db:"house_id" json:"house_id"`
-	PayerID     string    `db:"payer_id" json:"payer_id"`
-	Amount      float64   `db:"amount" json:"amount"`
-	AmountCents int64     `db:"amount_cents" json:"-"`
-	Description string    `db:"description" json:"description"`
-	Category    string    `db:"category" json:"category"`
-	Date        string    `db:"date" json:"date"`
-	Visibility  string    `db:"visibility" json:"visibility"`
-	CreatedAt   time.Time `db:"created_at" json:"created_at"`
-	PayerName   string    `db:"payer_name" json:"payer_name,omitempty"`
+	ID          string        `db:"id" json:"id"`
+	HouseID     string        `db:"house_id" json:"house_id"`
+	PayerID     string        `db:"payer_id" json:"payer_id"`
+	Amount      float64       `db:"amount" json:"amount"`
+	AmountCents int64         `db:"amount_cents" json:"-"`
+	Description secret.String `db:"description" json:"description"`
+	Category    secret.String `db:"category" json:"category"`
+	Date        string        `db:"date" json:"date"`
+	Visibility  string        `db:"visibility" json:"visibility"`
+	CreatedAt   time.Time     `db:"created_at" json:"created_at"`
+	PayerName   secret.String `db:"payer_name" json:"payer_name,omitempty"`
 }
 
 type ExpenseVisibility struct {
@@ -56,23 +58,23 @@ type ExpenseVisibility struct {
 }
 
 type ExpenseSplit struct {
-	ID               string  `db:"id" json:"id"`
-	ExpenseID        string  `db:"expense_id" json:"expense_id"`
-	UserID           string  `db:"user_id" json:"user_id"`
-	ShareAmount      float64 `db:"share_amount" json:"share_amount"`
-	ShareAmountCents int64   `db:"share_amount_cents" json:"-"`
-	UserName         string  `db:"user_name" json:"user_name,omitempty"`
+	ID               string        `db:"id" json:"id"`
+	ExpenseID        string        `db:"expense_id" json:"expense_id"`
+	UserID           string        `db:"user_id" json:"user_id"`
+	ShareAmount      float64       `db:"share_amount" json:"share_amount"`
+	ShareAmountCents int64         `db:"share_amount_cents" json:"-"`
+	UserName         secret.String `db:"user_name" json:"user_name,omitempty"`
 }
 
 type Note struct {
-	ID         string    `db:"id" json:"id"`
-	HouseID    string    `db:"house_id" json:"house_id"`
-	AuthorID   string    `db:"author_id" json:"author_id"`
-	Title      string    `db:"title" json:"title"`
-	Content    string    `db:"content" json:"content"`
-	CreatedAt  time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt  time.Time `db:"updated_at" json:"updated_at"`
-	AuthorName string    `db:"author_name" json:"author_name,omitempty"`
+	ID         string        `db:"id" json:"id"`
+	HouseID    string        `db:"house_id" json:"house_id"`
+	AuthorID   string        `db:"author_id" json:"author_id"`
+	Title      secret.String `db:"title" json:"title"`
+	Content    secret.String `db:"content" json:"content"`
+	CreatedAt  time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt  time.Time     `db:"updated_at" json:"updated_at"`
+	AuthorName secret.String `db:"author_name" json:"author_name,omitempty"`
 }
 
 type RegisterRequest struct {

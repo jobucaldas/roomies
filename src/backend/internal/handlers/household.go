@@ -10,6 +10,7 @@ import (
 	"github.com/roomies/backend/internal/middleware"
 	"github.com/roomies/backend/internal/models"
 	"github.com/roomies/backend/internal/repository"
+	"github.com/roomies/backend/internal/secret"
 )
 
 type HouseholdHandler struct {
@@ -109,7 +110,7 @@ func (h *HouseholdHandler) CreateGrocery(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	item := &models.GroceryItem{HouseID: chi.URLParam(r, "id"), Name: req.Name, Quantity: req.Quantity, Unit: req.Unit, Note: req.Note, AssigneeID: req.AssigneeID, Position: req.Position}
+	item := &models.GroceryItem{HouseID: chi.URLParam(r, "id"), Name: secret.String(req.Name), Quantity: secret.String(req.Quantity), Unit: secret.String(req.Unit), Note: secret.String(req.Note), AssigneeID: req.AssigneeID, Position: req.Position}
 	if err := h.repo.CreateGrocery(r.Context(), item, middleware.GetUserID(r.Context())); err != nil {
 		householdError(w, err)
 		return
@@ -128,7 +129,7 @@ func (h *HouseholdHandler) UpdateGrocery(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, 400, models.ErrorResponse{Error: "version is required"})
 		return
 	}
-	item := &models.GroceryItem{ID: chi.URLParam(r, "groceryId"), HouseID: chi.URLParam(r, "id"), Name: req.Name, Quantity: req.Quantity, Unit: req.Unit, Note: req.Note, AssigneeID: req.AssigneeID, Position: req.Position, Version: req.Version}
+	item := &models.GroceryItem{ID: chi.URLParam(r, "groceryId"), HouseID: chi.URLParam(r, "id"), Name: secret.String(req.Name), Quantity: secret.String(req.Quantity), Unit: secret.String(req.Unit), Note: secret.String(req.Note), AssigneeID: req.AssigneeID, Position: req.Position, Version: req.Version}
 	if err := h.repo.UpdateGrocery(r.Context(), item, middleware.GetUserID(r.Context())); err != nil {
 		householdError(w, err)
 		return
@@ -217,7 +218,7 @@ func (h *HouseholdHandler) CreateChore(w http.ResponseWriter, r *http.Request) {
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	item := &models.Chore{HouseID: chi.URLParam(r, "id"), Title: req.Title, Description: req.Description, AssigneeID: req.AssigneeID, Timezone: req.Timezone, DueLocal: req.DueLocal, RRule: req.RRule, ExDates: req.ExDates, Enabled: enabled}
+	item := &models.Chore{HouseID: chi.URLParam(r, "id"), Title: secret.String(req.Title), Description: secret.String(req.Description), AssigneeID: req.AssigneeID, Timezone: req.Timezone, DueLocal: req.DueLocal, RRule: req.RRule, ExDates: req.ExDates, Enabled: enabled}
 	if err := h.repo.SaveChore(r.Context(), item, middleware.GetUserID(r.Context()), true); err != nil {
 		householdError(w, err)
 		return
@@ -250,7 +251,7 @@ func (h *HouseholdHandler) UpdateChore(w http.ResponseWriter, r *http.Request) {
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	item := &models.Chore{ID: existing.ID, HouseID: existing.HouseID, CreatorID: existing.CreatorID, Title: req.Title, Description: req.Description, AssigneeID: req.AssigneeID, Timezone: req.Timezone, DueLocal: req.DueLocal, RRule: req.RRule, ExDates: req.ExDates, Enabled: enabled, Version: req.Version}
+	item := &models.Chore{ID: existing.ID, HouseID: existing.HouseID, CreatorID: existing.CreatorID, Title: secret.String(req.Title), Description: secret.String(req.Description), AssigneeID: req.AssigneeID, Timezone: req.Timezone, DueLocal: req.DueLocal, RRule: req.RRule, ExDates: req.ExDates, Enabled: enabled, Version: req.Version}
 	if err = h.repo.SaveChore(r.Context(), item, middleware.GetUserID(r.Context()), false); err != nil {
 		householdError(w, err)
 		return
@@ -368,7 +369,7 @@ func (h *HouseholdHandler) CreateCalendar(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	event := &models.CalendarEvent{HouseID: chi.URLParam(r, "id"), Title: req.Title, Description: req.Description, Timezone: req.Timezone, StartLocal: req.StartLocal, EndLocal: req.EndLocal, AllDay: req.AllDay, RRule: req.RRule, ExDates: req.ExDates}
+	event := &models.CalendarEvent{HouseID: chi.URLParam(r, "id"), Title: secret.String(req.Title), Description: secret.String(req.Description), Timezone: req.Timezone, StartLocal: req.StartLocal, EndLocal: req.EndLocal, AllDay: req.AllDay, RRule: req.RRule, ExDates: req.ExDates}
 	if err := h.repo.SaveCalendar(r.Context(), event, middleware.GetUserID(r.Context()), true); err != nil {
 		householdError(w, err)
 		return
@@ -397,7 +398,7 @@ func (h *HouseholdHandler) UpdateCalendar(w http.ResponseWriter, r *http.Request
 		writeJSON(w, 400, models.ErrorResponse{Error: "version is required"})
 		return
 	}
-	event := &models.CalendarEvent{ID: existing.ID, HouseID: existing.HouseID, CreatorID: existing.CreatorID, Title: req.Title, Description: req.Description, Timezone: req.Timezone, StartLocal: req.StartLocal, EndLocal: req.EndLocal, AllDay: req.AllDay, RRule: req.RRule, ExDates: req.ExDates, Version: req.Version}
+	event := &models.CalendarEvent{ID: existing.ID, HouseID: existing.HouseID, CreatorID: existing.CreatorID, Title: secret.String(req.Title), Description: secret.String(req.Description), Timezone: req.Timezone, StartLocal: req.StartLocal, EndLocal: req.EndLocal, AllDay: req.AllDay, RRule: req.RRule, ExDates: req.ExDates, Version: req.Version}
 	if err = h.repo.SaveCalendar(r.Context(), event, middleware.GetUserID(r.Context()), false); err != nil {
 		householdError(w, err)
 		return

@@ -79,6 +79,11 @@ func migrations(driver string) []schemaMigration {
 				`CREATE INDEX IF NOT EXISTS idx_revoked_sessions_expires ON revoked_sessions(expires_at)`,
 			),
 		},
+		{
+			version: 11,
+			name:    "encrypt_personal_data",
+			up:      encryptionSchemaMigration(driver),
+		},
 	}
 }
 

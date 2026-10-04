@@ -100,11 +100,11 @@ func TestEnqueuePrivacyQuietHoursAndDigestDedupe(t *testing.T) {
 	if err := repo.Enqueue(ctx, "h1", "expense_created", "expense", "expense-1", occurrence); err != nil {
 		t.Fatal(err)
 	}
-	var payload string
-	var available time.Time
-	if err := repo.db.QueryRow(`SELECT payload,available_at FROM outbox_messages WHERE topic='notification.delivery' AND payload LIKE '%expense-1%' LIMIT 1`).Scan(&payload, &available); err != nil {
-		t.Fatal(err)
+	matches := outboxRows(t, repo.db, "expense-1", `"user_id":"u1"`)
+	if len(matches) == 0 {
+		t.Fatal("no outbox row for expense-1")
 	}
+	payload, available := matches[0].Payload.Plain(), matches[0].AvailableAt
 	for _, private := range []string{"amount", "description", "receipt", "token"} {
 		if strings.Contains(strings.ToLower(payload), private) {
 			t.Fatalf("payload leaked %s: %s", private, payload)
@@ -122,10 +122,7 @@ func TestEnqueuePrivacyQuietHoursAndDigestDedupe(t *testing.T) {
 	if err := repo.Enqueue(ctx, "h1", "reminder", "scheduled_event", "event-b", occurrence.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	var count int
-	if err := repo.db.Get(&count, `SELECT COUNT(*) FROM outbox_messages WHERE topic='notification.delivery' AND payload LIKE '%event-%' AND payload LIKE '%"user_id":"u2"%'`); err != nil {
-		t.Fatal(err)
-	}
+	count := len(outboxRows(t, repo.db, "event-", `"user_id":"u2"`))
 	if count != 2 {
 		t.Fatalf("expected one durable trigger per digest row, got %d", count)
 	}
@@ -139,8 +136,10 @@ func TestSharedExpenseAtomicallyEnqueuesPrivacySafeNotifications(t *testing.T) {
 		t.Fatal(err)
 	}
 	var payloads []string
-	if err := repo.db.Select(&payloads, `SELECT payload FROM outbox_messages WHERE topic='notification.delivery'`); err != nil {
-		t.Fatal(err)
+	for _, row := range outboxRows(t, repo.db) {
+		if row.Topic == "notification.delivery" {
+			payloads = append(payloads, row.Payload.Plain())
+		}
 	}
 	if len(payloads) != 2 {
 		t.Fatalf("expected two recipients, got %d", len(payloads))
@@ -212,10 +211,7 @@ func TestDigestSnapshotsCategoriesAndLeavesConcurrentEnqueueForItsOwnTrigger(t *
 	if err := repo.PutPreferences(ctx, models.NotificationPreferences{HouseID: "h1", UserID: "u2", ExpenseCreatedEnabled: false, ReminderEnabled: true, Cadence: "daily_digest", Timezone: "UTC", DigestMinutes: 480}); err != nil {
 		t.Fatal(err)
 	}
-	var raw string
-	if err := repo.db.Get(&raw, `SELECT payload FROM outbox_messages WHERE payload LIKE '%digest-expense%' AND payload LIKE '%"user_id":"u2"%'`); err != nil {
-		t.Fatal(err)
-	}
+	raw := oneOutboxPayload(t, repo.db, "digest-expense", `"user_id":"u2"`)
 	var trigger NotificationPayload
 	if err := json.Unmarshal([]byte(raw), &trigger); err != nil {
 		t.Fatal(err)
@@ -263,8 +259,8 @@ func TestDigestSnapshotsCategoriesAndLeavesConcurrentEnqueueForItsOwnTrigger(t *
 	if dispatched != 2 || pending != 1 {
 		t.Fatalf("snapshot marking mismatch: dispatched=%d concurrent_pending=%d", dispatched, pending)
 	}
-	if err := repo.db.Get(&pending, `SELECT COUNT(*) FROM outbox_messages WHERE payload LIKE '%concurrent-reminder%' AND payload LIKE '%"user_id":"u2"%'`); err != nil || pending != 1 {
-		t.Fatalf("concurrent row lost durable trigger: count=%d err=%v", pending, err)
+	if pending = len(outboxRows(t, repo.db, "concurrent-reminder", `"user_id":"u2"`)); pending != 1 {
+		t.Fatalf("concurrent row lost durable trigger: count=%d", pending)
 	}
 }
 
@@ -296,10 +292,7 @@ func TestLazyKeyRotationConvergesAndTamperIsIsolated(t *testing.T) {
 	if err := repo.Enqueue(ctx, "h1", "expense_created", "expense", "rotation-expense", clock.Now()); err != nil {
 		t.Fatal(err)
 	}
-	var raw string
-	if err := repo.db.Get(&raw, `SELECT payload FROM outbox_messages WHERE payload LIKE '%rotation-expense%' AND payload LIKE '%u1%'`); err != nil {
-		t.Fatal(err)
-	}
+	raw := oneOutboxPayload(t, repo.db, "rotation-expense", "u1")
 	var payload NotificationPayload
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		t.Fatal(err)

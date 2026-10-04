@@ -18,6 +18,7 @@ import (
 	"github.com/roomies/backend/internal/internaltls"
 	"github.com/roomies/backend/internal/providers"
 	"github.com/roomies/backend/internal/repository"
+	"github.com/roomies/backend/internal/secret"
 	"github.com/roomies/backend/internal/server"
 	"github.com/roomies/backend/internal/worker"
 )
@@ -38,6 +39,11 @@ func run(logger *slog.Logger, args []string) error {
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
+	dataKeys, err := cfg.DataKeyRing()
+	if err != nil {
+		return fmt.Errorf("configure data encryption: %w", err)
+	}
+	secret.Configure(dataKeys)
 	command := "serve"
 	if len(args) > 0 {
 		command = args[0]

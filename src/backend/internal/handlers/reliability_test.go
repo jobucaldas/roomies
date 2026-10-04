@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/roomies/backend/internal/secret"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -262,7 +263,9 @@ func TestAcceptInvitationUsesCurrentDatabaseEmail(t *testing.T) {
 	inviteeToken := registerUser(t, env.Router, "Invitee", "invitee@example.test", "password123")
 	houseID := createHouse(t, env.Router, adminToken, "Invite House")
 	stale := createInvitation(t, env.Router, adminToken, houseID, models.CreateInvitationRequest{Email: "invitee@example.test", Role: "member"}, "invite-stale")
-	if _, err := env.DB.Exec(`UPDATE users SET email = $1 WHERE email = $2`, "renamed@example.test", "invitee@example.test"); err != nil {
+	oldHash, _ := secret.Index("invitee@example.test")
+	newHash, _ := secret.Index("renamed@example.test")
+	if _, err := env.DB.Exec(`UPDATE users SET email = $1, email_hash = $2 WHERE email_hash = $3`, secret.String("renamed@example.test"), newHash, oldHash); err != nil {
 		t.Fatal(err)
 	}
 	rejected := acceptInvitation(t, env.Router, inviteeToken, manualInvitationToken(t, stale.ManualAcceptanceURL))

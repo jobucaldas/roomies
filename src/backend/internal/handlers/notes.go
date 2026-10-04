@@ -9,6 +9,7 @@ import (
 	"github.com/roomies/backend/internal/middleware"
 	"github.com/roomies/backend/internal/models"
 	"github.com/roomies/backend/internal/repository"
+	"github.com/roomies/backend/internal/secret"
 )
 
 type NoteHandler struct {
@@ -66,7 +67,7 @@ func (h *NoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	note := &models.Note{
 		ID: models.NewID(), HouseID: houseID, AuthorID: userID,
-		Title: req.Title, Content: req.Content, CreatedAt: now, UpdatedAt: now,
+		Title: secret.String(req.Title), Content: secret.String(req.Content), CreatedAt: now, UpdatedAt: now,
 	}
 	if err := h.noteRepo.Create(r.Context(), note); err != nil {
 		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to create note"})
@@ -117,14 +118,14 @@ func (h *NoteHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Title != nil {
-		note.Title = strings.TrimSpace(*req.Title)
+		note.Title = secret.String(strings.TrimSpace(*req.Title))
 		if note.Title == "" {
 			writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "title is required"})
 			return
 		}
 	}
 	if req.Content != nil {
-		note.Content = strings.TrimSpace(*req.Content)
+		note.Content = secret.String(strings.TrimSpace(*req.Content))
 		if note.Content == "" {
 			writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "content is required"})
 			return
