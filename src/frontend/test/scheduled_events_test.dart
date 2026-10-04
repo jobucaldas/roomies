@@ -92,4 +92,27 @@ void main() {
     expect(build('20250105T090000').rrule,
         'FREQ=DAILY;INTERVAL=1;UNTIL=20250105T090000');
   });
+
+  test('until accepts date-only and UTC forms, rejects garbage', () {
+    ScheduledEventRequest build(String until) => buildScheduledEventRequest(
+          title: 'Bins',
+          start: '2025-01-02T09:00',
+          zone: 'UTC',
+          freq: 'DAILY',
+          interval: '1',
+          count: '',
+          until: until,
+          exdates: '',
+        );
+    expect(build('20250110').rrule, contains('UNTIL=20250110'));
+    expect(build('20250110T090000Z').rrule, contains('UNTIL='));
+    expect(() => build('20250101'), throwsFormatException);
+    expect(() => build('soon'), throwsFormatException);
+  });
+
+  test('recurrence extras keep qualifiers the form cannot edit', () {
+    expect(recurrenceExtras('FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,WE;COUNT=4'),
+        'BYDAY=MO,WE');
+    expect(recurrenceExtras('FREQ=DAILY;INTERVAL=1;COUNT=2'), '');
+  });
 }

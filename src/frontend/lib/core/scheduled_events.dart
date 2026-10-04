@@ -48,6 +48,15 @@ class ScheduledEventRequest {
   );
 }
 
+/// RRULE parts the form cannot edit (BYDAY, BYMONTHDAY, ...), kept verbatim
+/// so a summary never hides a qualifier that changes when events occur.
+String recurrenceExtras(String rule) => rule
+    .split(';')
+    .where((part) => part.isNotEmpty)
+    .where((part) =>
+        !const ['FREQ=', 'INTERVAL=', 'COUNT=', 'UNTIL='].any(part.startsWith))
+    .join(';');
+
 String minutesTime(int? minutes) {
   if (minutes == null) return '';
   return '${(minutes ~/ 60).toString().padLeft(2, '0')}:${(minutes % 60).toString().padLeft(2, '0')}';
@@ -105,9 +114,17 @@ ScheduledEventRequest buildScheduledEventRequest({
   if (start.length != 16 || zone.trim().isEmpty) {
     throw FormatException('Local start and IANA timezone are required.');
   }
-  final untilAt = count.trim().isNotEmpty ? null : tryParseApiDateTime(until);
-  if (untilAt != null && !untilAt.isAfter(DateTime.parse(start))) {
-    throw FormatException('Until must be after the local start.');
+  if (count.trim().isEmpty) {
+    final untilAt = tryParseApiDateTime(until);
+    if (untilAt == null) {
+      throw FormatException('Until must be a valid date.');
+    }
+    // Compare wall-clock values; a trailing Z must not shift the comparison.
+    final naive = DateTime(untilAt.year, untilAt.month, untilAt.day,
+        untilAt.hour, untilAt.minute, untilAt.second);
+    if (!naive.isAfter(DateTime.parse(start))) {
+      throw FormatException('Until must be after the local start.');
+    }
   }
   return ScheduledEventRequest(
     title: trimmedTitle,

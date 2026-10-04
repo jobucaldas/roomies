@@ -656,6 +656,18 @@ class _ScheduleCardState extends State<_ScheduleCard> {
     });
   }
 
+  String _draftSignature() => [
+        _editingId,
+        _title.text,
+        _start.text,
+        _zone.text,
+        _frequency,
+        _interval.text,
+        _count.text,
+        _until.text,
+        _exdates.text,
+      ].join('\u0000');
+
   void _resetForm() {
     _title.clear();
     _start.clear();
@@ -697,6 +709,7 @@ class _ScheduleCardState extends State<_ScheduleCard> {
   Future<void> _save() async {
     final request = _buildRequest();
     if (request == null) return;
+    final submitted = _draftSignature();
     setState(() => _saving = true);
     final api = context.read<AppState>().api;
     final s = context.read<AppState>().strings;
@@ -725,10 +738,12 @@ class _ScheduleCardState extends State<_ScheduleCard> {
         _status = s.scheduledEventCreated;
       }
       widget.onEventsChanged(items);
-      _resetForm();
+      // Only clear the form if nothing was typed or opened while saving.
+      final untouched = _draftSignature() == submitted;
+      if (untouched) _resetForm();
       setState(() {
         _items = items;
-        _editingId = null;
+        if (untouched) _editingId = null;
         _saving = false;
       });
     } catch (error) {
@@ -781,8 +796,12 @@ class _ScheduleCardState extends State<_ScheduleCard> {
         freq,
         if (rule.$2 != '1') s.everyInterval(int.tryParse(rule.$2) ?? 1),
         if (rule.$3.isNotEmpty) s.timesCount(rule.$3),
-        if (until != null)
-          s.untilDate(formatDisplayDate(rule.$4, localeCode: locale)),
+        if (rule.$4.isNotEmpty)
+          s.untilDate(until == null
+              ? rule.$4
+              : formatDisplayDate(rule.$4, localeCode: locale)),
+        if (recurrenceExtras(event.rrule).isNotEmpty)
+          recurrenceExtras(event.rrule),
       ].join(', '),
     ].join(' · ');
   }
@@ -834,7 +853,8 @@ class _ScheduleCardState extends State<_ScheduleCard> {
                           spacing: 8,
                           children: [
                             TextButton(
-                              onPressed: () => _beginEdit(event),
+                              onPressed:
+                                  _saving ? null : () => _beginEdit(event),
                               child: Text(s.edit),
                             ),
                             TextButton(
