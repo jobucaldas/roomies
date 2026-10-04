@@ -1,3 +1,5 @@
+import 'datetime_format.dart';
+
 class ScheduledEventRequest {
   ScheduledEventRequest({
     required this.title,
@@ -102,6 +104,10 @@ ScheduledEventRequest buildScheduledEventRequest({
   }
   if (start.length != 16 || zone.trim().isEmpty) {
     throw FormatException('Local start and IANA timezone are required.');
+  }
+  final untilAt = count.trim().isNotEmpty ? null : tryParseApiDateTime(until);
+  if (untilAt != null && !untilAt.isAfter(DateTime.parse(start))) {
+    throw FormatException('Until must be after the local start.');
   }
   return ScheduledEventRequest(
     title: trimmedTitle,

@@ -75,4 +75,21 @@ void main() {
       'FREQ=WEEKLY;INTERVAL=1;COUNT=2',
     );
   });
+
+  test('until must fall after the local start', () {
+    ScheduledEventRequest build(String until) => buildScheduledEventRequest(
+          title: 'Bins',
+          start: '2025-01-02T09:00',
+          zone: 'UTC',
+          freq: 'DAILY',
+          interval: '1',
+          count: '',
+          until: until,
+          exdates: '',
+        );
+    expect(() => build('20250101T090000'), throwsFormatException);
+    expect(() => build('20250102T090000'), throwsFormatException);
+    expect(build('20250105T090000').rrule,
+        'FREQ=DAILY;INTERVAL=1;UNTIL=20250105T090000');
+  });
 }

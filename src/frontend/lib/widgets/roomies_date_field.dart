@@ -8,7 +8,8 @@ enum RoomiesDateFieldKind { date, time, dateTime }
 
 String _two(int v) => v.toString().padLeft(2, '0');
 
-String _apiDate(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${_two(d.month)}-${_two(d.day)}';
+String _apiDate(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${_two(d.month)}-${_two(d.day)}';
 
 String _apiTime(TimeOfDay t) => '${_two(t.hour)}:${_two(t.minute)}';
 
@@ -38,6 +39,7 @@ class RoomiesDateField extends StatefulWidget {
   final bool compact;
   final bool multiple;
   final bool clearable;
+
   /// Date-only pick that reuses the time of day of this controller's value
   /// (recurrence exceptions and UNTIL must line up with the start time).
   final TextEditingController? timeFrom;
@@ -215,9 +217,8 @@ class _RoomiesTimeFieldState extends State<RoomiesTimeField> {
   late final TextEditingController _controller =
       TextEditingController(text: _format(widget.minutes));
 
-  static String _format(int? minutes) => minutes == null
-      ? ''
-      : '${_two(minutes ~/ 60)}:${_two(minutes % 60)}';
+  static String _format(int? minutes) =>
+      minutes == null ? '' : '${_two(minutes ~/ 60)}:${_two(minutes % 60)}';
 
   @override
   void didUpdateWidget(covariant RoomiesTimeField old) {
