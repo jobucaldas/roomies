@@ -9,6 +9,7 @@ import '../../l10n/strings.dart';
 import '../../models/models.dart';
 import '../../push/push_service.dart';
 import '../../state/app_state.dart';
+import '../../widgets/roomies_date_field.dart';
 import '../../widgets/roomies_ui.dart';
 
 const _fieldGap = 14.0;
@@ -310,47 +311,34 @@ class _PreferencesCardState extends State<_PreferencesCard> {
                 ),
               ]),
               _FieldRow([
-                TextFormField(
-                  key: ValueKey('quiet-start-${_value.quietStartMinutes}'),
-                  initialValue: minutesTime(_value.quietStartMinutes),
-                  decoration: InputDecoration(labelText: s.quietStartLocal),
-                  keyboardType: TextInputType.datetime,
-                  onChanged: (raw) {
-                    final minutes = timeMinutes(raw);
-                    setState(
-                      () => _value = minutes == null
-                          ? _value.copyWith(clearQuietStart: true)
-                          : _value.copyWith(quietStartMinutes: minutes),
-                    );
-                  },
+                RoomiesTimeField(
+                  label: s.quietStartLocal,
+                  minutes: _value.quietStartMinutes,
+                  clearable: true,
+                  onChanged: (minutes) => setState(
+                    () => _value = minutes == null
+                        ? _value.copyWith(clearQuietStart: true)
+                        : _value.copyWith(quietStartMinutes: minutes),
+                  ),
                 ),
-                TextFormField(
-                  key: ValueKey('quiet-end-${_value.quietEndMinutes}'),
-                  initialValue: minutesTime(_value.quietEndMinutes),
-                  decoration: InputDecoration(labelText: s.quietEndLocal),
-                  keyboardType: TextInputType.datetime,
-                  onChanged: (raw) {
-                    final minutes = timeMinutes(raw);
-                    setState(
-                      () => _value = minutes == null
-                          ? _value.copyWith(clearQuietEnd: true)
-                          : _value.copyWith(quietEndMinutes: minutes),
-                    );
-                  },
+                RoomiesTimeField(
+                  label: s.quietEndLocal,
+                  minutes: _value.quietEndMinutes,
+                  clearable: true,
+                  onChanged: (minutes) => setState(
+                    () => _value = minutes == null
+                        ? _value.copyWith(clearQuietEnd: true)
+                        : _value.copyWith(quietEndMinutes: minutes),
+                  ),
                 ),
-                TextFormField(
-                  key: ValueKey('digest-${_value.digestMinutes}'),
-                  initialValue: minutesTime(_value.digestMinutes),
-                  decoration: InputDecoration(labelText: s.dailyDigestTimeLocal),
-                  keyboardType: TextInputType.datetime,
-                  onChanged: (raw) {
-                    final minutes = timeMinutes(raw);
-                    setState(
-                      () => _value = _value.copyWith(
-                        digestMinutes: minutes ?? _value.digestMinutes,
-                      ),
-                    );
-                  },
+                RoomiesTimeField(
+                  label: s.dailyDigestTimeLocal,
+                  minutes: _value.digestMinutes,
+                  onChanged: (minutes) => setState(
+                    () => _value = _value.copyWith(
+                      digestMinutes: minutes ?? _value.digestMinutes,
+                    ),
+                  ),
                 ),
               ]),
             ]),
@@ -803,9 +791,10 @@ class _ScheduleCardState extends State<_ScheduleCard> {
                   decoration: InputDecoration(labelText: s.title),
                 ),
                 _FieldRow([
-                  TextFormField(
+                  RoomiesDateField(
                     controller: _start,
-                    decoration: InputDecoration(labelText: s.localStart),
+                    kind: RoomiesDateFieldKind.dateTime,
+                    label: s.localStart,
                   ),
                   TextFormField(
                     controller: _zone,
@@ -848,13 +837,21 @@ class _ScheduleCardState extends State<_ScheduleCard> {
                   ),
                 ]),
                 _FieldRow([
-                  TextFormField(
+                  RoomiesDateField(
                     controller: _until,
-                    decoration: InputDecoration(labelText: s.untilOptional),
+                    kind: RoomiesDateFieldKind.dateTime,
+                    label: s.untilOptional,
+                    compact: true,
+                    clearable: true,
+                    timeFrom: _start,
                   ),
-                  TextFormField(
+                  RoomiesDateField(
                     controller: _exdates,
-                    decoration: InputDecoration(labelText: s.exdateLocalTimes),
+                    kind: RoomiesDateFieldKind.dateTime,
+                    label: s.exdateLocalTimes,
+                    multiple: true,
+                    clearable: true,
+                    timeFrom: _start,
                   ),
                 ]),
               ]),

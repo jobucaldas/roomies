@@ -332,6 +332,14 @@ class RoomiesStrings {
   String get enable => _t('Enable', 'Ativar', 'Activar');
   String get createCalendarEvent =>
       _t('Create calendar event', 'Criar evento', 'Crear evento');
+  String get pickStartAndEnd => _t(
+      'Pick a start and an end.',
+      'Escolha início e fim.',
+      'Elige inicio y fin.');
+  String get endAfterStart => _t(
+      'End must be after the start.',
+      'O fim deve ser depois do início.',
+      'El fin debe ser posterior al inicio.');
   String get calendarEventSaved =>
       _t('Calendar event saved.', 'Evento salvo.', 'Evento guardado.');
   String get calendarEventDeleted =>
@@ -460,12 +468,11 @@ class RoomiesStrings {
       'Count (1–366; leave blank to use until)',
       'Contagem (1–366; deixe em branco para usar até)',
       'Cantidad (1–366; deja en blanco para usar hasta)');
-  String get untilOptional => _t('Until (optional, YYYYMMDDTHHMMSS)',
-      'Até (opcional, YYYYMMDDTHHMMSS)', 'Hasta (opcional, YYYYMMDDTHHMMSS)');
+  String get untilOptional => _t('Until (optional)', 'Até (opcional)', 'Hasta (opcional)');
   String get exdateLocalTimes => _t(
-      'EXDATE local times (comma-separated)',
-      'EXDATE horários locais (separados por vírgula)',
-      'EXDATE horas locales (separadas por comas)');
+      'Skipped occurrences (optional)',
+      'Ocorrências ignoradas (opcional)',
+      'Ocurrencias omitidas (opcional)');
   String get createScheduledEvent => _t('Create scheduled event',
       'Criar evento agendado', 'Crear evento programado');
   String get saveScheduledEvent => _t('Save scheduled event',

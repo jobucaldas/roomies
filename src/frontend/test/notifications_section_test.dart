@@ -6,6 +6,7 @@ import 'package:roomies/core/roles.dart';
 import 'package:roomies/models/models.dart';
 import 'package:roomies/screens/house/notifications_section.dart';
 import 'package:roomies/state/app_state.dart';
+import 'package:roomies/widgets/roomies_date_field.dart';
 
 class _FakeApi extends ApiClient {
   _FakeApi({this.devices = const [], this.events = const []})
@@ -90,6 +91,7 @@ void main() {
     await _pump(tester, _FakeApi(),
         size: const Size(390, 800), role: HouseRole.monitor);
     expect(tester.takeException(), isNull);
-    expect(find.byType(TextFormField), findsNWidgets(4));
+    expect(find.byType(TextFormField), findsOneWidget);
+    expect(find.byType(RoomiesTimeField), findsNWidgets(3));
   });
 }
