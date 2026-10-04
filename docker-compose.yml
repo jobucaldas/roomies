@@ -1,10 +1,52 @@
+# Development stack: builds everything from this checkout.
+#   docker compose up --build                 # http://localhost:8080
+#   docker compose run --rm test-backend      # gofmt, vet, tests
+#   docker compose run --rm test-frontend     # flutter analyze + test
+#   docker compose run --rm apk               # debug APK
+# Works without a .env; copy .env.example to .env to change settings.
+# Running Roomies rather than hacking on it? Use the compose file in the README.
+name: roomies
+
+x-backend: &backend
+  build:
+    context: src/backend
+    target: dev
+  volumes:
+    - ./src/backend:/app:Z
+    - gocache:/root/.cache/go-build
+    - gomod:/go/pkg/mod
+  environment:
+    DATABASE_URL: postgres://roomies:${POSTGRES_PASSWORD:-roomies}@db:5432/roomies?sslmode=disable
+    ROOMIES_PUBLIC_BASE_URL: ${ROOMIES_PUBLIC_BASE_URL:-http://localhost:8080}
+    CORS_ALLOWED_ORIGINS: ${ROOMIES_PUBLIC_BASE_URL:-http://localhost:8080}
+    JWT_SECRET: ${JWT_SECRET:-}
+    WORKOS_API_KEY: ${WORKOS_API_KEY:-}
+    WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
+    SMTP_HOST: ${SMTP_HOST:-}
+    SMTP_PORT: ${SMTP_PORT:-1025}
+    SMTP_USERNAME: ${SMTP_USERNAME:-}
+    SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    SMTP_FROM: ${SMTP_FROM:-Roomies <no-reply@roomies.local>}
+    INVITATION_DELIVERY_KEY_ID: ${INVITATION_DELIVERY_KEY_ID:-}
+    INVITATION_DELIVERY_KEY: ${INVITATION_DELIVERY_KEY:-}
+    NOTIFICATION_DELIVERY_KEY_ID: ${NOTIFICATION_DELIVERY_KEY_ID:-}
+    NOTIFICATION_DELIVERY_KEY: ${NOTIFICATION_DELIVERY_KEY:-}
+    WEB_PUSH_PUBLIC_KEY: ${WEB_PUSH_PUBLIC_KEY:-}
+    WEB_PUSH_PRIVATE_KEY: ${WEB_PUSH_PRIVATE_KEY:-}
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+
 services:
   db:
     image: docker.io/postgres:16-alpine
     environment:
       POSTGRES_USER: roomies
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-roomies}
       POSTGRES_DB: roomies
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -12,120 +54,73 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
+  # API and background worker: `go run` on the mounted src/backend.
+  # After changing Go code: docker compose restart backend worker
   backend:
-    build:
-      context: src/backend
-      dockerfile: Dockerfile
-    command: ["serve"]
-    environment:
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
-      PORT: "8080"
-      WORKER_HEALTH_PORT: "8081"
-      APP_ENV: production
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost}
-      ROOMIES_PUBLIC_BASE_URL: ${ROOMIES_PUBLIC_BASE_URL:-http://localhost}
-      INVITATION_TTL_HOURS: ${INVITATION_TTL_HOURS:-168}
-      JOB_POLL_INTERVAL_SECONDS: ${JOB_POLL_INTERVAL_SECONDS:-2}
-      JOB_LEASE_SECONDS: ${JOB_LEASE_SECONDS:-30}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-1025}
-      SMTP_USERNAME: ${SMTP_USERNAME:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-Roomies <no-reply@roomies.local>}
-      INVITATION_DELIVERY_KEY_ID: ${INVITATION_DELIVERY_KEY_ID:-}
-      INVITATION_DELIVERY_KEY: ${INVITATION_DELIVERY_KEY:-}
-      INVITATION_DELIVERY_OLD_KEYS: ${INVITATION_DELIVERY_OLD_KEYS:-}
-      NOTIFICATION_DELIVERY_KEY_ID: ${NOTIFICATION_DELIVERY_KEY_ID:-}
-      NOTIFICATION_DELIVERY_KEY: ${NOTIFICATION_DELIVERY_KEY:-}
-      NOTIFICATION_DELIVERY_OLD_KEYS: ${NOTIFICATION_DELIVERY_OLD_KEYS:-}
-      WEB_PUSH_PUBLIC_KEY: ${WEB_PUSH_PUBLIC_KEY:-}
-      WEB_PUSH_PRIVATE_KEY: ${WEB_PUSH_PRIVATE_KEY:-}
-      WEB_PUSH_SUBJECT: ${WEB_PUSH_SUBJECT:-mailto:no-reply@roomies.local}
-      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
-      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
-      WORKOS_API_KEY: ${WORKOS_API_KEY:-}
-      WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
-      WORKOS_REDIRECT_URI: ${WORKOS_REDIRECT_URI:-}
-    ports:
-      - "${ROOMIES_BACKEND_PORT:-8080}:8080"
-    depends_on:
-      db:
-        condition: service_healthy
+    <<: *backend
+    command: ["go", "run", ".", "serve"]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/readyz"]
-      interval: 30s
+      interval: 5s
       timeout: 5s
-      retries: 3
+      retries: 60
+      start_period: 120s
 
   worker:
+    <<: *backend
+    command: ["go", "run", ".", "worker"]
+
+  # Flutter web bundle built from src/frontend, served by Caddy next to the API.
+  # After changing the app: docker compose up --build -d web
+  web:
+    build:
+      context: src/frontend
+      target: local
+    ports:
+      # HTTP_PORT must match the port in ROOMIES_PUBLIC_BASE_URL.
+      - "${HTTP_PORT:-8080}:8080"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Tooling: nothing to install on the host.
+  test-backend:
+    profiles: [tools]
     build:
       context: src/backend
-      dockerfile: Dockerfile
-    command: ["worker"]
+      target: dev
+    volumes:
+      - ./src/backend:/app:Z
+      - gocache:/root/.cache/go-build
+      - gomod:/go/pkg/mod
     environment:
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
-      PORT: "8080"
-      WORKER_HEALTH_PORT: "8081"
-      APP_ENV: production
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost}
-      ROOMIES_PUBLIC_BASE_URL: ${ROOMIES_PUBLIC_BASE_URL:-http://localhost}
-      INVITATION_TTL_HOURS: ${INVITATION_TTL_HOURS:-168}
-      JOB_POLL_INTERVAL_SECONDS: ${JOB_POLL_INTERVAL_SECONDS:-2}
-      JOB_LEASE_SECONDS: ${JOB_LEASE_SECONDS:-30}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-1025}
-      SMTP_USERNAME: ${SMTP_USERNAME:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-Roomies <no-reply@roomies.local>}
-      INVITATION_DELIVERY_KEY_ID: ${INVITATION_DELIVERY_KEY_ID:-}
-      INVITATION_DELIVERY_KEY: ${INVITATION_DELIVERY_KEY:-}
-      INVITATION_DELIVERY_OLD_KEYS: ${INVITATION_DELIVERY_OLD_KEYS:-}
-      NOTIFICATION_DELIVERY_KEY_ID: ${NOTIFICATION_DELIVERY_KEY_ID:-}
-      NOTIFICATION_DELIVERY_KEY: ${NOTIFICATION_DELIVERY_KEY:-}
-      NOTIFICATION_DELIVERY_OLD_KEYS: ${NOTIFICATION_DELIVERY_OLD_KEYS:-}
-      WEB_PUSH_PUBLIC_KEY: ${WEB_PUSH_PUBLIC_KEY:-}
-      WEB_PUSH_PRIVATE_KEY: ${WEB_PUSH_PRIVATE_KEY:-}
-      WEB_PUSH_SUBJECT: ${WEB_PUSH_SUBJECT:-mailto:no-reply@roomies.local}
-      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
-      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      DATABASE_URL: postgres://roomies:${POSTGRES_PASSWORD:-roomies}@db:5432/roomies?sslmode=disable
     depends_on:
       db:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/readyz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+    command: ["sh", "-c", 'test -z "$$(gofmt -l .)" && go vet ./... && go test ./...']
 
-  frontend:
-    build:
-      context: .
-      dockerfile: src/flutter/Dockerfile
-      args:
-        ROOMIES_API_URL: ${ROOMIES_API_URL:-/api}
+  test-frontend:
+    profiles: [tools]
+    image: ghcr.io/cirruslabs/flutter:3.27.1
     volumes:
-      - frontend_dist:/export
-    depends_on:
-      backend:
-        condition: service_healthy
-    command: ["/bin/sh", "-c", "cp -a /app/dist/. /export/ && tail -f /dev/null"]
+      - ./src/frontend:/workspace:Z
+    working_dir: /workspace
+    command: ["bash", "-lc", "flutter pub get && flutter analyze && flutter test"]
 
-  caddy:
-    image: docker.io/caddy:2.8-alpine
-    ports:
-      - "${ROOMIES_HTTP_PORT:-80}:80"
+  # Debug APK; it asks for a server on first launch.
+  # Output: src/frontend/build/app/outputs/flutter-apk/
+  apk:
+    profiles: [tools]
+    image: ghcr.io/cirruslabs/flutter:3.27.1
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - frontend_dist:/usr/share/caddy/html
-    depends_on:
-      backend:
-        condition: service_healthy
-      frontend:
-        condition: service_started
+      - ./src/frontend:/workspace:Z
+    working_dir: /workspace
+    command: ["bash", "-lc", "flutter pub get && flutter build apk --debug --dart-define=ROOMIES_API_URL="]
 
 volumes:
   pgdata:
-  frontend_dist:
+  gocache:
+  gomod:
