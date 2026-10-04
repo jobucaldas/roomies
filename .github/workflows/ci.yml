@@ -243,7 +243,11 @@ jobs:
           docker compose pull db
           docker compose up -d --pull never
           timeout 120 sh -c 'until curl -fsS http://localhost:8080/ >/dev/null; do sleep 2; done'
-          timeout 120 sh -c 'until [ "$(curl -sS -o /dev/null -w "%{http_code}" http://localhost:8080/api/auth/me)" = 401 ]; do sleep 2; done'
+          for _ in $(seq 1 60); do
+            [ "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:8080/api/auth/me)" = 401 ] && break
+            sleep 2
+          done
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:8080/api/auth/me)" = 401
           curl -fsS http://localhost:8080/some/deep/link | grep -qi '<html'
           test "$(docker compose ps --status running -q | wc -l)" = 4
       - if: failure()
