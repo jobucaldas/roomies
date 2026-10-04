@@ -18,27 +18,46 @@ name: roomies
 x-backend: &backend
   image: ghcr.io/jobucaldas/roomies-backend:nightly
   environment:
-    DATABASE_URL: postgres://roomies:${POSTGRES_PASSWORD}@db:5432/roomies?sslmode=disable
+    DATABASE_URL: postgres://roomies:${POSTGRES_PASSWORD}@db:5432/roomies?sslmode=verify-full&sslrootcert=/tls/ca.crt
     APP_ENV: production
     JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
     ROOMIES_PUBLIC_BASE_URL: ${ROOMIES_PUBLIC_BASE_URL:?set ROOMIES_PUBLIC_BASE_URL in .env}
     CORS_ALLOWED_ORIGINS: ${ROOMIES_PUBLIC_BASE_URL}
+    TLS_CERT_FILE: /tls/backend.crt
+    TLS_KEY_FILE: /tls/backend.key
     WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
     WORKOS_API_KEY: ${WORKOS_API_KEY:-}
+  volumes:
+    - tls:/tls:ro
   depends_on:
     db:
       condition: service_healthy
   restart: unless-stopped
 
 services:
+  # One-shot: issues the private CA and certificates that encrypt traffic
+  # between the containers below. Runs as root only to set key ownership.
+  tls:
+    image: ghcr.io/jobucaldas/roomies-backend:nightly
+    command: ["tls-init"]
+    user: "0"
+    volumes:
+      - tls:/tls
+
   db:
     image: postgres:16-alpine
+    command: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/tls/db.crt", "-c", "ssl_key_file=/tls/db.key",
+      "-c", "ssl_min_protocol_version=TLSv1.2", "-c", "hba_file=/tls/pg_hba.conf"]
     environment:
       POSTGRES_USER: roomies
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: roomies
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - tls:/tls:ro
+    depends_on:
+      tls:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U roomies -d roomies"]
       interval: 5s
@@ -66,6 +85,7 @@ services:
       # - "443:443"
     volumes:
       - caddy:/data
+      - tls:/tls:ro
     depends_on:
       - backend
     restart: unless-stopped
@@ -73,6 +93,7 @@ services:
 volumes:
   pgdata:
   caddy:
+  tls:
 ```
 
 **2. Save this as `.env` next to it** (keep it private):
@@ -93,9 +114,11 @@ docker compose up -d
 curl -i http://localhost:8080/api/auth/me   # 401 means it is up
 ```
 
-Open `ROOMIES_PUBLIC_BASE_URL`. Update with `docker compose pull && docker compose up -d`; pin `:nightly` to a `YYYYMMDDHHMMSS_<shortsha>` tag to stay on a fixed version. Data lives in the `pgdata` volume.
+Open `ROOMIES_PUBLIC_BASE_URL`. With `APP_ENV: production` the server refuses to start unless that URL is `https://` (or `localhost`), so put it behind `SITE_ADDRESS` or your own TLS proxy. Update with `docker compose pull && docker compose up -d`; pin `:nightly` to a `YYYYMMDDHHMMSS_<shortsha>` tag to stay on a fixed version. Data lives in the `pgdata` volume.
 
 Optional backend variables (email invitations, Web Push, FCM) are listed with comments in [`.env.example`](.env.example); add the ones you set to the `x-backend` environment.
+
+**Encryption in transit.** Browsers and apps reach Caddy over HTTPS when `SITE_ADDRESS` is a domain (HSTS is sent). Between containers, `tls-init` issues a private CA: Caddy reaches the API, and the API and worker reach PostgreSQL, over TLS with certificate checks; PostgreSQL rejects plaintext TCP connections. Invitation email requires STARTTLS or TLS (`SMTP_TLS`). Using an external PostgreSQL? Point `DATABASE_URL` at it with `sslmode=verify-full`; production refuses `disable`, `allow`, and `prefer`.
 
 **WorkOS AuthKit (optional).** Without it, people sign up with email and password. To use hosted sign-in, create a [WorkOS](https://workos.com/docs/authkit) project, set `WORKOS_CLIENT_ID` and `WORKOS_API_KEY`, and register `{ROOMIES_PUBLIC_BASE_URL}/callback` as a redirect URI.
 

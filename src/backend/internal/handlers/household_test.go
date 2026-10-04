@@ -31,9 +31,9 @@ func TestHouseholdAuthorizationIsolationIdempotencyAndSafeEvents(t *testing.T) {
 	removed := registerUser(t, env.Router, "Removed", "domain-removed@test", "password123")
 	houseID := createHouse(t, env.Router, admin, "Domain House")
 	otherHouseID := createHouse(t, env.Router, admin, "Other House")
-	addMember(t, env.Router, admin, houseID, getUserID(t, env.Router, monitor), "monitor")
+	addMember(t, env.Router, admin, houseID, monitor, "monitor")
 	removedID := getUserID(t, env.Router, removed)
-	addMember(t, env.Router, admin, houseID, removedID, "member")
+	addMember(t, env.Router, admin, houseID, removed, "member")
 	if _, err := env.DB.Exec(`DELETE FROM house_members WHERE house_id=$1 AND user_id=$2`, houseID, removedID); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestChatOwnMessageTombstoneAndCursorBounds(t *testing.T) {
 	alice := registerUser(t, env.Router, "Alice", "chat-alice@test", "password123")
 	bob := registerUser(t, env.Router, "Bob", "chat-bob@test", "password123")
 	houseID := createHouse(t, env.Router, alice, "Chat House")
-	addMember(t, env.Router, alice, houseID, getUserID(t, env.Router, bob), "member")
+	addMember(t, env.Router, alice, houseID, bob, "member")
 	created := authenticatedRequest(t, env.Router, http.MethodPost, "/api/houses/"+houseID+"/chat", alice, models.ChatMessageRequest{Body: "hello private text"})
 	if created.Code != http.StatusCreated {
 		t.Fatalf("create chat: %d %s", created.Code, created.Body.String())

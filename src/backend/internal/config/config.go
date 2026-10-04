@@ -13,6 +13,13 @@ import (
 
 const developmentJWTSecret = "dev-secret-change-in-production"
 
+// SMTP transport security modes for SMTP_TLS.
+const (
+	SMTPTLSStartTLS = "starttls" // plain connection upgraded with STARTTLS; refuses servers without it
+	SMTPTLSImplicit = "tls"      // TLS from the first byte (usually port 465)
+	SMTPTLSNone     = "none"     // no encryption; only for a local test sink such as Mailpit
+)
+
 type Config struct {
 	Port                        string
 	WorkerHealthPort            string
@@ -29,6 +36,9 @@ type Config struct {
 	SMTPUsername                string
 	SMTPPassword                string
 	SMTPFrom                    string
+	SMTPTLS                     string
+	TLSCertFile                 string
+	TLSKeyFile                  string
 	InvitationDeliveryKeyID     string
 	InvitationDeliveryKey       string
 	InvitationDeliveryOldKeys   string
@@ -63,6 +73,9 @@ func Load() *Config {
 		SMTPUsername:                os.Getenv("SMTP_USERNAME"),
 		SMTPPassword:                os.Getenv("SMTP_PASSWORD"),
 		SMTPFrom:                    getEnv("SMTP_FROM", "Roomies <no-reply@roomies.local>"),
+		SMTPTLS:                     strings.ToLower(getEnv("SMTP_TLS", SMTPTLSStartTLS)),
+		TLSCertFile:                 strings.TrimSpace(os.Getenv("TLS_CERT_FILE")),
+		TLSKeyFile:                  strings.TrimSpace(os.Getenv("TLS_KEY_FILE")),
 		InvitationDeliveryKeyID:     strings.TrimSpace(os.Getenv("INVITATION_DELIVERY_KEY_ID")),
 		InvitationDeliveryKey:       strings.TrimSpace(os.Getenv("INVITATION_DELIVERY_KEY")),
 		InvitationDeliveryOldKeys:   strings.TrimSpace(os.Getenv("INVITATION_DELIVERY_OLD_KEYS")),
@@ -112,6 +125,17 @@ func (c *Config) Validate() error {
 				return errors.New("wildcard CORS origin is not allowed in production")
 			}
 		}
+		// Sessions, passwords, and household data must not cross a network in
+		// clear text; only a loopback origin (trying it on one machine) is exempt.
+		if !strings.HasPrefix(strings.ToLower(c.PublicBaseURL), "https://") && !isLoopbackURL(c.PublicBaseURL) {
+			return errors.New("production ROOMIES_PUBLIC_BASE_URL must use https unless it is a localhost URL")
+		}
+		if insecurePostgresURL(c.DatabaseURL) {
+			return errors.New("production DATABASE_URL must use sslmode=require, verify-ca, or verify-full")
+		}
+	}
+	if (c.TLSCertFile == "") != (c.TLSKeyFile == "") {
+		return errors.New("TLS_CERT_FILE and TLS_KEY_FILE must be provided together")
 	}
 	if (c.WorkOSAPIKey == "") != (c.WorkOSClientID == "") {
 		return errors.New("WORKOS_API_KEY and WORKOS_CLIENT_ID must be provided together")
@@ -187,6 +211,15 @@ func (c *Config) Validate() error {
 		if err != nil || address.Address == "" {
 			return errors.New("SMTP_FROM must be a valid email address")
 		}
+		switch c.SMTPTLS {
+		case "", SMTPTLSStartTLS, SMTPTLSImplicit:
+		case SMTPTLSNone:
+			if c.Environment == "production" && !isLoopbackHost(c.SMTPHost) {
+				return errors.New("SMTP_TLS=none is only allowed for a localhost SMTP server in production")
+			}
+		default:
+			return errors.New("SMTP_TLS must be starttls, tls, or none")
+		}
 	}
 	return nil
 }
@@ -226,10 +259,31 @@ func isLoopbackURL(raw string) bool {
 	if err != nil {
 		return false
 	}
-	host := u.Hostname()
+	return isLoopbackHost(u.Hostname())
+}
+
+func isLoopbackHost(host string) bool {
 	if strings.EqualFold(host, "localhost") {
 		return true
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+// insecurePostgresURL reports a PostgreSQL URL that allows a plaintext
+// connection. A missing sslmode is safe: the database package defaults it to
+// require.
+func insecurePostgresURL(raw string) bool {
+	if !strings.HasPrefix(raw, "postgres://") && !strings.HasPrefix(raw, "postgresql://") {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return true
+	}
+	switch strings.ToLower(u.Query().Get("sslmode")) {
+	case "disable", "allow", "prefer":
+		return true
+	}
+	return false
 }

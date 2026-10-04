@@ -78,20 +78,20 @@ func (r *NotificationRepository) GetPreferences(ctx context.Context, houseID, us
 func (r *NotificationRepository) PutPreferences(ctx context.Context, p models.NotificationPreferences) error {
 	_, err := time.LoadLocation(p.Timezone)
 	if err != nil {
-		return errors.New("invalid IANA timezone")
+		return invalidInput("invalid IANA timezone")
 	}
 	if p.Cadence != "immediate" && p.Cadence != "daily_digest" {
-		return errors.New("invalid cadence")
+		return invalidInput("invalid cadence")
 	}
 	if (p.QuietStartMinutes == nil) != (p.QuietEndMinutes == nil) {
-		return errors.New("quiet hours require both start and end")
+		return invalidInput("quiet hours require both start and end")
 	}
 	valid := func(v int) bool { return v >= 0 && v < 1440 }
 	if p.QuietStartMinutes != nil && (!valid(*p.QuietStartMinutes) || !valid(*p.QuietEndMinutes)) {
-		return errors.New("quiet hour minutes must be 0..1439")
+		return invalidInput("quiet hour minutes must be 0..1439")
 	}
 	if !valid(p.DigestMinutes) {
-		return errors.New("digest minutes must be 0..1439")
+		return invalidInput("digest minutes must be 0..1439")
 	}
 	_, err = r.db.ExecContext(ctx, `INSERT INTO notification_preferences(house_id,user_id,expense_created_enabled,reminder_enabled,cadence,timezone,quiet_start_minutes,quiet_end_minutes,digest_minutes,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(house_id,user_id) DO UPDATE SET expense_created_enabled=excluded.expense_created_enabled,reminder_enabled=excluded.reminder_enabled,cadence=excluded.cadence,timezone=excluded.timezone,quiet_start_minutes=excluded.quiet_start_minutes,quiet_end_minutes=excluded.quiet_end_minutes,digest_minutes=excluded.digest_minutes,updated_at=excluded.updated_at`, p.HouseID, p.UserID, p.ExpenseCreatedEnabled, p.ReminderEnabled, p.Cadence, p.Timezone, p.QuietStartMinutes, p.QuietEndMinutes, p.DigestMinutes, r.clock.Now())
 	return err
@@ -99,29 +99,29 @@ func (r *NotificationRepository) PutPreferences(ctx context.Context, p models.No
 
 func (r *NotificationRepository) CreateSubscription(ctx context.Context, houseID, userID string, req models.CreateNotificationSubscriptionRequest) (*models.NotificationSubscription, error) {
 	if r.cipher == nil {
-		return nil, errors.New("notification delivery encryption is not configured")
+		return nil, invalidInput("notification delivery encryption is not configured")
 	}
 	identity := ""
 	secret := subscriptionSecret{}
 	switch req.Platform {
 	case "web_push":
 		if req.Endpoint == "" || req.P256DH == "" || req.Auth == "" {
-			return nil, errors.New("web push endpoint and keys are required")
+			return nil, invalidInput("web push endpoint and keys are required")
 		}
 		endpoint, err := url.Parse(req.Endpoint)
 		if err != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil || len(req.Endpoint) > 2048 || len(req.P256DH) > 256 || len(req.Auth) > 256 {
-			return nil, errors.New("web push subscription is invalid")
+			return nil, invalidInput("web push subscription is invalid")
 		}
 		identity = req.Endpoint
 		secret = subscriptionSecret{Endpoint: req.Endpoint, P256DH: req.P256DH, Auth: req.Auth}
 	case "android_fcm":
 		if req.Token == "" || len(req.Token) > 4096 {
-			return nil, errors.New("valid FCM token is required")
+			return nil, invalidInput("valid FCM token is required")
 		}
 		identity = req.Token
 		secret.Token = req.Token
 	default:
-		return nil, errors.New("platform must be web_push or android_fcm")
+		return nil, invalidInput("platform must be web_push or android_fcm")
 	}
 	sum := sha256.Sum256([]byte(identity))
 	hash := hex.EncodeToString(sum[:])
@@ -185,11 +185,11 @@ func (r *NotificationRepository) UpdateScheduledEvent(ctx context.Context, event
 func (r *NotificationRepository) saveScheduledEvent(ctx context.Context, event *models.ScheduledHouseEvent, update bool) error {
 	spec := recurrence.Spec{Timezone: event.Timezone, DTStartLocal: event.DTStartLocal, Rule: event.RRule, ExDates: event.ExDates}
 	if err := recurrence.Validate(spec, r.clock.Now()); err != nil {
-		return err
+		return asInputError(err)
 	}
 	next, err := recurrence.Next(spec, r.clock.Now().Add(-time.Nanosecond))
 	if err != nil {
-		return err
+		return asInputError(err)
 	}
 	event.NextOccurrenceAt = next
 	body, _ := json.Marshal(event.ExDates)
@@ -316,7 +316,7 @@ func (r *NotificationRepository) WithAuthorizedDispatch(ctx context.Context, req
 			return summary, err
 		}
 		if r.cipher == nil {
-			return summary, errors.New("notification delivery encryption is not configured")
+			return summary, invalidInput("notification delivery encryption is not configured")
 		}
 		var targets []struct {
 			ID         string `db:"id"`

@@ -58,6 +58,16 @@ String resolveApiBaseUrl({
   return value.replaceAll(RegExp(r'/+$'), '');
 }
 
+/// Native apps call the server directly, so a plain `http://` API would carry
+/// passwords, session tokens, and household data in clear text. Only a
+/// loopback address (a developer's own machine) may skip TLS.
+void requireEncryptedApiBase(String baseUrl) {
+  final uri = Uri.tryParse(baseUrl);
+  if (uri != null && uri.scheme == 'http' && !_isLoopbackHost(uri.host)) {
+    throw StateError('ROOMIES_API_URL must use https:// (got $baseUrl)');
+  }
+}
+
 class ApiClient {
   ApiClient({
     SessionStorage? storage,
@@ -375,19 +385,6 @@ class ApiClient {
           .toList();
     }
     throw ApiError.http(response.statusCode, response.body);
-  }
-
-  Future<HouseMember> addMember(String id, String userId, String role) async {
-    final gen = _generation;
-    return _send(
-      () => _http.post(
-        Uri.parse('$baseUrl/houses/$id/members'),
-        headers: _headers(),
-        body: jsonEncode({'user_id': userId, 'role': role}),
-      ),
-      HouseMember.fromJson,
-      generation: gen,
-    );
   }
 
   Future<MessageResponse> updateMemberRole(

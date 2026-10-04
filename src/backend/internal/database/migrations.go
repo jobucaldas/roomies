@@ -68,6 +68,17 @@ func migrations(driver string) []schemaMigration {
 				`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_workos_user_id ON users(workos_user_id) WHERE workos_user_id IS NOT NULL AND workos_user_id != ''`,
 			),
 		},
+		{
+			version: 10,
+			name:    "revoked_sessions",
+			up: execStatements(
+				`CREATE TABLE IF NOT EXISTS revoked_sessions (
+					jti TEXT PRIMARY KEY,
+					expires_at TIMESTAMP NOT NULL
+				)`,
+				`CREATE INDEX IF NOT EXISTS idx_revoked_sessions_expires ON revoked_sessions(expires_at)`,
+			),
+		},
 	}
 }
 

@@ -61,6 +61,31 @@ func (r *UserRepository) EmailExists(ctx context.Context, email string) (bool, e
 	return count > 0, err
 }
 
+// SessionActive reports whether a session token may still be used: its user
+// exists and the token was not revoked by signing out.
+func (r *UserRepository) SessionActive(ctx context.Context, userID, jti string) (bool, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM users u
+		WHERE u.id = $1 AND NOT EXISTS (SELECT 1 FROM revoked_sessions s WHERE s.jti = $2)`, userID, jti)
+	return count > 0, err
+}
+
+// RevokeSession blocks a session token until it would have expired anyway.
+func (r *UserRepository) RevokeSession(ctx context.Context, jti string, expiresAt time.Time) error {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO revoked_sessions (jti, expires_at) VALUES ($1, $2)
+		ON CONFLICT (jti) DO NOTHING`, jti, expiresAt.UTC())
+	return err
+}
+
+// PurgeExpiredRevocations drops revocations for tokens that have expired.
+func (r *UserRepository) PurgeExpiredRevocations(ctx context.Context, now time.Time) (int64, error) {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM revoked_sessions WHERE expires_at < $1`, now.UTC())
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 func (r *UserRepository) LinkWorkOSUser(ctx context.Context, userID, workosUserID, name string) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE users SET workos_user_id = $1, name = $2 WHERE id = $3`,

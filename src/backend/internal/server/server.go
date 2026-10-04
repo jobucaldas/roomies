@@ -75,6 +75,9 @@ func NewHandler(deps Dependencies) http.Handler {
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.Header().Set("Referrer-Policy", "no-referrer")
 			w.Header().Set("X-Frame-Options", "DENY")
+			// API responses carry personal and financial data; keep them out
+			// of browser, proxy, and CDN caches.
+			w.Header().Set("Cache-Control", "no-store")
 			next.ServeHTTP(w, r)
 		})
 	})
@@ -114,7 +117,7 @@ func NewHandler(deps Dependencies) http.Handler {
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.JWTAuth(deps.Config.JWTSecret))
+		r.Use(middleware.JWTAuth(deps.Config.JWTSecret, deps.UserRepo))
 		r.Use(middleware.Idempotency(deps.ReliabilityRepo))
 
 		r.Get("/api/auth/me", authHandler.Me)
@@ -174,7 +177,6 @@ func NewHandler(deps Dependencies) http.Handler {
 
 				r.Route("/members", func(r chi.Router) {
 					r.Get("/", houseHandler.ListMembers)
-					r.Post("/", houseHandler.AddMember)
 					r.Put("/{userId}", houseHandler.UpdateMemberRole)
 					r.Delete("/{userId}", houseHandler.RemoveMember)
 				})

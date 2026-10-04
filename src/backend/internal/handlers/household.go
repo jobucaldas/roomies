@@ -48,7 +48,7 @@ func householdError(w http.ResponseWriter, err error) {
 	case errors.Is(err, repository.ErrInvalidOccurrence):
 		writeJSON(w, 400, models.ErrorResponse{Error: err.Error()})
 	default:
-		writeJSON(w, 400, models.ErrorResponse{Error: err.Error()})
+		writeRepositoryError(w, err)
 	}
 }
 func versionParam(w http.ResponseWriter, r *http.Request) (int64, bool) {
