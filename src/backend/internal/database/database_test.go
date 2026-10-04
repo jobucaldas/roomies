@@ -228,6 +228,7 @@ func assertCurrentPostgresMigrationState(t *testing.T, db *sqlx.DB, legacyName s
 		{7, "house_scoped_notification_capabilities"},
 		{8, "household_domains"},
 		{9, "workos_authkit_users"},
+		{10, "revoked_sessions"},
 	}
 	if len(ledger) != len(expected) {
 		t.Fatalf("unexpected migration ledger: %#v", ledger)
@@ -388,6 +389,7 @@ func TestSQLiteMigrationsUpgradeLegacySchema(t *testing.T) {
 		"house_scoped_notification_capabilities",
 		"household_domains",
 		"workos_authkit_users",
+		"revoked_sessions",
 	}
 	if len(names) != len(wantNames) {
 		t.Fatalf("unexpected migration ledger names: %#v", names)

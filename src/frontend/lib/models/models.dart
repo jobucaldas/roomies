@@ -292,6 +292,7 @@ class HouseInvitation {
     this.acceptedAt,
     this.revokedBy,
     this.revokedAt,
+    this.manualAcceptanceUrl,
   });
 
   final String id;
@@ -307,6 +308,10 @@ class HouseInvitation {
   final String? revokedBy;
   final String? revokedAt;
 
+  /// One-time acceptance link; only present in the response that created
+  /// the invitation.
+  final String? manualAcceptanceUrl;
+
   factory HouseInvitation.fromJson(Map<String, dynamic> json) =>
       HouseInvitation(
         id: json['id'] as String,
@@ -321,6 +326,7 @@ class HouseInvitation {
         acceptedAt: json['accepted_at'] as String?,
         revokedBy: json['revoked_by'] as String?,
         revokedAt: json['revoked_at'] as String?,
+        manualAcceptanceUrl: json['manual_acceptance_url'] as String?,
       );
 }
 

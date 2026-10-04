@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,7 +31,15 @@ const (
 	defaultLoginLimit    = 40
 	defaultRegisterLimit = 90
 	defaultCallbackLimit = 15
+	// Per-account budget so a botnet spread over many IPs still gets only a
+	// handful of guesses per account.
+	defaultAccountLoginLimit = 10
+	accountLoginWindow       = 15 * time.Minute
 )
+
+// dummyPasswordHash is compared when an email has no password so a failed
+// login takes as long whether or not the account exists.
+var dummyPasswordHash, _ = bcrypt.GenerateFromPassword([]byte("roomies-timing-equalizer"), bcrypt.DefaultCost)
 
 type AuthHandler struct {
 	userRepo      *repository.UserRepository
@@ -38,6 +47,7 @@ type AuthHandler struct {
 	workos        *workosauth.Client
 	publicBaseURL string
 	limiter       *middleware.WindowLimiter
+	accountLimit  *middleware.WindowLimiter
 	loginLimit    int
 	registerLimit int
 	callbackLimit int
@@ -50,6 +60,7 @@ func NewAuthHandler(userRepo *repository.UserRepository, jwtSecret string, worko
 		jwtSecret:     jwtSecret,
 		workos:        workos,
 		limiter:       middleware.NewWindowLimiter(time.Minute),
+		accountLimit:  middleware.NewWindowLimiter(accountLoginWindow),
 		loginLimit:    defaultLoginLimit,
 		registerLimit: defaultRegisterLimit,
 		callbackLimit: defaultCallbackLimit,
@@ -77,6 +88,7 @@ func (h *AuthHandler) SetRateLimit(limit int) {
 	h.registerLimit = limit
 	h.callbackLimit = limit
 }
+
 
 func (h *AuthHandler) Config(w http.ResponseWriter, r *http.Request) {
 	enabled := h.workos != nil && h.workos.Enabled()
@@ -261,14 +273,19 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "email and password are required"})
 		return
 	}
-
-	user, err := h.userRepo.GetByEmail(r.Context(), req.Email)
-	if err != nil {
-		writeJSON(w, http.StatusUnauthorized, models.ErrorResponse{Error: "invalid email or password"})
+	if h.accountLimit != nil && !h.accountLimit.Allow("login|"+req.Email, defaultAccountLoginLimit) {
+		w.Header().Set("Retry-After", strconv.Itoa(int(accountLoginWindow.Seconds())))
+		writeJSON(w, http.StatusTooManyRequests, models.ErrorResponse{Error: "too many requests"})
 		return
 	}
 
-	if user.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
+	user, err := h.userRepo.GetByEmail(r.Context(), req.Email)
+	hash := dummyPasswordHash
+	if err == nil && user.PasswordHash != "" {
+		hash = []byte(user.PasswordHash)
+	}
+	compareErr := bcrypt.CompareHashAndPassword(hash, []byte(req.Password))
+	if err != nil || user.PasswordHash == "" || compareErr != nil {
 		writeJSON(w, http.StatusUnauthorized, models.ErrorResponse{Error: "invalid email or password"})
 		return
 	}
@@ -284,6 +301,17 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	if h.workos != nil {
 		logoutURL = h.workos.LogoutURL(h.workosSessionID(r))
 	}
+	// Revoke the token itself: clearing the cookie alone would leave a copied
+	// token (or a native app's bearer) usable until it expires.
+	if claims := h.sessionClaims(r); claims != nil {
+		jti, _ := claims["jti"].(string)
+		if exp, err := claims.GetExpirationTime(); err == nil && exp != nil && jti != "" {
+			if err := h.userRepo.RevokeSession(r.Context(), jti, exp.Time); err != nil {
+				writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "failed to end session"})
+				return
+			}
+		}
+	}
 	secure := h.secureCookie(r)
 	clearCookie(w, middleware.SessionCookieName, true, secure)
 	clearCookie(w, middleware.SessionHintCookieName, false, secure)
@@ -294,21 +322,25 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// sessionClaims returns the claims of the request's still-valid Roomies
+// session token, or nil for missing, expired, or forged tokens.
+func (h *AuthHandler) sessionClaims(r *http.Request) jwt.MapClaims {
+	raw, ok := middleware.SessionToken(r)
+	if !ok {
+		return nil
+	}
+	claims, err := middleware.ParseSessionClaims(raw, h.jwtSecret)
+	if err != nil {
+		return nil
+	}
+	return claims
+}
+
 // workosSessionID reads the AuthKit session id from a still-valid Roomies
 // session token. Expired or forged tokens yield "".
 func (h *AuthHandler) workosSessionID(r *http.Request) string {
-	raw, ok := middleware.SessionToken(r)
-	if !ok {
-		return ""
-	}
-	token, err := jwt.Parse(raw, func(*jwt.Token) (interface{}, error) {
-		return []byte(h.jwtSecret), nil
-	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
-	if err != nil || !token.Valid {
-		return ""
-	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
+	claims := h.sessionClaims(r)
+	if claims == nil {
 		return ""
 	}
 	sid, _ := claims[workosSessionClaim].(string)
@@ -326,9 +358,14 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) generateToken(user *models.User, workosSessionID string) (string, error) {
+	jti, err := randomURLToken()
+	if err != nil {
+		return "", err
+	}
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
 		"email":   user.Email,
+		"jti":     jti,
 		"exp":     time.Now().Add(h.sessionTTL).Unix(),
 		"iat":     time.Now().Unix(),
 	}

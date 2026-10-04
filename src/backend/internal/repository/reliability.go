@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -71,7 +73,10 @@ func NewReliabilityRepository(db *sqlx.DB, clk roomiesclock.Clock, deliveryCiphe
 
 func (r *ReliabilityRepository) CreateInvitation(ctx context.Context, params CreateInvitationParams) (*models.HouseInvitation, string, error) {
 	now := r.clock.Now()
-	token := models.NewID()
+	token, err := newInvitationToken()
+	if err != nil {
+		return nil, "", err
+	}
 	tokenHash := hashToken(token)
 	invite := &models.HouseInvitation{
 		ID:        models.NewID(),
@@ -777,6 +782,16 @@ func BuildInvitationAcceptanceURL(publicBaseURL, token string) (string, error) {
 	query.Set("token", token)
 	base.RawQuery = query.Encode()
 	return base.String(), nil
+}
+
+// newInvitationToken returns a 256-bit random bearer token. Only its SHA-256
+// hash is stored.
+func newInvitationToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
 func hashToken(token string) string {

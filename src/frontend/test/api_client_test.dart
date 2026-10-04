@@ -82,4 +82,17 @@ void main() {
       isFalse,
     );
   });
+
+  test('native API base must be encrypted unless it is loopback', () {
+    expect(() => requireEncryptedApiBase('https://roomies.example/api'),
+        returnsNormally);
+    expect(() => requireEncryptedApiBase('http://localhost:8080/api'),
+        returnsNormally);
+    expect(() => requireEncryptedApiBase('http://127.0.0.1:8080/api'),
+        returnsNormally);
+    expect(() => requireEncryptedApiBase('http://roomies.example/api'),
+        throwsStateError);
+    expect(() => requireEncryptedApiBase('http://192.168.1.20:8080/api'),
+        throwsStateError);
+  });
 }

@@ -152,59 +152,6 @@ func (h *HouseHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, members)
 }
 
-func (h *HouseHandler) AddMember(w http.ResponseWriter, r *http.Request) {
-	houseID := chi.URLParam(r, "id")
-	userID := middleware.GetUserID(r.Context())
-
-	member, err := h.houseRepo.GetMember(r.Context(), houseID, userID)
-	if err != nil {
-		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
-		return
-	}
-	if member.Role != "admin" {
-		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "only admins can add members"})
-		return
-	}
-
-	var req models.AddMemberRequest
-	if err := decodeJSON(w, r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "invalid request body"})
-		return
-	}
-
-	if req.Role == "" {
-		req.Role = "member"
-	}
-	if req.Role != "admin" && req.Role != "member" && req.Role != "monitor" {
-		writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "invalid role: must be admin, member, or monitor"})
-		return
-	}
-
-	targetUser, err := h.userRepo.GetByID(r.Context(), req.UserID)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "user not found"})
-		return
-	}
-
-	newMember := &models.HouseMember{
-		ID:       models.NewID(),
-		HouseID:  houseID,
-		UserID:   targetUser.ID,
-		Role:     req.Role,
-		JoinedAt: time.Now(),
-	}
-
-	if err := h.houseRepo.AddMember(r.Context(), newMember); err != nil {
-		writeJSON(w, http.StatusConflict, models.ErrorResponse{Error: "user is already a member"})
-		return
-	}
-	if h.reliabilityRepo != nil {
-		_ = h.reliabilityRepo.AppendHouseEvent(r.Context(), houseID, "house.member.added", &userID, "house_member", targetUser.ID, map[string]any{"role": req.Role})
-	}
-
-	writeJSON(w, http.StatusCreated, newMember)
-}
-
 func (h *HouseHandler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 	houseID := chi.URLParam(r, "id")
 	targetUserID := chi.URLParam(r, "userId")

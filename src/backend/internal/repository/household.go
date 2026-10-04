@@ -169,7 +169,7 @@ func (r *HouseholdRepository) GetChore(ctx context.Context, houseID, id string) 
 }
 func (r *HouseholdRepository) SaveChore(ctx context.Context, chore *models.Chore, actorID string, create bool) error {
 	if err := recurrence.Validate(recurrence.Spec{Timezone: chore.Timezone, DTStartLocal: chore.DueLocal, Rule: chore.RRule, ExDates: chore.ExDates}, r.clock.Now()); err != nil {
-		return err
+		return asInputError(err)
 	}
 	body, _ := json.Marshal(chore.ExDates)
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -271,13 +271,13 @@ func (r *HouseholdRepository) GetCalendar(ctx context.Context, houseID, id strin
 func (r *HouseholdRepository) SaveCalendar(ctx context.Context, event *models.CalendarEvent, actorID string, create bool) error {
 	spec := recurrence.Spec{Timezone: event.Timezone, DTStartLocal: event.StartLocal, Rule: event.RRule, ExDates: event.ExDates}
 	if err := recurrence.Validate(spec, r.clock.Now()); err != nil {
-		return err
+		return asInputError(err)
 	}
 	loc, _ := time.LoadLocation(event.Timezone)
 	start, e1 := time.ParseInLocation("2006-01-02T15:04:05", event.StartLocal, loc)
 	end, e2 := time.ParseInLocation("2006-01-02T15:04:05", event.EndLocal, loc)
 	if e1 != nil || e2 != nil || !end.After(start) {
-		return errors.New("end_local must be after start_local")
+		return invalidInput("end_local must be after start_local")
 	}
 	body, _ := json.Marshal(event.ExDates)
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -345,7 +345,7 @@ func (r *HouseholdRepository) GetChat(ctx context.Context, houseID, id string) (
 func (r *HouseholdRepository) CreateChat(ctx context.Context, houseID, actorID, body string) (*models.ChatMessage, error) {
 	body = strings.TrimSpace(body)
 	if body == "" || len([]rune(body)) > chatBodyLimit {
-		return nil, errors.New("body must contain 1 to 4000 characters")
+		return nil, invalidInput("body must contain 1 to 4000 characters")
 	}
 	id := models.NewID()
 	now := r.clock.Now()
@@ -369,7 +369,7 @@ func (r *HouseholdRepository) CreateChat(ctx context.Context, houseID, actorID, 
 func (r *HouseholdRepository) EditChat(ctx context.Context, houseID, id, actorID, body string) (*models.ChatMessage, error) {
 	body = strings.TrimSpace(body)
 	if body == "" || len([]rune(body)) > chatBodyLimit {
-		return nil, errors.New("body must contain 1 to 4000 characters")
+		return nil, invalidInput("body must contain 1 to 4000 characters")
 	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -517,7 +517,7 @@ func ensureActiveAssignee(ctx context.Context, tx *sqlx.Tx, houseID string, user
 		return err
 	}
 	if n == 0 {
-		return errors.New("assignee must be an active house member")
+		return invalidInput("assignee must be an active house member")
 	}
 	return nil
 }

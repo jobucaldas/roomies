@@ -102,3 +102,48 @@ func TestDevelopmentSecretOnlyAllowedOnLoopback(t *testing.T) {
 		t.Fatalf("explicit secret should be accepted: %v", err)
 	}
 }
+
+func TestProductionConfigRequiresEncryptedTransport(t *testing.T) {
+	base := func() *Config {
+		return &Config{
+			Environment:        "production",
+			JWTSecret:          "a-production-secret-that-is-long-enough",
+			CORSAllowedOrigins: []string{"https://roomies.example"},
+			Port:               "8080",
+			WorkerHealthPort:   "8081",
+			DatabaseURL:        "postgres://roomies:pw@db:5432/roomies?sslmode=verify-full&sslrootcert=/tls/ca.crt",
+			PublicBaseURL:      "https://roomies.example",
+			InvitationTTL:      168,
+			JWTAccessTTLHours:  8,
+			JobPollInterval:    2,
+			JobLeaseSeconds:    30,
+		}
+	}
+	if err := base().Validate(); err != nil {
+		t.Fatalf("expected TLS configuration to validate: %v", err)
+	}
+	for name, mutate := range map[string]func(*Config){
+		"http public origin":      func(c *Config) { c.PublicBaseURL = "http://roomies.example" },
+		"plaintext database":      func(c *Config) { c.DatabaseURL = "postgres://roomies:pw@db:5432/roomies?sslmode=disable" },
+		"opportunistic database":  func(c *Config) { c.DatabaseURL = "postgresql://roomies:pw@db/roomies?sslmode=prefer" },
+		"cert without key":        func(c *Config) { c.TLSCertFile = "/tls/backend.crt" },
+		"smtp without encryption": func(c *Config) { c.SMTPHost = "smtp.example"; c.SMTPTLS = SMTPTLSNone },
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := base()
+			c.SMTPPort = 587
+			c.SMTPFrom = "sender@example.test"
+			c.InvitationDeliveryKeyID = "k"
+			c.InvitationDeliveryKey = testDeliveryKey()
+			mutate(c)
+			if err := c.Validate(); err == nil {
+				t.Fatal("expected configuration to be rejected")
+			}
+		})
+	}
+	loopback := base()
+	loopback.PublicBaseURL = "http://localhost:8080"
+	if err := loopback.Validate(); err != nil {
+		t.Fatalf("expected loopback trial origin to validate: %v", err)
+	}
+}

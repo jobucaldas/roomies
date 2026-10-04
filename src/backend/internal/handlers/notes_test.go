@@ -140,20 +140,10 @@ func TestMonitorCannotCreateNote(t *testing.T) {
 
 	aliceToken := registerUser(t, router, "Alice", "mon-note@test.com", "password123")
 	monitorToken := registerUser(t, router, "Mon", "mon-note2@test.com", "password123")
-	monitorUserID := getUserID(t, router, monitorToken)
 
 	houseID := createHouse(t, router, aliceToken, "Monitor Notes")
 
-	addBody := map[string]string{"user_id": monitorUserID, "role": "monitor"}
-	addData, _ := json.Marshal(addBody)
-	addReq := httptest.NewRequest("POST", "/api/houses/"+houseID+"/members", bytes.NewReader(addData))
-	addReq.Header.Set("Content-Type", "application/json")
-	addReq.Header.Set("Authorization", "Bearer "+aliceToken)
-	addW := httptest.NewRecorder()
-	router.ServeHTTP(addW, addReq)
-	if addW.Code != http.StatusCreated {
-		t.Fatalf("add monitor failed: %d", addW.Code)
-	}
+	addMember(t, router, aliceToken, houseID, monitorToken, "monitor")
 
 	body := models.CreateNoteRequest{Title: "Test", Content: "Test content"}
 	data, _ := json.Marshal(body)

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/strings.dart';
@@ -26,8 +27,6 @@ class MembersSection extends StatefulWidget {
 }
 
 class _MembersSectionState extends State<MembersSection> {
-  final _userId = TextEditingController();
-  var _role = 'member';
   String _status = '';
   final _pendingRoles = <String, String>{};
 
@@ -36,6 +35,7 @@ class _MembersSectionState extends State<MembersSection> {
   var _invitesLoading = false;
   List<HouseInvitation> _invites = [];
   String? _inviteError;
+  String? _inviteLink;
 
   @override
   void initState() {
@@ -45,7 +45,6 @@ class _MembersSectionState extends State<MembersSection> {
 
   @override
   void dispose() {
-    _userId.dispose();
     _inviteEmail.dispose();
     super.dispose();
   }
@@ -73,20 +72,6 @@ class _MembersSectionState extends State<MembersSection> {
     }
   }
 
-  Future<void> _addMember() async {
-    if (_userId.text.trim().isEmpty) {
-      setState(() => _status = context.read<AppState>().strings.userIdRequired);
-      return;
-    }
-    await context.read<AppState>().api.addMember(
-          widget.houseId,
-          _userId.text.trim(),
-          _role,
-        );
-    setState(() => _status = context.read<AppState>().strings.memberAdded);
-    widget.onRefresh();
-  }
-
   Future<void> _changeRole(HouseMember member, String role) async {
     await context.read<AppState>().api.updateMemberRole(
           widget.houseId,
@@ -111,12 +96,35 @@ class _MembersSectionState extends State<MembersSection> {
       return;
     }
     try {
-      await context.read<AppState>().api.createInvitation(
+      final invite = await context.read<AppState>().api.createInvitation(
             widget.houseId,
             _inviteEmail.text.trim(),
             _inviteRole,
           );
       _inviteEmail.clear();
+      // The link is a bearer token returned only once; it is not stored.
+      setState(() {
+        _inviteError = null;
+        _inviteLink = invite.manualAcceptanceUrl;
+      });
+      await _loadInvites();
+    } catch (error) {
+      setState(() => _inviteError = context.read<AppState>().strings.inviteFailed('$error'));
+    }
+  }
+
+  Future<void> _copyInviteLink(String link) async {
+    final copied = context.read<AppState>().strings.linkCopied;
+    await Clipboard.setData(ClipboardData(text: link));
+    if (mounted) setState(() => _status = copied);
+  }
+
+  Future<void> _revokeInvite(HouseInvitation invite) async {
+    try {
+      await context
+          .read<AppState>()
+          .api
+          .revokeInvitation(widget.houseId, invite.id);
       await _loadInvites();
     } catch (error) {
       setState(() => _inviteError = context.read<AppState>().strings.inviteFailed('$error'));
@@ -171,35 +179,40 @@ class _MembersSectionState extends State<MembersSection> {
                     onPressed: _sendInvite,
                   ),
                   if (_inviteError != null) RoomiesError(_inviteError!),
+                  if (_inviteLink != null) ...[
+                    Text(s.inviteLinkReady),
+                    SelectableText(_inviteLink!),
+                    TextButton(
+                      onPressed: () => _copyInviteLink(_inviteLink!),
+                      child: Text(s.copyLink),
+                    ),
+                  ],
                   RoomiesHeading(s.invitationHistory, level: 3),
                   if (_invitesLoading)
                     Text(s.loadingInvitations)
                   else if (_invites.isEmpty)
-                    Text(s.noInvitationsYet),
+                    Text(s.noInvitationsYet)
+                  else
+                    ..._invites.map(
+                      (invite) => Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 12,
+                        children: [
+                          Text('${invite.email} · ${_roleLabel(s, invite.role)} · ${invite.status}'),
+                          if (invite.status == 'pending')
+                            TextButton(
+                              onPressed: () => _revokeInvite(invite),
+                              child: Text(s.revokeInvitation),
+                            ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
-          RoomiesCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                RoomiesHeading(s.addExistingMember, level: 3),
-                RoomiesLabeledField(
-                  label: s.userId,
-                  child: TextField(controller: _userId),
-                ),
-                DropdownButtonFormField<String>(
-                  value: _role,
-                  items: _roleItems(s),
-                  onChanged: (v) => setState(() => _role = v ?? 'member'),
-                ),
-                RoomiesPrimaryButton(label: s.addMember, onPressed: _addMember),
-                if (_status.isNotEmpty) Text(_status),
-              ],
-            ),
-          ),
         ],
+        if (_status.isNotEmpty) Text(_status),
         ...widget.members.map((member) {
           return RoomiesArticleCard(
             semanticLabel: member.userName,
