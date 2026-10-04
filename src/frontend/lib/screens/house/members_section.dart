@@ -181,7 +181,7 @@ class _MembersSectionState extends State<MembersSection> {
                   if (_inviteError != null) RoomiesError(_inviteError!),
                   if (_inviteLink != null) ...[
                     Text(s.inviteLinkReady),
-                    SelectableText(_inviteLink!),
+                    SelectableText(_inviteLink!, semanticsLabel: _inviteLink),
                     TextButton(
                       onPressed: () => _copyInviteLink(_inviteLink!),
                       child: Text(s.copyLink),
