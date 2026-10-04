@@ -45,6 +45,6 @@ Thumbs.db
 # Coverage
 coverage.out
 *.html
-!src/flutter/web/index.html
+!src/frontend/web/index.html
 
 .worktrees/

@@ -1,4 +1,5 @@
-build/
 .dart_tool/
 .idea/
 *.iml
+build/
+!build/web/
