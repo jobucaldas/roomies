@@ -119,10 +119,12 @@ ScheduledEventRequest buildScheduledEventRequest({
     if (untilAt == null) {
       throw FormatException('Until must be a valid date.');
     }
-    // Compare wall-clock values; a trailing Z must not shift the comparison.
+    // A trailing Z is an instant; without a timezone database it can only be
+    // compared against the local start when the event zone is UTC.
+    final comparable = !untilAt.isUtc || zone.trim().toUpperCase() == 'UTC';
     final naive = DateTime(untilAt.year, untilAt.month, untilAt.day,
         untilAt.hour, untilAt.minute, untilAt.second);
-    if (!naive.isAfter(DateTime.parse(start))) {
+    if (comparable && !naive.isAfter(DateTime.parse(start))) {
       throw FormatException('Until must be after the local start.');
     }
   }
