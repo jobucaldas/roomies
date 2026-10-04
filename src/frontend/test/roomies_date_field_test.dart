@@ -65,4 +65,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(c.text, matches(r'^\d{8}T\d{6}$'));
   });
+
+  testWidgets('time field picks, shows and clears minutes', (tester) async {
+    int? minutes = 8 * 60;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => RoomiesTimeField(
+              label: 'Quiet',
+              minutes: minutes,
+              clearable: true,
+              onChanged: (v) => setState(() => minutes = v),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('08:00'), findsOneWidget);
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(minutes, 8 * 60);
+    await tester.tap(find.byIcon(Icons.clear));
+    await tester.pumpAndSettle();
+    expect(minutes, isNull);
+    expect(find.text('08:00'), findsNothing);
+  });
 }

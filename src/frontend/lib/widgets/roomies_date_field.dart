@@ -193,7 +193,7 @@ class _RoomiesDateFieldState extends State<RoomiesDateField> {
 
 /// Time-of-day field backed by minutes since midnight; opens the native time
 /// picker. [onChanged] receives null when a clearable field is emptied.
-class RoomiesTimeField extends StatelessWidget {
+class RoomiesTimeField extends StatefulWidget {
   const RoomiesTimeField({
     super.key,
     required this.label,
@@ -207,36 +207,55 @@ class RoomiesTimeField extends StatelessWidget {
   final ValueChanged<int?> onChanged;
   final bool clearable;
 
-  Future<void> _pick(BuildContext context) async {
+  @override
+  State<RoomiesTimeField> createState() => _RoomiesTimeFieldState();
+}
+
+class _RoomiesTimeFieldState extends State<RoomiesTimeField> {
+  late final TextEditingController _controller =
+      TextEditingController(text: _format(widget.minutes));
+
+  static String _format(int? minutes) => minutes == null
+      ? ''
+      : '${_two(minutes ~/ 60)}:${_two(minutes % 60)}';
+
+  @override
+  void didUpdateWidget(covariant RoomiesTimeField old) {
+    super.didUpdateWidget(old);
+    final text = _format(widget.minutes);
+    if (_controller.text != text) _controller.text = text;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pick() async {
+    final minutes = widget.minutes;
     final seed = minutes == null
         ? TimeOfDay.now()
-        : TimeOfDay(hour: minutes! ~/ 60, minute: minutes! % 60);
+        : TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60);
     final picked = await showTimePicker(context: context, initialTime: seed);
-    if (picked != null) onChanged(picked.hour * 60 + picked.minute);
+    if (picked != null) widget.onChanged(picked.hour * 60 + picked.minute);
   }
 
   @override
   Widget build(BuildContext context) {
-    final text = minutes == null
-        ? ''
-        : '${_two(minutes! ~/ 60)}:${_two(minutes! % 60)}';
     return TextField(
-      key: ValueKey('time-$label-$text'),
-      controller: TextEditingController(text: text),
+      controller: _controller,
       readOnly: true,
       showCursor: false,
-      onTap: () => _pick(context),
+      onTap: _pick,
       decoration: InputDecoration(
-        labelText: label,
-        suffixIcon: clearable && minutes != null
+        labelText: widget.label,
+        suffixIcon: widget.clearable && widget.minutes != null
             ? IconButton(
                 icon: const Icon(Icons.clear),
-                onPressed: () => onChanged(null),
+                onPressed: () => widget.onChanged(null),
               )
-            : IconButton(
-                icon: const Icon(Icons.schedule),
-                onPressed: () => _pick(context),
-              ),
+            : IconButton(icon: const Icon(Icons.schedule), onPressed: _pick),
       ),
     );
   }
