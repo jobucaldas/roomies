@@ -126,6 +126,8 @@ func TestProductionConfigRequiresEncryptedTransport(t *testing.T) {
 		"http public origin":      func(c *Config) { c.PublicBaseURL = "http://roomies.example" },
 		"plaintext database":      func(c *Config) { c.DatabaseURL = "postgres://roomies:pw@db:5432/roomies?sslmode=disable" },
 		"opportunistic database":  func(c *Config) { c.DatabaseURL = "postgresql://roomies:pw@db/roomies?sslmode=prefer" },
+		"unverified database":     func(c *Config) { c.DatabaseURL = "postgres://roomies:pw@db/roomies?sslmode=require" },
+		"default database mode":   func(c *Config) { c.DatabaseURL = "postgres://roomies:pw@db/roomies" },
 		"cert without key":        func(c *Config) { c.TLSCertFile = "/tls/backend.crt" },
 		"smtp without encryption": func(c *Config) { c.SMTPHost = "smtp.example"; c.SMTPTLS = SMTPTLSNone },
 	} {

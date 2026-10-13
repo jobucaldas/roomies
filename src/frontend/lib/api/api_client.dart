@@ -58,14 +58,22 @@ String resolveApiBaseUrl({
   return value.replaceAll(RegExp(r'/+$'), '');
 }
 
+/// The Android emulator's alias for the developer machine's loopback.
+const _androidEmulatorHost = '10.0.2.2';
+
 /// Native apps call the server directly, so a plain `http://` API would carry
 /// passwords, session tokens, and household data in clear text. Only a
-/// loopback address (a developer's own machine) may skip TLS.
-void requireEncryptedApiBase(String baseUrl) {
+/// loopback address (a developer's own machine) may skip TLS, plus the
+/// emulator alias in debug builds; on a real device `10.0.2.2` is just
+/// another network address.
+void requireEncryptedApiBase(String baseUrl,
+    {bool allowEmulatorHost = kDebugMode}) {
   final uri = Uri.tryParse(baseUrl);
-  if (uri != null && uri.scheme == 'http' && !_isLoopbackHost(uri.host)) {
-    throw StateError('ROOMIES_API_URL must use https:// (got $baseUrl)');
+  if (uri == null || uri.scheme != 'http' || _isLoopbackHost(uri.host)) {
+    return;
   }
+  if (allowEmulatorHost && uri.host == _androidEmulatorHost) return;
+  throw StateError('ROOMIES_API_URL must use https:// (got $baseUrl)');
 }
 
 class ApiClient {

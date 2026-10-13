@@ -1,7 +1,9 @@
 // Package internaltls issues the private CA and server certificates that
 // encrypt traffic between Roomies containers (web -> backend, backend/worker
 // -> PostgreSQL). It runs as the one-shot `tls-init` subcommand before the
-// other services start.
+// other services start. The CA is kept across runs (its key in a root-only
+// directory) so reissuing one server certificate never changes the trust
+// root that running services already loaded.
 package internaltls
 
 import (
@@ -23,6 +25,7 @@ import (
 
 const (
 	CAFile         = "ca.crt"
+	CAKeyFile      = "private/ca.key"
 	DBCertFile     = "db.crt"
 	DBKeyFile      = "db.key"
 	BackendCert    = "backend.crt"
@@ -56,9 +59,9 @@ hostnossl all all ::/0        reject
 `
 
 // Ensure writes the CA, the PostgreSQL and backend certificates, and
-// pg_hba.conf into dir. Existing material is kept while it is complete, still
-// matches opts, and is not close to expiry; otherwise everything is reissued.
-// The CA private key is never written to disk.
+// pg_hba.conf into dir. A server certificate is reissued only when it is
+// missing, no longer matches opts, chains to another CA, or is close to
+// expiry; the CA is replaced only when it is missing or close to expiry.
 func Ensure(dir string, opts Options) (issued bool, err error) {
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -66,35 +69,23 @@ func Ensure(dir string, opts Options) (issued bool, err error) {
 	if len(opts.DBHosts) == 0 || len(opts.BackendHosts) == 0 {
 		return false, errors.New("db and backend hosts are required")
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(CAKeyFile)), 0o700); err != nil {
 		return false, err
 	}
-	if current(dir, opts) {
-		return false, writeFile(filepath.Join(dir, PGHBAFile), []byte(PGHBA), 0o644, -1, -1)
+	if err := os.Chmod(filepath.Join(dir, filepath.Dir(CAKeyFile)), 0o700); err != nil {
+		return false, err
 	}
 	now := opts.Now()
-	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return false, err
+	caCert, caKey := loadCA(dir, now)
+	newCA := caCert == nil
+	if newCA {
+		if caCert, caKey, err = issueCA(dir, now); err != nil {
+			return false, err
+		}
+		issued = true
 	}
-	caTemplate := &x509.Certificate{
-		SerialNumber:          serial(),
-		Subject:               pkix.Name{CommonName: "Roomies internal CA"},
-		NotBefore:             now.Add(-time.Hour),
-		NotAfter:              now.Add(validity),
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-		MaxPathLenZero:        true,
-	}
-	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
-	if err != nil {
-		return false, err
-	}
-	caCert, err := x509.ParseCertificate(caDER)
-	if err != nil {
-		return false, err
-	}
+	roots := x509.NewCertPool()
+	roots.AddCert(caCert)
 	leaves := []struct {
 		cert, key  string
 		hosts      []string
@@ -106,6 +97,9 @@ func Ensure(dir string, opts Options) (issued bool, err error) {
 		{BackendCert, BackendKey, opts.BackendHosts, opts.BackendUser, opts.BackendUser, 0o600, "roomies-backend"},
 	}
 	for _, leaf := range leaves {
+		if !newCA && leafCurrent(dir, leaf.cert, leaf.key, leaf.hosts, roots, now) {
+			continue
+		}
 		certPEM, keyPEM, err := issueLeaf(caCert, caKey, leaf.commonName, leaf.hosts, now)
 		if err != nil {
 			return false, err
@@ -116,12 +110,72 @@ func Ensure(dir string, opts Options) (issued bool, err error) {
 		if err := writeFile(filepath.Join(dir, leaf.cert), certPEM, 0o644, -1, -1); err != nil {
 			return false, err
 		}
+		issued = true
 	}
-	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
-	if err := writeFile(filepath.Join(dir, CAFile), caPEM, 0o644, -1, -1); err != nil {
-		return false, err
+	return issued, writeFile(filepath.Join(dir, PGHBAFile), []byte(PGHBA), 0o644, -1, -1)
+}
+
+// loadCA returns the stored CA when its certificate and key match and it is
+// not close to expiry.
+func loadCA(dir string, now time.Time) (*x509.Certificate, *ecdsa.PrivateKey) {
+	cert, err := readCert(filepath.Join(dir, CAFile))
+	if err != nil || !cert.IsCA || now.Add(renewThreshold).After(cert.NotAfter) {
+		return nil, nil
 	}
-	return true, writeFile(filepath.Join(dir, PGHBAFile), []byte(PGHBA), 0o644, -1, -1)
+	data, err := os.ReadFile(filepath.Join(dir, CAKeyFile))
+	if err != nil {
+		return nil, nil
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, nil
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, nil
+	}
+	key, ok := parsed.(*ecdsa.PrivateKey)
+	if !ok || !key.PublicKey.Equal(cert.PublicKey) {
+		return nil, nil
+	}
+	return cert, key
+}
+
+func issueCA(dir string, now time.Time) (*x509.Certificate, *ecdsa.PrivateKey, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, nil, err
+	}
+	template := &x509.Certificate{
+		SerialNumber:          serial(),
+		Subject:               pkix.Name{CommonName: "Roomies internal CA"},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(validity),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		MaxPathLenZero:        true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		return nil, nil, err
+	}
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		return nil, nil, err
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Root-only: other containers mount this volume but must not sign.
+	if err := writeFile(filepath.Join(dir, CAKeyFile), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0o600, 0, 0); err != nil {
+		return nil, nil, err
+	}
+	if err := writeFile(filepath.Join(dir, CAFile), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644, -1, -1); err != nil {
+		return nil, nil, err
+	}
+	return cert, key, nil
 }
 
 func issueLeaf(ca *x509.Certificate, caKey *ecdsa.PrivateKey, commonName string, hosts []string, now time.Time) (certPEM, keyPEM []byte, err error) {
@@ -156,31 +210,22 @@ func issueLeaf(ca *x509.Certificate, caKey *ecdsa.PrivateKey, commonName string,
 		pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), nil
 }
 
-// current reports whether every file exists, both leaves chain to the CA for
-// their configured hosts, and nothing expires within renewThreshold.
-func current(dir string, opts Options) bool {
-	caCert, err := readCert(filepath.Join(dir, CAFile))
-	if err != nil || opts.Now().Add(renewThreshold).After(caCert.NotAfter) {
+// leafCurrent reports a server certificate whose key exists, that chains to
+// roots for every host, and that is not close to expiry.
+func leafCurrent(dir, certFile, keyFile string, hosts []string, roots *x509.CertPool, now time.Time) bool {
+	if _, err := os.Stat(filepath.Join(dir, keyFile)); err != nil {
 		return false
 	}
-	roots := x509.NewCertPool()
-	roots.AddCert(caCert)
-	check := func(certFile, keyFile string, hosts []string) bool {
-		if _, err := os.Stat(filepath.Join(dir, keyFile)); err != nil {
-			return false
-		}
-		cert, err := readCert(filepath.Join(dir, certFile))
-		if err != nil || opts.Now().Add(renewThreshold).After(cert.NotAfter) {
-			return false
-		}
-		for _, host := range hosts {
-			if _, err := cert.Verify(x509.VerifyOptions{DNSName: host, Roots: roots, CurrentTime: opts.Now()}); err != nil {
-				return false
-			}
-		}
-		return true
+	cert, err := readCert(filepath.Join(dir, certFile))
+	if err != nil || now.Add(renewThreshold).After(cert.NotAfter) {
+		return false
 	}
-	return check(DBCertFile, DBKeyFile, opts.DBHosts) && check(BackendCert, BackendKey, opts.BackendHosts)
+	for _, host := range hosts {
+		if _, err := cert.Verify(x509.VerifyOptions{DNSName: host, Roots: roots, CurrentTime: now}); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func readCert(path string) (*x509.Certificate, error) {

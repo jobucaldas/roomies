@@ -56,9 +56,20 @@ func TestEnsureIssuesVerifiableCertificatesOnce(t *testing.T) {
 	if err != nil || issued {
 		t.Fatalf("second run should keep existing material: issued=%v err=%v", issued, err)
 	}
+	caBefore, _ := os.ReadFile(filepath.Join(dir, CAFile))
+	backendBefore, _ := os.ReadFile(filepath.Join(dir, BackendCert))
 	opts.DBHosts = []string{"postgres"}
 	if issued, err = Ensure(dir, opts); err != nil || !issued {
 		t.Fatalf("changed hosts should reissue: issued=%v err=%v", issued, err)
+	}
+	// Services that already trust the CA keep working: only the db leaf changed.
+	caAfter, _ := os.ReadFile(filepath.Join(dir, CAFile))
+	backendAfter, _ := os.ReadFile(filepath.Join(dir, BackendCert))
+	if string(caBefore) != string(caAfter) || string(backendBefore) != string(backendAfter) {
+		t.Fatal("reissuing one server certificate must keep the CA and the other certificate")
+	}
+	if info, err := os.Stat(filepath.Join(dir, CAKeyFile)); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("CA key must be private: %v %v", info, err)
 	}
 	opts.Now = func() time.Time { return time.Now().Add(validity) }
 	if issued, err = Ensure(dir, opts); err != nil || !issued {

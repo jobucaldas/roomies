@@ -118,7 +118,7 @@ Open `ROOMIES_PUBLIC_BASE_URL`. With `APP_ENV: production` the server refuses to
 
 Optional backend variables (email invitations, Web Push, FCM) are listed with comments in [`.env.example`](.env.example); add the ones you set to the `x-backend` environment.
 
-**Encryption in transit.** Browsers and apps reach Caddy over HTTPS when `SITE_ADDRESS` is a domain (HSTS is sent). Between containers, `tls-init` issues a private CA: Caddy reaches the API, and the API and worker reach PostgreSQL, over TLS with certificate checks; PostgreSQL rejects plaintext TCP connections. Invitation email requires STARTTLS or TLS (`SMTP_TLS`). Using an external PostgreSQL? Point `DATABASE_URL` at it with `sslmode=verify-full`; production refuses `disable`, `allow`, and `prefer`.
+**Encryption in transit.** Browsers and apps reach Caddy over HTTPS when `SITE_ADDRESS` is a domain (HSTS is sent). Between containers, `tls-init` issues a private CA (kept across restarts, key readable by root only): Caddy reaches the API, and the API and worker reach PostgreSQL, over TLS with certificate checks; PostgreSQL rejects plaintext TCP connections. Invitation email requires STARTTLS or TLS (`SMTP_TLS`). Using an external PostgreSQL? Point `DATABASE_URL` at it with `sslmode=verify-full` (plus `sslrootcert=` for a private CA); production refuses any weaker mode, since only `verify-full` checks the server's certificate and hostname.
 
 **WorkOS AuthKit (optional).** Without it, people sign up with email and password. To use hosted sign-in, create a [WorkOS](https://workos.com/docs/authkit) project, set `WORKOS_CLIENT_ID` and `WORKOS_API_KEY`, and register `{ROOMIES_PUBLIC_BASE_URL}/callback` as a redirect URI.
 

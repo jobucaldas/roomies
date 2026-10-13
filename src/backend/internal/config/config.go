@@ -130,8 +130,8 @@ func (c *Config) Validate() error {
 		if !strings.HasPrefix(strings.ToLower(c.PublicBaseURL), "https://") && !isLoopbackURL(c.PublicBaseURL) {
 			return errors.New("production ROOMIES_PUBLIC_BASE_URL must use https unless it is a localhost URL")
 		}
-		if insecurePostgresURL(c.DatabaseURL) {
-			return errors.New("production DATABASE_URL must use sslmode=require, verify-ca, or verify-full")
+		if unverifiedPostgresURL(c.DatabaseURL) {
+			return errors.New("production DATABASE_URL must use sslmode=verify-full (add sslrootcert for a private CA) so the server's certificate and hostname are checked")
 		}
 	}
 	if (c.TLSCertFile == "") != (c.TLSKeyFile == "") {
@@ -270,10 +270,10 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// insecurePostgresURL reports a PostgreSQL URL that allows a plaintext
-// connection. A missing sslmode is safe: the database package defaults it to
-// require.
-func insecurePostgresURL(raw string) bool {
+// unverifiedPostgresURL reports a PostgreSQL URL that would connect without
+// checking the server certificate and hostname (anything but verify-full,
+// including a missing sslmode, which the database package treats as require).
+func unverifiedPostgresURL(raw string) bool {
 	if !strings.HasPrefix(raw, "postgres://") && !strings.HasPrefix(raw, "postgresql://") {
 		return false
 	}
@@ -281,9 +281,5 @@ func insecurePostgresURL(raw string) bool {
 	if err != nil {
 		return true
 	}
-	switch strings.ToLower(u.Query().Get("sslmode")) {
-	case "disable", "allow", "prefer":
-		return true
-	}
-	return false
+	return !strings.EqualFold(u.Query().Get("sslmode"), "verify-full")
 }
