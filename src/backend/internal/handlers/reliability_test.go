@@ -216,15 +216,7 @@ func TestHouseEventsSSEClosesAfterMemberRemoval(t *testing.T) {
 	memberToken := registerUser(t, env.Router, "Member", "member-events-removal@example.com", "password123")
 	memberID := getUserID(t, env.Router, memberToken)
 	houseID := createHouse(t, env.Router, adminToken, "Events Removal House")
-	addBody, _ := json.Marshal(map[string]string{"user_id": memberID, "role": "member"})
-	addReq := httptest.NewRequest(http.MethodPost, "/api/houses/"+houseID+"/members", bytes.NewReader(addBody))
-	addReq.Header.Set("Authorization", "Bearer "+adminToken)
-	addReq.Header.Set("Content-Type", "application/json")
-	addRes := httptest.NewRecorder()
-	env.Router.ServeHTTP(addRes, addReq)
-	if addRes.Code != http.StatusCreated {
-		t.Fatalf("add member failed: %d %s", addRes.Code, addRes.Body.String())
-	}
+	addMember(t, env.Router, adminToken, houseID, memberToken, "member")
 
 	ts := httptest.NewServer(env.Router)
 	defer ts.Close()

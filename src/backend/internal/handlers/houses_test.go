@@ -125,74 +125,28 @@ func TestListHouses(t *testing.T) {
 	}
 }
 
-func TestAddMemberAsAdmin(t *testing.T) {
+func TestMembersJoinOnlyByAcceptingAnInvitation(t *testing.T) {
 	router, _, _, cleanup := setupTest(t)
 	defer cleanup()
 
 	aliceToken := registerUser(t, router, "Alice", "alice4@test.com", "password123")
 	bobToken := registerUser(t, router, "Bob", "bob@test.com", "password123")
-
-	bobUserID := getUserID(t, router, bobToken)
 	houseID := createHouse(t, router, aliceToken, "Shared House")
 
-	body := map[string]string{"user_id": bobUserID, "role": "member"}
-	data, _ := json.Marshal(body)
-	req := httptest.NewRequest("POST", "/api/houses/"+houseID+"/members", bytes.NewReader(data))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+aliceToken)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusCreated {
-		t.Errorf("expected 201, got %d: %s", w.Code, w.Body.String())
+	// Adding someone by user id would expose their name and email to the
+	// house without their consent, so the endpoint no longer exists.
+	direct := authenticatedRequest(t, router, http.MethodPost, "/api/houses/"+houseID+"/members", aliceToken,
+		map[string]string{"user_id": getUserID(t, router, bobToken), "role": "member"})
+	if direct.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected direct add to be unavailable, got %d: %s", direct.Code, direct.Body.String())
 	}
 
-	bobHousesReq := httptest.NewRequest("GET", "/api/houses", nil)
-	bobHousesReq.Header.Set("Authorization", "Bearer "+bobToken)
-	bobW := httptest.NewRecorder()
-	router.ServeHTTP(bobW, bobHousesReq)
-	if bobW.Code != http.StatusOK {
-		t.Errorf("bob houses list failed: %d", bobW.Code)
-	}
+	addMember(t, router, aliceToken, houseID, bobToken, "member")
+	bobW := authenticatedRequest(t, router, http.MethodGet, "/api/houses", bobToken, nil)
 	var bobHouses []models.House
 	json.NewDecoder(bobW.Body).Decode(&bobHouses)
 	if len(bobHouses) != 1 {
-		t.Errorf("expected Bob to see 1 house, got %d", len(bobHouses))
-	}
-}
-
-func TestNonAdminCannotAddMembers(t *testing.T) {
-	router, _, _, cleanup := setupTest(t)
-	defer cleanup()
-
-	aliceToken := registerUser(t, router, "Alice", "alice5@test.com", "password123")
-	bobToken := registerUser(t, router, "Bob", "bob3@test.com", "password123")
-
-	bobUserID := getUserID(t, router, bobToken)
-	charlieToken := registerUser(t, router, "Charlie", "charlie@test.com", "password123")
-	charlieUserID := getUserID(t, router, charlieToken)
-
-	houseID := createHouse(t, router, aliceToken, "House")
-
-	addBody := map[string]string{"user_id": bobUserID, "role": "member"}
-	addData, _ := json.Marshal(addBody)
-	addReq := httptest.NewRequest("POST", "/api/houses/"+houseID+"/members", bytes.NewReader(addData))
-	addReq.Header.Set("Content-Type", "application/json")
-	addReq.Header.Set("Authorization", "Bearer "+aliceToken)
-	addW := httptest.NewRecorder()
-	router.ServeHTTP(addW, addReq)
-	if addW.Code != http.StatusCreated {
-		t.Fatalf("add bob failed: %d %s", addW.Code, addW.Body.String())
-	}
-
-	charlieAddBody := map[string]string{"user_id": charlieUserID, "role": "member"}
-	charlieAddData, _ := json.Marshal(charlieAddBody)
-	charlieReq := httptest.NewRequest("POST", "/api/houses/"+houseID+"/members", bytes.NewReader(charlieAddData))
-	charlieReq.Header.Set("Content-Type", "application/json")
-	charlieReq.Header.Set("Authorization", "Bearer "+bobToken)
-	charlieW := httptest.NewRecorder()
-	router.ServeHTTP(charlieW, charlieReq)
-	if charlieW.Code != http.StatusForbidden {
-		t.Errorf("expected 403, got %d: %s", charlieW.Code, charlieW.Body.String())
+		t.Errorf("expected Bob to see 1 house after accepting, got %d", len(bobHouses))
 	}
 }
 
@@ -206,16 +160,7 @@ func TestRemoveMember(t *testing.T) {
 	bobUserID := getUserID(t, router, bobToken)
 	houseID := createHouse(t, router, aliceToken, "House")
 
-	addBody := map[string]string{"user_id": bobUserID, "role": "member"}
-	addData, _ := json.Marshal(addBody)
-	addReq := httptest.NewRequest("POST", "/api/houses/"+houseID+"/members", bytes.NewReader(addData))
-	addReq.Header.Set("Content-Type", "application/json")
-	addReq.Header.Set("Authorization", "Bearer "+aliceToken)
-	addW := httptest.NewRecorder()
-	router.ServeHTTP(addW, addReq)
-	if addW.Code != http.StatusCreated {
-		t.Fatalf("add bob failed: %d %s", addW.Code, addW.Body.String())
-	}
+	addMember(t, router, aliceToken, houseID, bobToken, "member")
 
 	delReq := httptest.NewRequest("DELETE", "/api/houses/"+houseID+"/members/"+bobUserID, nil)
 	delReq.Header.Set("Authorization", "Bearer "+aliceToken)

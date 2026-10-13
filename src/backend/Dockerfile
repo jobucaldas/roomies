@@ -14,7 +14,8 @@ COPY . .
 RUN go build -trimpath -ldflags="-s -w" -o /roomies-backend .
 
 FROM docker.io/alpine:3.20
-RUN addgroup -S roomies && adduser -S -G roomies roomies
+# Fixed uid: `tls-init` makes backend.key readable by this user only.
+RUN addgroup -S -g 10001 roomies && adduser -S -u 10001 -G roomies roomies
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=build /roomies-backend /roomies-backend
 USER roomies

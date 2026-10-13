@@ -50,7 +50,7 @@ func (h *NotificationHandler) PutPreferences(w http.ResponseWriter, r *http.Requ
 	p.HouseID = chi.URLParam(r, "id")
 	p.UserID = middleware.GetUserID(r.Context())
 	if err := h.repo.PutPreferences(r.Context(), p); err != nil {
-		writeJSON(w, 400, models.ErrorResponse{Error: err.Error()})
+		writeRepositoryError(w, err)
 		return
 	}
 	writeJSON(w, 200, p)
@@ -66,7 +66,7 @@ func (h *NotificationHandler) CreateSubscription(w http.ResponseWriter, r *http.
 	}
 	subscription, err := h.repo.CreateSubscription(r.Context(), chi.URLParam(r, "id"), middleware.GetUserID(r.Context()), req)
 	if err != nil {
-		writeJSON(w, 400, models.ErrorResponse{Error: err.Error()})
+		writeRepositoryError(w, err)
 		return
 	}
 	writeJSON(w, 201, subscription)
@@ -130,7 +130,7 @@ func (h *NotificationHandler) CreateEvent(w http.ResponseWriter, r *http.Request
 	event.HouseID = chi.URLParam(r, "id")
 	event.CreatorID = middleware.GetUserID(r.Context())
 	if err := h.repo.CreateScheduledEvent(r.Context(), event); err != nil {
-		writeJSON(w, 400, models.ErrorResponse{Error: err.Error()})
+		writeRepositoryError(w, err)
 		return
 	}
 	writeJSON(w, 201, event)
@@ -158,7 +158,11 @@ func (h *NotificationHandler) UpdateEvent(w http.ResponseWriter, r *http.Request
 	event.HouseID = existing.HouseID
 	event.CreatorID = existing.CreatorID
 	if err := h.repo.UpdateScheduledEvent(r.Context(), event); err != nil {
-		writeJSON(w, 400, models.ErrorResponse{Error: err.Error()})
+		if errors.Is(err, repository.ErrNotificationNotFound) {
+			writeJSON(w, 404, models.ErrorResponse{Error: "scheduled event not found"})
+			return
+		}
+		writeRepositoryError(w, err)
 		return
 	}
 	writeJSON(w, 200, event)

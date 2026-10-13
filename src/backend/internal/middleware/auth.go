@@ -58,7 +58,29 @@ func sessionToken(r *http.Request) (string, bool) {
 	return raw, raw != ""
 }
 
-func JWTAuth(secret string) func(http.Handler) http.Handler {
+// SessionChecker confirms that a signed session is still usable.
+type SessionChecker interface {
+	SessionActive(ctx context.Context, userID, jti string) (bool, error)
+}
+
+// ParseSessionClaims verifies an HS256 session token and returns its claims.
+func ParseSessionClaims(raw, secret string) (jwt.MapClaims, error) {
+	token, err := jwt.Parse(raw, func(t *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
+	if err != nil || !token.Valid {
+		return nil, jwt.ErrTokenInvalidClaims
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, jwt.ErrTokenInvalidClaims
+	}
+	return claims, nil
+}
+
+// JWTAuth accepts a session only when its signature, expiry, and id are valid
+// and sessions reports it active (not signed out, user not deleted).
+func JWTAuth(secret string, sessions SessionChecker) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			raw, ok := sessionToken(r)
@@ -67,30 +89,30 @@ func JWTAuth(secret string) func(http.Handler) http.Handler {
 				return
 			}
 
-			token, err := jwt.Parse(raw, func(t *jwt.Token) (interface{}, error) {
-				if t.Method != jwt.SigningMethodHS256 {
-					return nil, jwt.ErrSignatureInvalid
-				}
-				return []byte(secret), nil
-			}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
-
-			if err != nil || !token.Valid {
+			claims, err := ParseSessionClaims(raw, secret)
+			if err != nil {
 				writeError(w, http.StatusUnauthorized, "invalid or expired token")
-				return
-			}
-
-			claims, ok := token.Claims.(jwt.MapClaims)
-			if !ok {
-				writeError(w, http.StatusUnauthorized, "invalid token claims")
 				return
 			}
 
 			userID, _ := claims["user_id"].(string)
 			email, _ := claims["email"].(string)
+			jti, _ := claims["jti"].(string)
 
-			if userID == "" {
+			if userID == "" || jti == "" {
 				writeError(w, http.StatusUnauthorized, "invalid token payload")
 				return
+			}
+			if sessions != nil {
+				active, err := sessions.SessionActive(r.Context(), userID, jti)
+				if err != nil {
+					writeError(w, http.StatusServiceUnavailable, "session check unavailable")
+					return
+				}
+				if !active {
+					writeError(w, http.StatusUnauthorized, "session has ended")
+					return
+				}
 			}
 
 			ctx := context.WithValue(r.Context(), userIDKey, userID)

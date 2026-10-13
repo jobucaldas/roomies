@@ -136,29 +136,9 @@ func (h *ExpenseHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expense, err := h.expenseRepo.GetByHouseAndID(r.Context(), houseID, expenseID)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "expense not found"})
+	expense, ok := h.visibleExpense(w, r, houseID, expenseID, userID)
+	if !ok {
 		return
-	}
-
-	if expense.Visibility == "private" && expense.PayerID != userID {
-		visibleUsers, err := h.expenseRepo.GetVisibleUsers(r.Context(), expenseID)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "internal error"})
-			return
-		}
-		canSee := false
-		for _, visibility := range visibleUsers {
-			if visibility.UserID == userID {
-				canSee = true
-				break
-			}
-		}
-		if !canSee {
-			writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "expense not found"})
-			return
-		}
 	}
 
 	splits, err := h.expenseRepo.GetSplits(r.Context(), expenseID)
@@ -185,9 +165,8 @@ func (h *ExpenseHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
 	}
-	expense, err := h.expenseRepo.GetByHouseAndID(r.Context(), houseID, expenseID)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "expense not found"})
+	expense, ok := h.visibleExpense(w, r, houseID, expenseID, userID)
+	if !ok {
 		return
 	}
 	if !canMutateOwnedResource(member, expense.PayerID, userID) {
@@ -276,9 +255,8 @@ func (h *ExpenseHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
 	}
-	expense, err := h.expenseRepo.GetByHouseAndID(r.Context(), houseID, expenseID)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "expense not found"})
+	expense, ok := h.visibleExpense(w, r, houseID, expenseID, userID)
+	if !ok {
 		return
 	}
 	if !canMutateOwnedResource(member, expense.PayerID, userID) {
@@ -307,9 +285,8 @@ func (h *ExpenseHandler) SetVisibility(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, models.ErrorResponse{Error: "not a member"})
 		return
 	}
-	expense, err := h.expenseRepo.GetByHouseAndID(r.Context(), houseID, expenseID)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "expense not found"})
+	expense, ok := h.visibleExpense(w, r, houseID, expenseID, userID)
+	if !ok {
 		return
 	}
 	if !canChangeOwnedResourceVisibility(member, expense.PayerID, userID) {
@@ -353,6 +330,32 @@ func (h *ExpenseHandler) SetVisibility(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": "visibility updated"})
+}
+
+// visibleExpense loads an expense the user may see, answering 404 otherwise,
+// so private expenses stay hidden (and immutable) for every member they were
+// not shared with, admins included.
+func (h *ExpenseHandler) visibleExpense(w http.ResponseWriter, r *http.Request, houseID, expenseID, userID string) (*models.Expense, bool) {
+	expense, err := h.expenseRepo.GetByHouseAndID(r.Context(), houseID, expenseID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "expense not found"})
+		return nil, false
+	}
+	if expense.Visibility != "private" || expense.PayerID == userID {
+		return expense, true
+	}
+	visibleUsers, err := h.expenseRepo.GetVisibleUsers(r.Context(), expenseID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, models.ErrorResponse{Error: "internal error"})
+		return nil, false
+	}
+	for _, visibility := range visibleUsers {
+		if visibility.UserID == userID {
+			return expense, true
+		}
+	}
+	writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "expense not found"})
+	return nil, false
 }
 
 func validateExpenseFields(amount float64, description, date string) (int64, error) {

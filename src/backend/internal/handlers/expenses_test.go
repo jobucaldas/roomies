@@ -74,20 +74,10 @@ func TestMonitorCannotCreateExpense(t *testing.T) {
 
 	aliceToken := registerUser(t, router, "Alice", "monitor-exp@test.com", "password123")
 	monitorToken := registerUser(t, router, "Mon", "mon-exp@test.com", "password123")
-	monitorUserID := getUserID(t, router, monitorToken)
 
 	houseID := createHouse(t, router, aliceToken, "Monitor House")
 
-	addBody := map[string]string{"user_id": monitorUserID, "role": "monitor"}
-	addData, _ := json.Marshal(addBody)
-	addReq := httptest.NewRequest("POST", "/api/houses/"+houseID+"/members", bytes.NewReader(addData))
-	addReq.Header.Set("Content-Type", "application/json")
-	addReq.Header.Set("Authorization", "Bearer "+aliceToken)
-	addW := httptest.NewRecorder()
-	router.ServeHTTP(addW, addReq)
-	if addW.Code != http.StatusCreated {
-		t.Fatalf("add monitor failed: %d %s", addW.Code, addW.Body.String())
-	}
+	addMember(t, router, aliceToken, houseID, monitorToken, "monitor")
 
 	body := models.CreateExpenseRequest{
 		Amount:      30.00,
@@ -175,7 +165,6 @@ func TestNonAuthorCannotDeleteExpense(t *testing.T) {
 
 	aliceToken := registerUser(t, router, "Alice", "non-auth@test.com", "password123")
 	bobToken := registerUser(t, router, "Bob", "non-auth-bob@test.com", "password123")
-	bobUserID := getUserID(t, router, bobToken)
 
 	houseID := createHouse(t, router, aliceToken, "Non-Auth House")
 
@@ -190,16 +179,7 @@ func TestNonAuthorCannotDeleteExpense(t *testing.T) {
 	var expense models.Expense
 	json.NewDecoder(w.Body).Decode(&expense)
 
-	addBody := map[string]string{"user_id": bobUserID, "role": "member"}
-	addData, _ := json.Marshal(addBody)
-	addReq := httptest.NewRequest("POST", "/api/houses/"+houseID+"/members", bytes.NewReader(addData))
-	addReq.Header.Set("Content-Type", "application/json")
-	addReq.Header.Set("Authorization", "Bearer "+aliceToken)
-	addW := httptest.NewRecorder()
-	router.ServeHTTP(addW, addReq)
-	if addW.Code != http.StatusCreated {
-		t.Fatalf("add bob failed: %d %s", addW.Code, addW.Body.String())
-	}
+	addMember(t, router, aliceToken, houseID, bobToken, "member")
 
 	delReq := httptest.NewRequest("DELETE", "/api/houses/"+houseID+"/expenses/"+expense.ID, nil)
 	delReq.Header.Set("Authorization", "Bearer "+bobToken)

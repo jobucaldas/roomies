@@ -16,20 +16,10 @@ func TestGetBalances(t *testing.T) {
 
 	aliceToken := registerUser(t, router, "Alice", "bal-alice@test.com", "password123")
 	bobToken := registerUser(t, router, "Bob", "bal-bob@test.com", "password123")
-	bobUserID := getUserID(t, router, bobToken)
 
 	houseID := createHouse(t, router, aliceToken, "Balance House")
 
-	addBody := map[string]string{"user_id": bobUserID, "role": "member"}
-	addData, _ := json.Marshal(addBody)
-	addReq := httptest.NewRequest("POST", "/api/houses/"+houseID+"/members", bytes.NewReader(addData))
-	addReq.Header.Set("Content-Type", "application/json")
-	addReq.Header.Set("Authorization", "Bearer "+aliceToken)
-	addW := httptest.NewRecorder()
-	router.ServeHTTP(addW, addReq)
-	if addW.Code != http.StatusCreated {
-		t.Fatalf("add bob failed: %d", addW.Code)
-	}
+	addMember(t, router, aliceToken, houseID, bobToken, "member")
 
 	expBody := models.CreateExpenseRequest{
 		Amount: 200.00, Description: "Dinner", Visibility: "shared", Date: "2025-01-15",
@@ -68,20 +58,10 @@ func TestBalancesWithSettlements(t *testing.T) {
 
 	aliceToken := registerUser(t, router, "Alice", "bal2-alice@test.com", "password123")
 	bobToken := registerUser(t, router, "Bob", "bal2-bob@test.com", "password123")
-	bobUserID := getUserID(t, router, bobToken)
 
 	houseID := createHouse(t, router, aliceToken, "Settlement House")
 
-	addBody := map[string]string{"user_id": bobUserID, "role": "member"}
-	addData, _ := json.Marshal(addBody)
-	addReq := httptest.NewRequest("POST", "/api/houses/"+houseID+"/members", bytes.NewReader(addData))
-	addReq.Header.Set("Content-Type", "application/json")
-	addReq.Header.Set("Authorization", "Bearer "+aliceToken)
-	addW := httptest.NewRecorder()
-	router.ServeHTTP(addW, addReq)
-	if addW.Code != http.StatusCreated {
-		t.Fatalf("add bob failed: %d", addW.Code)
-	}
+	addMember(t, router, aliceToken, houseID, bobToken, "member")
 
 	exp1 := models.CreateExpenseRequest{Amount: 100.00, Description: "Groceries by Alice", Visibility: "shared", Date: "2025-01-15"}
 	exp1Data, _ := json.Marshal(exp1)

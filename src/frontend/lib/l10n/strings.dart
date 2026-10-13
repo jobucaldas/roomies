@@ -363,17 +363,17 @@ class RoomiesStrings {
       'Loading invitations…', 'Carregando convites…', 'Cargando invitaciones…');
   String get noInvitationsYet => _t('No invitations yet.',
       'Nenhum convite ainda.', 'Aún no hay invitaciones.');
-  String get addExistingMember => _t('Add existing member',
-      'Adicionar membro existente', 'Agregar miembro existente');
-  String get userId => _t('User ID', 'ID do usuário', 'ID de usuario');
-  String get addMember =>
-      _t('Add member', 'Adicionar membro', 'Agregar miembro');
+  String get inviteLinkReady => _t(
+      'Invitation created. If no email arrives, share this one-time link with them:',
+      'Convite criado. Se o email não chegar, compartilhe este link de uso único:',
+      'Invitación creada. Si no llega el correo, comparte este enlace de un solo uso:');
+  String get copyLink => _t('Copy link', 'Copiar link', 'Copiar enlace');
+  String get linkCopied =>
+      _t('Link copied.', 'Link copiado.', 'Enlace copiado.');
+  String get revokeInvitation =>
+      _t('Revoke', 'Revogar', 'Revocar');
   String get changeRole => _t('Change role', 'Alterar papel', 'Cambiar rol');
   String get remove => _t('Remove', 'Remover', 'Quitar');
-  String get userIdRequired => _t('User ID is required',
-      'ID do usuário é obrigatório', 'El ID de usuario es obligatorio');
-  String get memberAdded =>
-      _t('Member added.', 'Membro adicionado.', 'Miembro agregado.');
   String get memberRemoved =>
       _t('Member removed.', 'Membro removido.', 'Miembro quitado.');
   String get emailRequired => _t('Email is required.', 'Email é obrigatório.',

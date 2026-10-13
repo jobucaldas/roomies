@@ -23,6 +23,8 @@ type Worker struct {
 	notificationRepo     *repository.NotificationRepository
 	notificationProvider providers.NotificationProvider
 	householdRepo        *repository.HouseholdRepository
+	userRepo             *repository.UserRepository
+	lastSessionPurge     time.Time
 	ready                atomic.Bool
 }
 
@@ -60,6 +62,11 @@ func (w *Worker) ConfigureHousehold(repo *repository.HouseholdRepository) {
 	w.householdRepo = repo
 }
 
+// ConfigureSessions lets the worker drop revocations of expired sessions.
+func (w *Worker) ConfigureSessions(repo *repository.UserRepository) {
+	w.userRepo = repo
+}
+
 func (w *Worker) Ready() bool {
 	return w.ready.Load()
 }
@@ -91,6 +98,12 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		if _, err := w.householdRepo.RunChatRetention(ctx, w.owner, w.leaseDuration, 100); err != nil {
 			return err
 		}
+	}
+	if w.userRepo != nil && time.Since(w.lastSessionPurge) >= time.Hour {
+		if _, err := w.userRepo.PurgeExpiredRevocations(ctx, time.Now()); err != nil {
+			return err
+		}
+		w.lastSessionPurge = time.Now()
 	}
 	job, err := w.repo.AcquireNextJob(ctx, w.owner, w.leaseDuration)
 	if err != nil || job == nil {

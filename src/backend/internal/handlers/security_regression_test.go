@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/roomies/backend/internal/models"
@@ -57,12 +58,32 @@ func createNote(t *testing.T, router http.Handler, token, houseID string, body m
 	return note
 }
 
-func addMember(t *testing.T, router http.Handler, adminToken, houseID, userID, role string) {
+// addMember joins the user behind memberToken to the house the only way the
+// API allows: the admin invites their email and they accept.
+func addMember(t *testing.T, router http.Handler, adminToken, houseID, memberToken, role string) {
 	t.Helper()
-	response := authenticatedRequest(t, router, http.MethodPost, "/api/houses/"+houseID+"/members", adminToken,
-		models.AddMemberRequest{UserID: userID, Role: role})
-	if response.Code != http.StatusCreated {
-		t.Fatalf("add member failed: %d %s", response.Code, response.Body.String())
+	me := authenticatedRequest(t, router, http.MethodGet, "/api/auth/me", memberToken, nil)
+	var member models.User
+	if err := json.NewDecoder(me.Body).Decode(&member); err != nil || member.Email == "" {
+		t.Fatalf("load invitee failed: %d %s", me.Code, me.Body.String())
+	}
+	invite := authenticatedRequest(t, router, http.MethodPost, "/api/houses/"+houseID+"/invites", adminToken,
+		models.CreateInvitationRequest{Email: member.Email, Role: role})
+	if invite.Code != http.StatusCreated {
+		t.Fatalf("invite member failed: %d %s", invite.Code, invite.Body.String())
+	}
+	var created models.HouseInvitation
+	if err := json.NewDecoder(invite.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	link, err := url.Parse(created.ManualAcceptanceURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accept := authenticatedRequest(t, router, http.MethodPost, "/api/invitations/accept", memberToken,
+		models.AcceptInvitationRequest{Token: link.Query().Get("token")})
+	if accept.Code != http.StatusOK {
+		t.Fatalf("accept invitation failed: %d %s", accept.Code, accept.Body.String())
 	}
 }
 
@@ -165,8 +186,8 @@ func TestExpenseMoneyValidationAndDeterministicCentSplit(t *testing.T) {
 	bobToken := registerUser(t, router, "Cent Bob", "cent-bob@test.com", "password123")
 	carolToken := registerUser(t, router, "Cent Carol", "cent-carol@test.com", "password123")
 	houseID := createHouse(t, router, adminToken, "Cent House")
-	addMember(t, router, adminToken, houseID, getUserID(t, router, bobToken), "member")
-	addMember(t, router, adminToken, houseID, getUserID(t, router, carolToken), "member")
+	addMember(t, router, adminToken, houseID, bobToken, "member")
+	addMember(t, router, adminToken, houseID, carolToken, "member")
 
 	for _, amount := range []float64{-1, 1.001, 100000000} {
 		response := authenticatedRequest(t, router, http.MethodPost, "/api/houses/"+houseID+"/expenses", adminToken,
@@ -206,7 +227,7 @@ func TestExpenseAmountUpdateRequiresValidReplacementSplits(t *testing.T) {
 	adminID := getUserID(t, router, adminToken)
 	memberID := getUserID(t, router, memberToken)
 	houseID := createHouse(t, router, adminToken, "Update Split House")
-	addMember(t, router, adminToken, houseID, memberID, "member")
+	addMember(t, router, adminToken, houseID, memberToken, "member")
 	expense := createExpense(t, router, adminToken, houseID, models.CreateExpenseRequest{
 		Amount: 10, Description: "before", Date: "2025-02-01",
 	})
@@ -244,9 +265,8 @@ func TestExpenseVisibilityRemainsPayerOnly(t *testing.T) {
 	defer cleanup()
 	payerToken := registerUser(t, router, "Payer", "visibility-payer@test.com", "password123")
 	adminToken := registerUser(t, router, "Admin", "visibility-admin@test.com", "password123")
-	adminID := getUserID(t, router, adminToken)
 	houseID := createHouse(t, router, payerToken, "Visibility House")
-	addMember(t, router, payerToken, houseID, adminID, "admin")
+	addMember(t, router, payerToken, houseID, adminToken, "admin")
 	expense := createExpense(t, router, payerToken, houseID, models.CreateExpenseRequest{
 		Amount: 10, Description: "visibility", Date: "2025-02-01", Visibility: "shared",
 	})
@@ -293,7 +313,7 @@ func TestRemovedMemberRemainsInHistoricalBalancesWithoutAccess(t *testing.T) {
 	formerToken := registerUser(t, router, "Former Member", "history-former@test.com", "password123")
 	formerID := getUserID(t, router, formerToken)
 	houseID := createHouse(t, router, adminToken, "History House")
-	addMember(t, router, adminToken, houseID, formerID, "member")
+	addMember(t, router, adminToken, houseID, formerToken, "member")
 	createExpense(t, router, adminToken, houseID, models.CreateExpenseRequest{
 		Amount: 20, Description: "historical dinner", Date: "2025-02-01",
 	})

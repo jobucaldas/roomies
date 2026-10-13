@@ -8,7 +8,8 @@
 #
 # Runtime env:
 #   SITE_ADDRESS      ":8080" (plain HTTP, default) or a domain for automatic HTTPS
-#   BACKEND_UPSTREAM  where the API listens (default backend:8080)
+#   BACKEND_UPSTREAM  where the API listens (default backend:8080); always reached over TLS
+#   BACKEND_CA_FILE   CA that signed the API certificate (default /tls/ca.crt, from `tls-init`)
 
 FROM ghcr.io/cirruslabs/flutter:3.27.1 AS web-build
 WORKDIR /app
@@ -34,6 +35,9 @@ COPY <<'CADDYFILE' /etc/caddy/Caddyfile
 	encode gzip
 
 	header {
+		# Ignored by browsers over plain HTTP, so it is safe for localhost trials.
+		Strict-Transport-Security "max-age=31536000"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
 		Referrer-Policy "no-referrer"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
@@ -44,6 +48,11 @@ COPY <<'CADDYFILE' /etc/caddy/Caddyfile
 
 	handle /api/* {
 		reverse_proxy {$BACKEND_UPSTREAM:backend:8080} {
+			# The API only speaks TLS; trust the private CA from `tls-init`.
+			transport http {
+				tls
+				tls_trusted_ca_certs {$BACKEND_CA_FILE:/tls/ca.crt}
+			}
 			header_up X-Forwarded-For {remote_host}
 			header_up X-Forwarded-Host {host}
 		}

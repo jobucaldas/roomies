@@ -20,6 +20,7 @@ Future<void> main() async {
   usePathUrlStrategy();
   await ensureDateFormatting();
   final api = ApiClient(webOrigin: kIsWeb ? Uri.base.origin : null);
+  if (!kIsWeb) requireEncryptedApiBase(api.baseUrl);
   final appState = AppState(api, deviceLocales: platformLocaleTags());
   await appState.restoreSession();
   runApp(RoomiesApp(appState: appState));

@@ -58,6 +58,24 @@ String resolveApiBaseUrl({
   return value.replaceAll(RegExp(r'/+$'), '');
 }
 
+/// The Android emulator's alias for the developer machine's loopback.
+const _androidEmulatorHost = '10.0.2.2';
+
+/// Native apps call the server directly, so a plain `http://` API would carry
+/// passwords, session tokens, and household data in clear text. Only a
+/// loopback address (a developer's own machine) may skip TLS, plus the
+/// emulator alias in debug builds; on a real device `10.0.2.2` is just
+/// another network address.
+void requireEncryptedApiBase(String baseUrl,
+    {bool allowEmulatorHost = kDebugMode}) {
+  final uri = Uri.tryParse(baseUrl);
+  if (uri == null || uri.scheme != 'http' || _isLoopbackHost(uri.host)) {
+    return;
+  }
+  if (allowEmulatorHost && uri.host == _androidEmulatorHost) return;
+  throw StateError('ROOMIES_API_URL must use https:// (got $baseUrl)');
+}
+
 class ApiClient {
   ApiClient({
     SessionStorage? storage,
@@ -375,19 +393,6 @@ class ApiClient {
           .toList();
     }
     throw ApiError.http(response.statusCode, response.body);
-  }
-
-  Future<HouseMember> addMember(String id, String userId, String role) async {
-    final gen = _generation;
-    return _send(
-      () => _http.post(
-        Uri.parse('$baseUrl/houses/$id/members'),
-        headers: _headers(),
-        body: jsonEncode({'user_id': userId, 'role': role}),
-      ),
-      HouseMember.fromJson,
-      generation: gen,
-    );
   }
 
   Future<MessageResponse> updateMemberRole(
