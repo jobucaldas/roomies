@@ -10,6 +10,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -210,13 +211,15 @@ func issueLeaf(ca *x509.Certificate, caKey *ecdsa.PrivateKey, commonName string,
 		pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), nil
 }
 
-// leafCurrent reports a server certificate whose key exists, that chains to
-// roots for every host, and that is not close to expiry.
+// leafCurrent reports a server certificate whose key is its own (a run
+// interrupted between writing the key and the certificate leaves a mismatched
+// pair), that chains to roots for every host, and that is not close to expiry.
 func leafCurrent(dir, certFile, keyFile string, hosts []string, roots *x509.CertPool, now time.Time) bool {
-	if _, err := os.Stat(filepath.Join(dir, keyFile)); err != nil {
+	pair, err := tls.LoadX509KeyPair(filepath.Join(dir, certFile), filepath.Join(dir, keyFile))
+	if err != nil {
 		return false
 	}
-	cert, err := readCert(filepath.Join(dir, certFile))
+	cert, err := x509.ParseCertificate(pair.Certificate[0])
 	if err != nil || now.Add(renewThreshold).After(cert.NotAfter) {
 		return false
 	}

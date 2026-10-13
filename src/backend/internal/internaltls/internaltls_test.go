@@ -71,6 +71,20 @@ func TestEnsureIssuesVerifiableCertificatesOnce(t *testing.T) {
 	if info, err := os.Stat(filepath.Join(dir, CAKeyFile)); err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("CA key must be private: %v %v", info, err)
 	}
+	// A run interrupted after writing a new key but before its certificate.
+	otherKey, err := os.ReadFile(filepath.Join(dir, DBKeyFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, BackendKey), otherKey, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if issued, err = Ensure(dir, opts); err != nil || !issued {
+		t.Fatalf("mismatched key and certificate should be reissued: issued=%v err=%v", issued, err)
+	}
+	if _, err := tls.LoadX509KeyPair(filepath.Join(dir, BackendCert), filepath.Join(dir, BackendKey)); err != nil {
+		t.Fatalf("reissued pair does not match: %v", err)
+	}
 	opts.Now = func() time.Time { return time.Now().Add(validity) }
 	if issued, err = Ensure(dir, opts); err != nil || !issued {
 		t.Fatalf("expiring material should be reissued: issued=%v err=%v", issued, err)
