@@ -18,37 +18,29 @@ class SessionStorage {
 
   Future<String?> loadToken() async {
     if (kIsWeb) return null;
-    String? token;
+    // Older builds kept the token in plain preferences. Take it out first so
+    // it is gone from disk even if the protected store is unavailable.
+    final prefs = await SharedPreferences.getInstance();
+    final legacy = prefs.getString(sessionTokenKey);
+    if (legacy != null) await prefs.remove(sessionTokenKey);
     try {
-      token = await _secure.read(key: sessionTokenKey);
+      final token = await _secure.read(key: sessionTokenKey);
+      if (token != null && token.isNotEmpty) return token;
+      if (legacy == null || legacy.isEmpty) return null;
+      await _secure.write(key: sessionTokenKey, value: legacy);
+      return legacy;
     } catch (error) {
       // No usable keystore (e.g. a Linux session without a Secret Service):
       // sign in again rather than fall back to plaintext.
       debugPrint('secure session storage unavailable: $error');
       return null;
     }
-    if (token != null && token.isNotEmpty) return token;
-    return _migrateLegacyToken();
-  }
-
-  /// Moves a token saved in plain preferences by older builds into the
-  /// protected store, and removes the plaintext copy either way.
-  Future<String?> _migrateLegacyToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    final legacy = prefs.getString(sessionTokenKey);
-    if (legacy == null || legacy.isEmpty) return null;
-    await prefs.remove(sessionTokenKey);
-    try {
-      await _secure.write(key: sessionTokenKey, value: legacy);
-    } catch (error) {
-      debugPrint('secure session storage unavailable: $error');
-      return null;
-    }
-    return legacy;
   }
 
   Future<void> saveToken(String token) async {
     if (kIsWeb) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(sessionTokenKey);
     try {
       await _secure.write(key: sessionTokenKey, value: token);
     } catch (error) {

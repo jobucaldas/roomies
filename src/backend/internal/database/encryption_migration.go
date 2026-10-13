@@ -113,10 +113,40 @@ func dropSQLiteChecks(ctx context.Context, exec migrationRunner) error {
 	return err
 }
 
-// EncryptExistingData seals plaintext left from before encryption and
-// re-seals values under retired keys, refreshing email blind indexes. It runs
-// on every start under the migration lock and only touches rows that need it.
+// encryptLegacyPlaintext is the one-time data migration that seals every
+// value written before encryption existed. All of them are plaintext by
+// definition, so even text that happens to look like "enc:v1:..." is
+// encrypted rather than parsed. It also drops the house names that older
+// house.updated events copied into their plaintext payload.
+func encryptLegacyPlaintext(driver string) func(context.Context, migrationRunner) error {
+	return func(ctx context.Context, exec migrationRunner) error {
+		redact := `UPDATE house_events SET payload = json_remove(payload, '$.name')
+			WHERE event_type = 'house.updated' AND json_valid(payload) AND json_type(payload, '$.name') IS NOT NULL`
+		if driver == "postgres" {
+			redact = `UPDATE house_events SET payload = (payload::jsonb - 'name')::text
+				WHERE event_type = 'house.updated' AND payload::jsonb ? 'name'`
+		}
+		if _, err := exec.ExecContext(ctx, redact); err != nil {
+			return fmt.Errorf("redact house names from events: %w", err)
+		}
+		return sealColumns(ctx, exec, true)
+	}
+}
+
+// EncryptExistingData runs on every start under the migration lock. It
+// re-seals values under retired keys (key rotation), seals plaintext column
+// defaults, and refreshes email blind indexes. A prefixed value that does not
+// decrypt (for example a retired key missing from DATA_ENCRYPTION_OLD_KEYS)
+// stops startup instead of being treated as text.
 func EncryptExistingData(ctx context.Context, exec migrationRunner) error {
+	return sealColumns(ctx, exec, false)
+}
+
+// sealColumns walks every encrypted column once, in id order. With legacy set
+// every value is plaintext; otherwise only values not under the current key
+// are visited. Each row is updated only if it still holds the values read, so
+// a running server's concurrent edit is never overwritten.
+func sealColumns(ctx context.Context, exec migrationRunner, legacy bool) error {
 	ring := secret.Active()
 	if ring == nil {
 		return secret.ErrNotConfigured
@@ -124,16 +154,22 @@ func EncryptExistingData(ctx context.Context, exec migrationRunner) error {
 	currentPrefix := "enc:v1:" + ring.CurrentID() + ":"
 	for _, spec := range encryptedColumns {
 		selectCols := append([]string{"id"}, spec.columns...)
-		var stale []string
-		for _, column := range spec.columns {
-			stale = append(stale, fmt.Sprintf("(%s IS NOT NULL AND substr(%s, 1, %d) <> '%s')", column, column, len(currentPrefix), currentPrefix))
+		filter := "1 = 1"
+		args := []any{""}
+		if !legacy {
+			var stale []string
+			for _, column := range spec.columns {
+				stale = append(stale, fmt.Sprintf("(%s IS NOT NULL AND substr(%s, 1, %d) <> $2)", column, column, len(currentPrefix)))
+			}
+			if spec.emailHash != "" {
+				stale = append(stale, spec.emailHash+" IS NULL")
+			}
+			filter = strings.Join(stale, " OR ")
+			args = append(args, currentPrefix)
 		}
-		if spec.emailHash != "" {
-			stale = append(stale, spec.emailHash+" IS NULL")
-		}
-		query := fmt.Sprintf(`SELECT %s FROM %s WHERE %s ORDER BY id LIMIT 200`, strings.Join(selectCols, ", "), spec.table, strings.Join(stale, " OR "))
+		query := fmt.Sprintf(`SELECT %s FROM %s WHERE id > $1 AND (%s) ORDER BY id LIMIT 200`, strings.Join(selectCols, ", "), spec.table, filter)
 		for {
-			batch, err := readStaleRows(ctx, exec, query, len(spec.columns))
+			batch, err := readStaleRows(ctx, exec, query, len(spec.columns), args...)
 			if err != nil {
 				return fmt.Errorf("encrypt %s: %w", spec.table, err)
 			}
@@ -141,33 +177,68 @@ func EncryptExistingData(ctx context.Context, exec migrationRunner) error {
 				break
 			}
 			for _, row := range batch {
-				var sets []string
-				var args []any
-				for i, column := range spec.columns {
-					if !row.values[i].Valid {
-						continue
-					}
-					plain, err := ring.Decrypt(row.values[i].String)
-					if err != nil {
-						return fmt.Errorf("encrypt %s.%s row %s: %w", spec.table, column, row.id, err)
-					}
-					sealed, err := ring.Encrypt(plain)
-					if err != nil {
-						return err
-					}
-					args = append(args, sealed)
-					sets = append(sets, fmt.Sprintf("%s = $%d", column, len(args)))
-					if column == spec.emailColumn {
-						args = append(args, ring.Index(strings.ToLower(strings.TrimSpace(plain))))
-						sets = append(sets, fmt.Sprintf("%s = $%d", spec.emailHash, len(args)))
-					}
-				}
-				args = append(args, row.id)
-				if _, err := exec.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET %s WHERE id = $%d`, spec.table, strings.Join(sets, ", "), len(args)), args...); err != nil {
-					return fmt.Errorf("encrypt %s row %s: %w", spec.table, row.id, err)
+				if err := resealRow(ctx, exec, ring, spec.table, spec.columns, spec.emailColumn, spec.emailHash, row, legacy); err != nil {
+					return err
 				}
 			}
+			args[0] = batch[len(batch)-1].id
 		}
+	}
+	return nil
+}
+
+// resealRow writes the re-sealed values of one row, guarded by the values it
+// read: if the row changed in between, the update matches nothing.
+// Placeholders are numbered in the order they appear, which SQLite requires.
+func resealRow(ctx context.Context, exec migrationRunner, ring *secret.KeyRing, table string, columns []string, emailColumn, emailHash string, row staleRow, legacy bool) error {
+	type assignment struct {
+		column string
+		value  any
+	}
+	var sets, guards []assignment
+	var nullGuards []string
+	for i, column := range columns {
+		if !row.values[i].Valid {
+			nullGuards = append(nullGuards, column+" IS NULL")
+			continue
+		}
+		stored := row.values[i].String
+		plain := stored
+		if !legacy {
+			var err error
+			if plain, err = ring.Decrypt(stored); err != nil {
+				return fmt.Errorf("encrypt %s.%s row %s: %w", table, column, row.id, err)
+			}
+		}
+		sealed, err := ring.Encrypt(plain)
+		if err != nil {
+			return err
+		}
+		sets = append(sets, assignment{column, sealed})
+		if column == emailColumn {
+			sets = append(sets, assignment{emailHash, ring.Index(strings.ToLower(strings.TrimSpace(plain)))})
+		}
+		guards = append(guards, assignment{column, stored})
+	}
+	if len(sets) == 0 {
+		return nil
+	}
+	var setSQL, whereSQL []string
+	var args []any
+	for _, set := range sets {
+		args = append(args, set.value)
+		setSQL = append(setSQL, fmt.Sprintf("%s = $%d", set.column, len(args)))
+	}
+	args = append(args, row.id)
+	whereSQL = append(whereSQL, fmt.Sprintf("id = $%d", len(args)))
+	for _, guard := range guards {
+		args = append(args, guard.value)
+		whereSQL = append(whereSQL, fmt.Sprintf("%s = $%d", guard.column, len(args)))
+	}
+	whereSQL = append(whereSQL, nullGuards...)
+	query := fmt.Sprintf(`UPDATE %s SET %s WHERE %s`, table, strings.Join(setSQL, ", "), strings.Join(whereSQL, " AND "))
+	if _, err := exec.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("encrypt %s row %s: %w", table, row.id, err)
 	}
 	return nil
 }
@@ -177,8 +248,8 @@ type staleRow struct {
 	values []sql.NullString
 }
 
-func readStaleRows(ctx context.Context, exec migrationRunner, query string, columns int) ([]staleRow, error) {
-	rows, err := exec.QueryContext(ctx, query)
+func readStaleRows(ctx context.Context, exec migrationRunner, query string, columns int, args ...any) ([]staleRow, error) {
+	rows, err := exec.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

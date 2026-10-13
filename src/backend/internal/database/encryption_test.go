@@ -3,6 +3,7 @@ package database
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"strings"
 	"testing"
@@ -76,5 +77,62 @@ func TestExistingPlaintextIsEncryptedAndKeysRotate(t *testing.T) {
 	}
 	if err := db.Get(&decrypted, `SELECT name FROM grocery_items WHERE id = 'g1'`); err != nil || decrypted != "Oat milk" {
 		t.Fatalf("rotated value unreadable: %q %v", decrypted, err)
+	}
+}
+
+func TestLegacyMigrationTreatsEveryOldValueAsText(t *testing.T) {
+	db, err := Connect("sqlite://:memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	// Rows an older release wrote, including text that looks like ciphertext
+	// and a house.updated event that copied the house name.
+	if _, err := db.Exec(`INSERT INTO users (id, name, email, password_hash) VALUES ('u1', 'Ana', 'ana@example.test', 'x');
+		INSERT INTO houses (id, name) VALUES ('h1', 'Rua A');
+		INSERT INTO notes (id, house_id, author_id, title, content) VALUES ('n1', 'h1', 'u1', 'enc:v1:test:notreally', 'enc:v1:example');
+		INSERT INTO house_events (id, house_id, event_type, resource_type, resource_id, payload) VALUES ('e1', 'h1', 'house.updated', 'house', 'h1', '{"name":"Rua A"}');
+		DELETE FROM schema_migrations WHERE version = 12`); err != nil {
+		t.Fatal(err)
+	}
+	if err := RunMigrations(db); err != nil {
+		t.Fatalf("old text shaped like ciphertext must not block startup: %v", err)
+	}
+	var title, content secret.String
+	if err := db.QueryRow(`SELECT title, content FROM notes WHERE id = 'n1'`).Scan(&title, &content); err != nil {
+		t.Fatal(err)
+	}
+	if title != "enc:v1:test:notreally" || content != "enc:v1:example" {
+		t.Fatalf("legacy text changed: %q %q", title, content)
+	}
+	var payload string
+	if err := db.Get(&payload, `SELECT payload FROM house_events WHERE id = 'e1'`); err != nil || strings.Contains(payload, "Rua") {
+		t.Fatalf("house name left in event payload: %s %v", payload, err)
+	}
+}
+
+func TestResealSkipsRowsChangedConcurrently(t *testing.T) {
+	db, err := Connect("sqlite://:memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO houses (id, name) VALUES ('h1', $1)`, secret.String("edited by the app")); err != nil {
+		t.Fatal(err)
+	}
+	// The backfill read an older value; the app has since saved a new one.
+	stale := staleRow{id: "h1", values: []sql.NullString{{String: "old plaintext", Valid: true}}}
+	if err := resealRow(context.Background(), db, secret.Active(), "houses", []string{"name"}, "", "", stale, true); err != nil {
+		t.Fatal(err)
+	}
+	var name secret.String
+	if err := db.Get(&name, `SELECT name FROM houses WHERE id = 'h1'`); err != nil || name != "edited by the app" {
+		t.Fatalf("concurrent edit overwritten: %q %v", name, err)
 	}
 }

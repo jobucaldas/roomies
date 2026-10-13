@@ -48,8 +48,8 @@ func Active() *KeyRing { return active.Load() }
 // comma-separated list of id:base64-key pairs kept for decryption only.
 func NewKeyRing(currentID, currentKey, oldKeys string) (*KeyRing, error) {
 	currentID = strings.TrimSpace(currentID)
-	if currentID == "" || strings.Contains(currentID, ":") {
-		return nil, errors.New("data encryption key id must be non-empty and must not contain ':'")
+	if !validKeyID(currentID) {
+		return nil, errors.New("data encryption key id must be 1-64 letters, digits, '.', '_' or '-'")
 	}
 	ring := &KeyRing{currentID: currentID, aeads: map[string]cipher.AEAD{}}
 	master, err := ring.add(currentID, currentKey)
@@ -66,8 +66,8 @@ func NewKeyRing(currentID, currentKey, oldKeys string) (*KeyRing, error) {
 		}
 		id, encoded, ok := strings.Cut(pair, ":")
 		id = strings.TrimSpace(id)
-		if !ok || id == "" {
-			return nil, errors.New("DATA_ENCRYPTION_OLD_KEYS entries must be key-id:base64-key")
+		if !ok || !validKeyID(id) {
+			return nil, errors.New("DATA_ENCRYPTION_OLD_KEYS entries must be key-id:base64-key with a 1-64 character id of letters, digits, '.', '_' or '-'")
 		}
 		if _, exists := ring.aeads[id]; exists {
 			return nil, fmt.Errorf("duplicate data encryption key id %q", id)
@@ -77,6 +77,19 @@ func NewKeyRing(currentID, currentKey, oldKeys string) (*KeyRing, error) {
 		}
 	}
 	return ring, nil
+}
+
+// validKeyID keeps key ids safe to embed in stored values and queries.
+func validKeyID(id string) bool {
+	if id == "" || len(id) > 64 {
+		return false
+	}
+	for _, r := range id {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '.' || r == '_' || r == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 func (k *KeyRing) add(id, encoded string) ([]byte, error) {

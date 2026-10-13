@@ -80,6 +80,8 @@ func TestNewKeyRingRejectsBadKeys(t *testing.T) {
 	for _, tc := range []struct{ id, key, old string }{
 		{"", testKey('a'), ""},
 		{"a:b", testKey('a'), ""},
+		{"o'brien", testKey('a'), ""},
+		{"k", testKey('a'), "bad id:" + testKey('b')},
 		{"k", "short", ""},
 		{"k", testKey('a'), "nocolon"},
 		{"k", testKey('a'), "k:" + testKey('b')},

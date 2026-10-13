@@ -84,6 +84,11 @@ func migrations(driver string) []schemaMigration {
 			name:    "encrypt_personal_data",
 			up:      encryptionSchemaMigration(driver),
 		},
+		{
+			version: 12,
+			name:    "encrypt_legacy_plaintext",
+			up:      encryptLegacyPlaintext(driver),
+		},
 	}
 }
 

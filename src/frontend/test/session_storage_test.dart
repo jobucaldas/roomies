@@ -28,4 +28,43 @@ void main() {
     expect(prefs.getString(sessionTokenKey), isNull);
     expect(await const FlutterSecureStorage().read(key: sessionTokenKey), 'legacy-jwt');
   });
+
+  test('a plaintext token is removed even when the keystore fails', () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({sessionTokenKey: 'legacy-jwt'});
+    final storage = SessionStorage(secureStorage: _BrokenSecureStorage());
+    expect(await storage.loadToken(), isNull);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(sessionTokenKey), isNull);
+    await prefs.setString(sessionTokenKey, 'another-legacy-jwt');
+    await storage.saveToken('fresh-jwt');
+    expect(prefs.getString(sessionTokenKey), isNull);
+  });
+}
+
+class _BrokenSecureStorage extends FlutterSecureStorage {
+  @override
+  Future<String?> read({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) =>
+      throw Exception('no keystore');
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) =>
+      throw Exception('no keystore');
 }
