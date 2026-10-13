@@ -36,6 +36,7 @@ class _MembersSectionState extends State<MembersSection> {
   List<HouseInvitation> _invites = [];
   String? _inviteError;
   String? _inviteLink;
+  String? _inviteLinkId;
 
   @override
   void initState() {
@@ -106,6 +107,7 @@ class _MembersSectionState extends State<MembersSection> {
       setState(() {
         _inviteError = null;
         _inviteLink = invite.manualAcceptanceUrl;
+        _inviteLinkId = invite.id;
       });
       await _loadInvites();
     } catch (error) {
@@ -125,6 +127,13 @@ class _MembersSectionState extends State<MembersSection> {
           .read<AppState>()
           .api
           .revokeInvitation(widget.houseId, invite.id);
+      if (!mounted) return;
+      if (_inviteLinkId == invite.id) {
+        setState(() {
+          _inviteLink = null;
+          _inviteLinkId = null;
+        });
+      }
       await _loadInvites();
     } catch (error) {
       setState(() => _inviteError = context.read<AppState>().strings.inviteFailed('$error'));
