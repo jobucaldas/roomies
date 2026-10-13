@@ -11,6 +11,7 @@ import (
 	"github.com/roomies/backend/internal/middleware"
 	"github.com/roomies/backend/internal/models"
 	"github.com/roomies/backend/internal/repository"
+	"github.com/roomies/backend/internal/secret"
 )
 
 const maxMoneyCents int64 = 9_999_999_999
@@ -101,8 +102,8 @@ func (h *ExpenseHandler) Create(w http.ResponseWriter, r *http.Request) {
 		PayerID:     userID,
 		Amount:      centsToMoney(amountCents),
 		AmountCents: amountCents,
-		Description: req.Description,
-		Category:    strings.TrimSpace(req.Category),
+		Description: secret.String(req.Description),
+		Category:    secret.String(strings.TrimSpace(req.Category)),
 		Date:        req.Date,
 		Visibility:  req.Visibility,
 		CreatedAt:   time.Now(),
@@ -201,10 +202,10 @@ func (h *ExpenseHandler) Update(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, models.ErrorResponse{Error: "description is required"})
 			return
 		}
-		expense.Description = description
+		expense.Description = secret.String(description)
 	}
 	if req.Category != nil {
-		expense.Category = strings.TrimSpace(*req.Category)
+		expense.Category = secret.String(strings.TrimSpace(*req.Category))
 	}
 	if req.Date != nil {
 		if err := validateDate(*req.Date); err != nil {

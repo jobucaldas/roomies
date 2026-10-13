@@ -176,7 +176,7 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev desktop-file-utils
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev desktop-file-utils
           curl -fsSLo "$RUNNER_TEMP/appimagetool" \
             https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
           chmod +x "$RUNNER_TEMP/appimagetool"
@@ -238,7 +238,7 @@ jobs:
           mkdir smoke
           awk '/^```yaml$/{f=1;next} /^```$/{f=0} f' README.md > smoke/compose.yaml
           printf '%s\n' POSTGRES_PASSWORD="$(openssl rand -hex 24)" JWT_SECRET="$(openssl rand -hex 48)" \
-            ROOMIES_PUBLIC_BASE_URL=http://localhost:8080 > smoke/.env
+            DATA_ENCRYPTION_KEY="$(openssl rand -base64 32)" ROOMIES_PUBLIC_BASE_URL=http://localhost:8080 > smoke/.env
           cd smoke
           docker compose pull db
           docker compose up -d --pull never

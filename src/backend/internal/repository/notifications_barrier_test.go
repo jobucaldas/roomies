@@ -130,10 +130,7 @@ func seedNotificationBarrierFixture(t *testing.T, db *sqlx.DB) (*NotificationRep
 	if err := repo.Enqueue(context.Background(), houseID, "expense_created", "expense", "expense-"+suffix, clk.Now()); err != nil {
 		t.Fatal(err)
 	}
-	var raw string
-	if err := db.Get(&raw, `SELECT payload FROM outbox_messages WHERE topic='notification.delivery' AND payload LIKE $1 AND payload LIKE $2`, "%expense-"+suffix+"%", "%"+memberID+"%"); err != nil {
-		t.Fatal(err)
-	}
+	raw := oneOutboxPayload(t, db, "expense-"+suffix, memberID)
 	var payload NotificationPayload
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		t.Fatal(err)
@@ -152,10 +149,7 @@ func TestNotificationDispatchDeadlineBoundsLockAndCallback(t *testing.T) {
 	if err := repo.Enqueue(ctx, "h1", "expense_created", "expense", "deadline-expense", repo.clock.Now()); err != nil {
 		t.Fatal(err)
 	}
-	var raw string
-	if err := repo.db.Get(&raw, `SELECT payload FROM outbox_messages WHERE payload LIKE '%deadline-expense%' AND payload LIKE '%"user_id":"u2"%'`); err != nil {
-		t.Fatal(err)
-	}
+	raw := oneOutboxPayload(t, repo.db, "deadline-expense", `"user_id":"u2"`)
 	var payload NotificationPayload
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		t.Fatal(err)

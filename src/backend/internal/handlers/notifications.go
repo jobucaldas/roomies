@@ -9,6 +9,7 @@ import (
 	"github.com/roomies/backend/internal/middleware"
 	"github.com/roomies/backend/internal/models"
 	"github.com/roomies/backend/internal/repository"
+	"github.com/roomies/backend/internal/secret"
 )
 
 type NotificationHandler struct {
@@ -197,7 +198,7 @@ func (h *NotificationHandler) eventRequest(w http.ResponseWriter, r *http.Reques
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	event := &models.ScheduledHouseEvent{Title: strings.TrimSpace(req.Title), Timezone: req.Timezone, DTStartLocal: req.DTStartLocal, RRule: req.RRule, ExDates: req.ExDates, Enabled: enabled}
+	event := &models.ScheduledHouseEvent{Title: secret.String(strings.TrimSpace(req.Title)), Timezone: req.Timezone, DTStartLocal: req.DTStartLocal, RRule: req.RRule, ExDates: req.ExDates, Enabled: enabled}
 	if event.Title == "" || len(event.Title) > 120 {
 		writeJSON(w, 400, models.ErrorResponse{Error: "title must contain 1 to 120 characters"})
 		return nil, false

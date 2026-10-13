@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"github.com/roomies/backend/internal/secret"
 	"os"
 	"strings"
 	"sync"
@@ -110,11 +111,11 @@ func TestPostgresEncryptedInvitationPayloadIsRedactedOnRevoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var payload string
+	var payload secret.String
 	if err := db.Get(&payload, `SELECT payload FROM outbox_messages WHERE dedupe_key = $1`, "outbox:invitation:"+invite.ID); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(payload, token) || !strings.Contains(payload, "ciphertext") {
+	if strings.Contains(payload.Plain(), token) || !strings.Contains(payload.Plain(), "ciphertext") {
 		t.Fatalf("PostgreSQL outbox leaked token or lacked ciphertext: %s", payload)
 	}
 	if _, err := repo.RevokeInvitation(context.Background(), houseID, invite.ID, adminID); err != nil {
@@ -123,7 +124,7 @@ func TestPostgresEncryptedInvitationPayloadIsRedactedOnRevoke(t *testing.T) {
 	if err := db.Get(&payload, `SELECT payload FROM outbox_messages WHERE dedupe_key = $1`, "outbox:invitation:"+invite.ID); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(payload, "ciphertext") || strings.Contains(payload, token) {
+	if strings.Contains(payload.Plain(), "ciphertext") || strings.Contains(payload.Plain(), token) {
 		t.Fatalf("PostgreSQL revoked payload retained delivery material: %s", payload)
 	}
 }

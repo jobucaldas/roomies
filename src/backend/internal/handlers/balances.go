@@ -52,11 +52,11 @@ func (h *BalanceHandler) GetBalances(w http.ResponseWriter, r *http.Request) {
 	owed := make(map[string]int64, len(activeMembers))
 	participantNames := make(map[string]string, len(activeMembers))
 	for _, member := range activeMembers {
-		participantNames[member.UserID] = member.UserName
+		participantNames[member.UserID] = member.UserName.Plain()
 	}
 	for _, expense := range expenses {
 		amountCents := expense.AmountCents
-		participantNames[expense.PayerID] = expense.PayerName
+		participantNames[expense.PayerID] = expense.PayerName.Plain()
 		paid[expense.PayerID] += amountCents
 
 		splits, err := h.expenseRepo.GetSplits(r.Context(), expense.ID)
@@ -71,7 +71,7 @@ func (h *BalanceHandler) GetBalances(w http.ResponseWriter, r *http.Request) {
 		var splitTotal int64
 		for _, split := range splits {
 			shareCents := split.ShareAmountCents
-			participantNames[split.UserID] = split.UserName
+			participantNames[split.UserID] = split.UserName.Plain()
 			owed[split.UserID] += shareCents
 			splitTotal += shareCents
 		}

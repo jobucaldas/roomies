@@ -11,6 +11,7 @@ func TestConfigValidatesSMTPSettings(t *testing.T) {
 	config := &Config{
 		Environment:             "production",
 		JWTSecret:               "a-production-secret-that-is-long-enough",
+		DataEncryptionKey:       testDeliveryKey(),
 		CORSAllowedOrigins:      []string{"https://roomies.example"},
 		Port:                    "8080",
 		WorkerHealthPort:        "8081",
@@ -50,6 +51,7 @@ func TestProductionConfigRejectsWeakSecretAndWildcardCORS(t *testing.T) {
 	config := &Config{
 		Environment:        "production",
 		JWTSecret:          developmentJWTSecret,
+		DataEncryptionKey:  testDeliveryKey(),
 		CORSAllowedOrigins: []string{"https://roomies.example"},
 		Port:               "8080",
 		WorkerHealthPort:   "8081",
@@ -78,6 +80,7 @@ func TestDevelopmentSecretOnlyAllowedOnLoopback(t *testing.T) {
 		return &Config{
 			Environment:        "development",
 			JWTSecret:          secret,
+			DataEncryptionKey:  testDeliveryKey(),
 			CORSAllowedOrigins: []string{publicURL},
 			Port:               "8080",
 			WorkerHealthPort:   "8081",
@@ -108,6 +111,7 @@ func TestProductionConfigRequiresEncryptedTransport(t *testing.T) {
 		return &Config{
 			Environment:        "production",
 			JWTSecret:          "a-production-secret-that-is-long-enough",
+			DataEncryptionKey:  testDeliveryKey(),
 			CORSAllowedOrigins: []string{"https://roomies.example"},
 			Port:               "8080",
 			WorkerHealthPort:   "8081",
@@ -147,5 +151,24 @@ func TestProductionConfigRequiresEncryptedTransport(t *testing.T) {
 	loopback.PublicBaseURL = "http://localhost:8080"
 	if err := loopback.Validate(); err != nil {
 		t.Fatalf("expected loopback trial origin to validate: %v", err)
+	}
+}
+
+func TestDataEncryptionKeyRequiredOutsideLocalDevelopment(t *testing.T) {
+	base := func(env, publicURL string) *Config {
+		return &Config{Environment: env, JWTSecret: "a-production-secret-that-is-long-enough", CORSAllowedOrigins: []string{publicURL}, Port: "8080", WorkerHealthPort: "8081", PublicBaseURL: publicURL, InvitationTTL: 168, JWTAccessTTLHours: 8, JobPollInterval: 2, JobLeaseSeconds: 30}
+	}
+	if err := base("development", "http://localhost:8080").Validate(); err != nil {
+		t.Fatalf("local development may use the built-in key: %v", err)
+	}
+	for _, c := range []*Config{base("production", "http://localhost:8080"), base("development", "https://roomies.example")} {
+		if err := c.Validate(); err == nil {
+			t.Fatalf("expected missing key to be rejected for %s %s", c.Environment, c.PublicBaseURL)
+		}
+	}
+	bad := base("production", "https://roomies.example")
+	bad.DataEncryptionKey = "not-base64-32-bytes"
+	if err := bad.Validate(); err == nil {
+		t.Fatal("expected malformed key to be rejected")
 	}
 }

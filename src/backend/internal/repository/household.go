@@ -13,6 +13,7 @@ import (
 	roomiesclock "github.com/roomies/backend/internal/clock"
 	"github.com/roomies/backend/internal/models"
 	"github.com/roomies/backend/internal/recurrence"
+	"github.com/roomies/backend/internal/secret"
 )
 
 var (
@@ -354,7 +355,7 @@ func (r *HouseholdRepository) CreateChat(ctx context.Context, houseID, actorID, 
 		return nil, err
 	}
 	defer tx.Rollback()
-	_, err = tx.ExecContext(ctx, `INSERT INTO chat_messages(id,house_id,author_id,body,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$5)`, id, houseID, actorID, body, now)
+	_, err = tx.ExecContext(ctx, `INSERT INTO chat_messages(id,house_id,author_id,body,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$5)`, id, houseID, actorID, secret.String(body), now)
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +377,7 @@ func (r *HouseholdRepository) EditChat(ctx context.Context, houseID, id, actorID
 		return nil, err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `UPDATE chat_messages SET body=$1,updated_at=$2 WHERE house_id=$3 AND id=$4 AND author_id=$5 AND deleted_at IS NULL AND redacted_at IS NULL`, body, r.clock.Now(), houseID, id, actorID)
+	res, err := tx.ExecContext(ctx, `UPDATE chat_messages SET body=$1,updated_at=$2 WHERE house_id=$3 AND id=$4 AND author_id=$5 AND deleted_at IS NULL AND redacted_at IS NULL`, secret.String(body), r.clock.Now(), houseID, id, actorID)
 	if err != nil {
 		return nil, err
 	}
@@ -500,7 +501,7 @@ func (r *HouseholdRepository) recordSystemMutation(ctx context.Context, tx *sqlx
 
 func (r *HouseholdRepository) recordMutationWithActor(ctx context.Context, tx *sqlx.Tx, houseID string, actorID *string, action, resource, id string) error {
 	now := r.clock.Now()
-	_, err := tx.ExecContext(ctx, `INSERT INTO audit_events(id,actor_id,house_id,action,target_type,target_id,metadata,created_at) VALUES($1,$2,$3,$4,$5,$6,'{}',$7)`, models.NewID(), actorID, houseID, action, resource, id, now)
+	_, err := tx.ExecContext(ctx, `INSERT INTO audit_events(id,actor_id,house_id,action,target_type,target_id,metadata,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, models.NewID(), actorID, houseID, action, resource, id, secret.String("{}"), now)
 	if err != nil {
 		return err
 	}

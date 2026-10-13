@@ -19,6 +19,7 @@ import (
 	roomiesclock "github.com/roomies/backend/internal/clock"
 	"github.com/roomies/backend/internal/models"
 	"github.com/roomies/backend/internal/providers"
+	"github.com/roomies/backend/internal/secret"
 )
 
 var (
@@ -51,7 +52,7 @@ type OutboxMessage struct {
 	ID           string         `db:"id"`
 	Topic        string         `db:"topic"`
 	DedupeKey    string         `db:"dedupe_key"`
-	Payload      string         `db:"payload"`
+	Payload      secret.String  `db:"payload"`
 	Status       string         `db:"status"`
 	AvailableAt  time.Time      `db:"available_at"`
 	DispatchedAt sql.NullTime   `db:"dispatched_at"`
@@ -81,7 +82,7 @@ func (r *ReliabilityRepository) CreateInvitation(ctx context.Context, params Cre
 	invite := &models.HouseInvitation{
 		ID:        models.NewID(),
 		HouseID:   params.HouseID,
-		Email:     strings.ToLower(strings.TrimSpace(params.Email)),
+		Email:     secret.String(strings.ToLower(strings.TrimSpace(params.Email))),
 		Role:      params.Role,
 		Status:    "pending",
 		CreatedBy: params.ActorID,
@@ -90,6 +91,10 @@ func (r *ReliabilityRepository) CreateInvitation(ctx context.Context, params Cre
 	}
 	if invite.Email == "" {
 		return nil, "", fmt.Errorf("email is required")
+	}
+	emailHash, err := secret.Index(invite.Email.Plain())
+	if err != nil {
+		return nil, "", err
 	}
 
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -106,17 +111,17 @@ func (r *ReliabilityRepository) CreateInvitation(ctx context.Context, params Cre
 	}
 	var existingID string
 	if err := tx.GetContext(ctx, &existingID, `SELECT id FROM house_invitations
-		WHERE house_id = $1 AND email_normalized = $2 AND status = 'pending'
-		LIMIT 1`, invite.HouseID, invite.Email); err == nil {
+		WHERE house_id = $1 AND email_hash = $2 AND status = 'pending'
+		LIMIT 1`, invite.HouseID, emailHash); err == nil {
 		return nil, "", ErrInvitationPendingExists
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, "", err
 	}
 
 	if _, err := tx.ExecContext(ctx, `INSERT INTO house_invitations
-		(id, house_id, email_normalized, role, token_hash, status, created_by, created_at, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		invite.ID, invite.HouseID, invite.Email, invite.Role, tokenHash, invite.Status, invite.CreatedBy, invite.CreatedAt, invite.ExpiresAt); err != nil {
+		(id, house_id, email_normalized, email_hash, role, token_hash, status, created_by, created_at, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		invite.ID, invite.HouseID, invite.Email, emailHash, invite.Role, tokenHash, invite.Status, invite.CreatedBy, invite.CreatedAt, invite.ExpiresAt); err != nil {
 		if isUniqueViolation(err) {
 			return nil, "", ErrInvitationPendingExists
 		}
@@ -127,7 +132,7 @@ func (r *ReliabilityRepository) CreateInvitation(ctx context.Context, params Cre
 		Topic:        "house.invitation.created",
 		InvitationID: invite.ID,
 		HouseID:      invite.HouseID,
-		Email:        invite.Email,
+		Email:        invite.Email.Plain(),
 		Role:         invite.Role,
 		Status:       invite.Status,
 		OccurredAt:   now,
@@ -153,8 +158,7 @@ func (r *ReliabilityRepository) CreateInvitation(ctx context.Context, params Cre
 		TargetType: "house_invitation",
 		TargetID:   invite.ID,
 		Metadata: map[string]string{
-			"email": invite.Email,
-			"role":  invite.Role,
+			"role": invite.Role,
 		},
 	}); err != nil {
 		return nil, "", err
@@ -240,7 +244,7 @@ func (r *ReliabilityRepository) RevokeInvitation(ctx context.Context, houseID, i
 		Topic:        "house.invitation.revoked",
 		InvitationID: invite.ID,
 		HouseID:      invite.HouseID,
-		Email:        invite.Email,
+		Email:        invite.Email.Plain(),
 		Role:         invite.Role,
 		Status:       invite.Status,
 		OccurredAt:   now,
@@ -255,8 +259,7 @@ func (r *ReliabilityRepository) RevokeInvitation(ctx context.Context, houseID, i
 		TargetType: "house_invitation",
 		TargetID:   invite.ID,
 		Metadata: map[string]string{
-			"email": invite.Email,
-			"role":  invite.Role,
+			"role": invite.Role,
 		},
 	}); err != nil {
 		return nil, err
@@ -308,7 +311,7 @@ func (r *ReliabilityRepository) AcceptInvitation(ctx context.Context, token, act
 		return nil, err
 	}
 	actorEmail = strings.ToLower(strings.TrimSpace(actorEmail))
-	if invite.Email != actorEmail {
+	if invite.Email.Plain() != actorEmail {
 		return nil, ErrInvitationUnavailable
 	}
 	if invite.Status == "accepted" {
@@ -352,7 +355,7 @@ func (r *ReliabilityRepository) AcceptInvitation(ctx context.Context, token, act
 		Topic:        "house.invitation.accepted",
 		InvitationID: invite.ID,
 		HouseID:      invite.HouseID,
-		Email:        invite.Email,
+		Email:        invite.Email.Plain(),
 		Role:         invite.Role,
 		Status:       invite.Status,
 		OccurredAt:   now,
@@ -370,8 +373,7 @@ func (r *ReliabilityRepository) AcceptInvitation(ctx context.Context, token, act
 		TargetType: "house_invitation",
 		TargetID:   invite.ID,
 		Metadata: map[string]string{
-			"email": invite.Email,
-			"role":  invite.Role,
+			"role": invite.Role,
 		},
 	}); err != nil {
 		return nil, err
@@ -661,7 +663,7 @@ func (r *ReliabilityRepository) insertAuditEventTx(ctx context.Context, tx *sqlx
 		(id, actor_id, house_id, action, target_type, target_id, metadata, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		models.NewID(), nullableString(params.ActorID), nullableString(params.HouseID),
-		params.Action, params.TargetType, params.TargetID, string(body), now)
+		params.Action, params.TargetType, params.TargetID, secret.String(body), now)
 	return err
 }
 
@@ -709,7 +711,7 @@ func (r *ReliabilityRepository) enqueueInvitationNotificationTx(ctx context.Cont
 	if _, err := tx.ExecContext(ctx, `INSERT INTO outbox_messages
 		(id, topic, dedupe_key, payload, status, available_at, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7)`,
-		messageID, notification.Topic, dedupeKey, string(payload), now, now, now); err != nil {
+		messageID, notification.Topic, dedupeKey, secret.String(payload), now, now, now); err != nil {
 		return err
 	}
 	jobBody, err := json.Marshal(jobPayload{OutboxMessageID: messageID})
@@ -730,7 +732,7 @@ func (r *ReliabilityRepository) clearInvitationDeliveryPayloadTx(ctx context.Con
 }
 
 func (r *ReliabilityRepository) clearOutboxDeliveryPayloadTx(ctx context.Context, tx *sqlx.Tx, dedupeKey string) error {
-	var payload string
+	var payload secret.String
 	err := tx.GetContext(ctx, &payload, `SELECT payload FROM outbox_messages WHERE dedupe_key = $1`, dedupeKey)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
@@ -750,7 +752,7 @@ func (r *ReliabilityRepository) clearOutboxDeliveryPayloadTx(ctx context.Context
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE outbox_messages SET payload = $1, updated_at = $2 WHERE dedupe_key = $3`, string(redacted), r.clock.Now(), dedupeKey)
+	_, err = tx.ExecContext(ctx, `UPDATE outbox_messages SET payload = $1, updated_at = $2 WHERE dedupe_key = $3`, secret.String(redacted), r.clock.Now(), dedupeKey)
 	return err
 }
 

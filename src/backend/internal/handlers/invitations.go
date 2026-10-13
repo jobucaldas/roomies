@@ -170,7 +170,7 @@ func (h *InvitationHandler) Accept(w http.ResponseWriter, r *http.Request) {
 	}
 	// Invite binding uses the current users.email row, not the email claim
 	// baked into the session token.
-	invite, err := h.reliabilityRepo.AcceptInvitation(r.Context(), req.Token, userID, user.Email)
+	invite, err := h.reliabilityRepo.AcceptInvitation(r.Context(), req.Token, userID, user.Email.Plain())
 	if err == repository.ErrInvitationUnavailable {
 		writeJSON(w, http.StatusNotFound, models.ErrorResponse{Error: "invitation unavailable"})
 		return

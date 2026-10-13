@@ -1,23 +1,25 @@
 package models
 
+import "github.com/roomies/backend/internal/secret"
+
 import "time"
 
 type GroceryItem struct {
-	ID         string     `db:"id" json:"id"`
-	HouseID    string     `db:"house_id" json:"house_id"`
-	CreatorID  string     `db:"creator_id" json:"creator_id"`
-	Name       string     `db:"name" json:"name"`
-	Quantity   string     `db:"quantity" json:"quantity"`
-	Unit       string     `db:"unit" json:"unit"`
-	Note       string     `db:"note" json:"note"`
-	AssigneeID *string    `db:"assignee_id" json:"assignee_id,omitempty"`
-	Checked    bool       `db:"checked" json:"checked"`
-	CheckedBy  *string    `db:"checked_by" json:"checked_by,omitempty"`
-	CheckedAt  *time.Time `db:"checked_at" json:"checked_at,omitempty"`
-	Position   int        `db:"position" json:"position"`
-	Version    int64      `db:"version" json:"version"`
-	CreatedAt  time.Time  `db:"created_at" json:"created_at"`
-	UpdatedAt  time.Time  `db:"updated_at" json:"updated_at"`
+	ID         string        `db:"id" json:"id"`
+	HouseID    string        `db:"house_id" json:"house_id"`
+	CreatorID  string        `db:"creator_id" json:"creator_id"`
+	Name       secret.String `db:"name" json:"name"`
+	Quantity   secret.String `db:"quantity" json:"quantity"`
+	Unit       secret.String `db:"unit" json:"unit"`
+	Note       secret.String `db:"note" json:"note"`
+	AssigneeID *string       `db:"assignee_id" json:"assignee_id,omitempty"`
+	Checked    bool          `db:"checked" json:"checked"`
+	CheckedBy  *string       `db:"checked_by" json:"checked_by,omitempty"`
+	CheckedAt  *time.Time    `db:"checked_at" json:"checked_at,omitempty"`
+	Position   int           `db:"position" json:"position"`
+	Version    int64         `db:"version" json:"version"`
+	CreatedAt  time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt  time.Time     `db:"updated_at" json:"updated_at"`
 }
 
 type GroceryRequest struct {
@@ -36,21 +38,21 @@ type GroceryToggleRequest struct {
 }
 
 type Chore struct {
-	ID          string    `db:"id" json:"id"`
-	HouseID     string    `db:"house_id" json:"house_id"`
-	CreatorID   string    `db:"creator_id" json:"creator_id"`
-	Title       string    `db:"title" json:"title"`
-	Description string    `db:"description" json:"description"`
-	AssigneeID  *string   `db:"assignee_id" json:"assignee_id,omitempty"`
-	Timezone    string    `db:"timezone" json:"timezone"`
-	DueLocal    string    `db:"due_local" json:"due_local"`
-	RRule       string    `db:"rrule" json:"rrule"`
-	ExDatesJSON string    `db:"exdates" json:"-"`
-	ExDates     []string  `db:"-" json:"exdates"`
-	Enabled     bool      `db:"enabled" json:"enabled"`
-	Version     int64     `db:"version" json:"version"`
-	CreatedAt   time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt   time.Time `db:"updated_at" json:"updated_at"`
+	ID          string        `db:"id" json:"id"`
+	HouseID     string        `db:"house_id" json:"house_id"`
+	CreatorID   string        `db:"creator_id" json:"creator_id"`
+	Title       secret.String `db:"title" json:"title"`
+	Description secret.String `db:"description" json:"description"`
+	AssigneeID  *string       `db:"assignee_id" json:"assignee_id,omitempty"`
+	Timezone    string        `db:"timezone" json:"timezone"`
+	DueLocal    string        `db:"due_local" json:"due_local"`
+	RRule       string        `db:"rrule" json:"rrule"`
+	ExDatesJSON string        `db:"exdates" json:"-"`
+	ExDates     []string      `db:"-" json:"exdates"`
+	Enabled     bool          `db:"enabled" json:"enabled"`
+	Version     int64         `db:"version" json:"version"`
+	CreatedAt   time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt   time.Time     `db:"updated_at" json:"updated_at"`
 }
 
 type ChoreRequest struct {
@@ -79,21 +81,21 @@ type CompleteChoreRequest struct {
 }
 
 type CalendarEvent struct {
-	ID          string    `db:"id" json:"id"`
-	HouseID     string    `db:"house_id" json:"house_id"`
-	CreatorID   string    `db:"creator_id" json:"creator_id"`
-	Title       string    `db:"title" json:"title"`
-	Description string    `db:"description" json:"description"`
-	Timezone    string    `db:"timezone" json:"timezone"`
-	StartLocal  string    `db:"start_local" json:"start_local"`
-	EndLocal    string    `db:"end_local" json:"end_local"`
-	AllDay      bool      `db:"all_day" json:"all_day"`
-	RRule       string    `db:"rrule" json:"rrule"`
-	ExDatesJSON string    `db:"exdates" json:"-"`
-	ExDates     []string  `db:"-" json:"exdates"`
-	Version     int64     `db:"version" json:"version"`
-	CreatedAt   time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt   time.Time `db:"updated_at" json:"updated_at"`
+	ID          string        `db:"id" json:"id"`
+	HouseID     string        `db:"house_id" json:"house_id"`
+	CreatorID   string        `db:"creator_id" json:"creator_id"`
+	Title       secret.String `db:"title" json:"title"`
+	Description secret.String `db:"description" json:"description"`
+	Timezone    string        `db:"timezone" json:"timezone"`
+	StartLocal  string        `db:"start_local" json:"start_local"`
+	EndLocal    string        `db:"end_local" json:"end_local"`
+	AllDay      bool          `db:"all_day" json:"all_day"`
+	RRule       string        `db:"rrule" json:"rrule"`
+	ExDatesJSON string        `db:"exdates" json:"-"`
+	ExDates     []string      `db:"-" json:"exdates"`
+	Version     int64         `db:"version" json:"version"`
+	CreatedAt   time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt   time.Time     `db:"updated_at" json:"updated_at"`
 }
 
 type CalendarEventRequest struct {
@@ -109,15 +111,15 @@ type CalendarEventRequest struct {
 }
 
 type ChatMessage struct {
-	Cursor     int64      `db:"cursor" json:"cursor"`
-	ID         string     `db:"id" json:"id"`
-	HouseID    string     `db:"house_id" json:"house_id"`
-	AuthorID   string     `db:"author_id" json:"author_id"`
-	Body       *string    `db:"body" json:"body,omitempty"`
-	CreatedAt  time.Time  `db:"created_at" json:"created_at"`
-	UpdatedAt  time.Time  `db:"updated_at" json:"updated_at"`
-	DeletedAt  *time.Time `db:"deleted_at" json:"deleted_at,omitempty"`
-	RedactedAt *time.Time `db:"redacted_at" json:"redacted_at,omitempty"`
+	Cursor     int64          `db:"cursor" json:"cursor"`
+	ID         string         `db:"id" json:"id"`
+	HouseID    string         `db:"house_id" json:"house_id"`
+	AuthorID   string         `db:"author_id" json:"author_id"`
+	Body       *secret.String `db:"body" json:"body,omitempty"`
+	CreatedAt  time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt  time.Time      `db:"updated_at" json:"updated_at"`
+	DeletedAt  *time.Time     `db:"deleted_at" json:"deleted_at,omitempty"`
+	RedactedAt *time.Time     `db:"redacted_at" json:"redacted_at,omitempty"`
 }
 
 type ChatMessageRequest struct {

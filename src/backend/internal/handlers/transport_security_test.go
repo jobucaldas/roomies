@@ -129,3 +129,36 @@ func TestAPIResponsesAreNotCacheable(t *testing.T) {
 		t.Fatalf("Cache-Control = %q", got)
 	}
 }
+
+func TestPersonalDataIsEncryptedAtRest(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.Cleanup()
+	token := registerUser(t, env.Router, "Maria Silva", "maria@example.test", "password123")
+	houseID := createHouse(t, env.Router, token, "Apartamento 302")
+	createNote(t, env.Router, token, houseID, models.CreateNoteRequest{Title: "Door code", Content: "4512#"})
+	createExpense(t, env.Router, token, houseID, models.CreateExpenseRequest{Amount: 10, Description: "Pharmacy", Date: "2025-02-01"})
+
+	var raw []string
+	if err := env.DB.Select(&raw, `SELECT name FROM users UNION ALL SELECT email FROM users UNION ALL SELECT name FROM houses
+		UNION ALL SELECT title FROM notes UNION ALL SELECT content FROM notes UNION ALL SELECT description FROM expenses`); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range raw {
+		for _, plain := range []string{"Maria", "maria@", "Apartamento", "Door code", "4512", "Pharmacy"} {
+			if strings.Contains(value, plain) {
+				t.Fatalf("stored value contains plaintext %q: %s", plain, value)
+			}
+		}
+	}
+	response := authenticatedRequest(t, env.Router, http.MethodGet, "/api/houses/"+houseID+"/notes", token, nil)
+	if !strings.Contains(response.Body.String(), "4512#") {
+		t.Fatalf("API did not return decrypted note: %s", response.Body.String())
+	}
+	login := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"email":"MARIA@example.test","password":"password123"}`))
+	login.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	env.Router.ServeHTTP(w, login)
+	if w.Code != http.StatusOK {
+		t.Fatalf("login by encrypted email failed: %d %s", w.Code, w.Body.String())
+	}
+}
