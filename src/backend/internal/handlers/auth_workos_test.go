@@ -130,7 +130,7 @@ func TestWorkOSCallbackDoesNotLinkLocalPasswordAccount(t *testing.T) {
 	if w.Code != http.StatusConflict {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	user, err := env.UserRepo.GetByEmail(t.Context(), existing.Email)
+	user, err := env.UserRepo.GetByEmail(t.Context(), existing.Email.Plain())
 	if err != nil {
 		t.Fatal(err)
 	}

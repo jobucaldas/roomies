@@ -9,9 +9,18 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/roomies/backend/internal/secret"
 )
 
 const developmentJWTSecret = "dev-secret-change-in-production"
+
+// developmentDataKey is public, like developmentJWTSecret: data sealed with
+// it is only as private as the machine it runs on.
+const (
+	developmentDataKeyID = "development"
+	developmentDataKey   = "cm9vbWllcy1kZXZlbG9wbWVudC1kYXRhLWtleS0zMmI=" // "roomies-development-data-key-32b"
+)
 
 // SMTP transport security modes for SMTP_TLS.
 const (
@@ -54,6 +63,9 @@ type Config struct {
 	WorkOSClientID              string
 	WorkOSRedirectURI           string
 	JWTAccessTTLHours           int
+	DataEncryptionKeyID         string
+	DataEncryptionKey           string
+	DataEncryptionOldKeys       string
 }
 
 func Load() *Config {
@@ -91,7 +103,24 @@ func Load() *Config {
 		WorkOSClientID:              strings.TrimSpace(os.Getenv("WORKOS_CLIENT_ID")),
 		WorkOSRedirectURI:           strings.TrimSpace(os.Getenv("WORKOS_REDIRECT_URI")),
 		JWTAccessTTLHours:           getEnvInt("JWT_ACCESS_TTL_HOURS", 8),
+		DataEncryptionKeyID:         strings.TrimSpace(getEnv("DATA_ENCRYPTION_KEY_ID", "primary")),
+		DataEncryptionKey:           strings.TrimSpace(os.Getenv("DATA_ENCRYPTION_KEY")),
+		DataEncryptionOldKeys:       strings.TrimSpace(os.Getenv("DATA_ENCRYPTION_OLD_KEYS")),
 	}
+}
+
+// DataKeyRing returns the key ring for encrypting stored personal data. A
+// development deployment on localhost without DATA_ENCRYPTION_KEY uses the
+// public development key; Validate rejects that combination elsewhere.
+func (c *Config) DataKeyRing() (*secret.KeyRing, error) {
+	if c.DataEncryptionKey == "" {
+		return secret.NewKeyRing(developmentDataKeyID, developmentDataKey, c.DataEncryptionOldKeys)
+	}
+	id := c.DataEncryptionKeyID
+	if id == "" {
+		id = "primary"
+	}
+	return secret.NewKeyRing(id, c.DataEncryptionKey, c.DataEncryptionOldKeys)
 }
 
 // WorkOSRedirect returns the AuthKit callback URL. Defaults to {PublicBaseURL}/callback.
@@ -133,6 +162,12 @@ func (c *Config) Validate() error {
 		if unverifiedPostgresURL(c.DatabaseURL) {
 			return errors.New("production DATABASE_URL must use sslmode=verify-full (add sslrootcert for a private CA) so the server's certificate and hostname are checked")
 		}
+	}
+	if c.DataEncryptionKey == "" && (c.Environment == "production" || !isLoopbackURL(c.PublicBaseURL)) {
+		return errors.New("DATA_ENCRYPTION_KEY is required (openssl rand -base64 32) unless a non-production ROOMIES_PUBLIC_BASE_URL is localhost")
+	}
+	if _, err := c.DataKeyRing(); err != nil {
+		return err
 	}
 	if (c.TLSCertFile == "") != (c.TLSKeyFile == "") {
 		return errors.New("TLS_CERT_FILE and TLS_KEY_FILE must be provided together")

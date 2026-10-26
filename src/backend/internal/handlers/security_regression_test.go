@@ -68,7 +68,7 @@ func addMember(t *testing.T, router http.Handler, adminToken, houseID, memberTok
 		t.Fatalf("load invitee failed: %d %s", me.Code, me.Body.String())
 	}
 	invite := authenticatedRequest(t, router, http.MethodPost, "/api/houses/"+houseID+"/invites", adminToken,
-		models.CreateInvitationRequest{Email: member.Email, Role: role})
+		models.CreateInvitationRequest{Email: member.Email.Plain(), Role: role})
 	if invite.Code != http.StatusCreated {
 		t.Fatalf("invite member failed: %d %s", invite.Code, invite.Body.String())
 	}

@@ -1,5 +1,7 @@
 package models
 
+import "github.com/roomies/backend/internal/secret"
+
 import "time"
 
 type NotificationPreferences struct {
@@ -15,14 +17,14 @@ type NotificationPreferences struct {
 }
 
 type NotificationSubscription struct {
-	ID          string     `db:"id" json:"id"`
-	HouseID     string     `db:"house_id" json:"house_id"`
-	UserID      string     `db:"user_id" json:"user_id"`
-	Platform    string     `db:"platform" json:"platform"`
-	DeviceLabel string     `db:"device_label" json:"device_label"`
-	CreatedAt   time.Time  `db:"created_at" json:"created_at"`
-	LastSeenAt  time.Time  `db:"last_seen_at" json:"last_seen_at"`
-	RevokedAt   *time.Time `db:"revoked_at" json:"revoked_at,omitempty"`
+	ID          string        `db:"id" json:"id"`
+	HouseID     string        `db:"house_id" json:"house_id"`
+	UserID      string        `db:"user_id" json:"user_id"`
+	Platform    string        `db:"platform" json:"platform"`
+	DeviceLabel secret.String `db:"device_label" json:"device_label"`
+	CreatedAt   time.Time     `db:"created_at" json:"created_at"`
+	LastSeenAt  time.Time     `db:"last_seen_at" json:"last_seen_at"`
+	RevokedAt   *time.Time    `db:"revoked_at" json:"revoked_at,omitempty"`
 }
 
 type CreateNotificationSubscriptionRequest struct {
@@ -35,19 +37,19 @@ type CreateNotificationSubscriptionRequest struct {
 }
 
 type ScheduledHouseEvent struct {
-	ID               string     `db:"id" json:"id"`
-	HouseID          string     `db:"house_id" json:"house_id"`
-	CreatorID        string     `db:"creator_id" json:"creator_id"`
-	Title            string     `db:"title" json:"title"`
-	Timezone         string     `db:"timezone" json:"timezone"`
-	DTStartLocal     string     `db:"dtstart_local" json:"dtstart_local"`
-	RRule            string     `db:"rrule" json:"rrule"`
-	ExDatesJSON      string     `db:"exdates" json:"-"`
-	ExDates          []string   `db:"-" json:"exdates"`
-	NextOccurrenceAt *time.Time `db:"next_occurrence_at" json:"next_occurrence_at,omitempty"`
-	Enabled          bool       `db:"enabled" json:"enabled"`
-	CreatedAt        time.Time  `db:"created_at" json:"created_at"`
-	UpdatedAt        time.Time  `db:"updated_at" json:"updated_at"`
+	ID               string        `db:"id" json:"id"`
+	HouseID          string        `db:"house_id" json:"house_id"`
+	CreatorID        string        `db:"creator_id" json:"creator_id"`
+	Title            secret.String `db:"title" json:"title"`
+	Timezone         string        `db:"timezone" json:"timezone"`
+	DTStartLocal     string        `db:"dtstart_local" json:"dtstart_local"`
+	RRule            string        `db:"rrule" json:"rrule"`
+	ExDatesJSON      string        `db:"exdates" json:"-"`
+	ExDates          []string      `db:"-" json:"exdates"`
+	NextOccurrenceAt *time.Time    `db:"next_occurrence_at" json:"next_occurrence_at,omitempty"`
+	Enabled          bool          `db:"enabled" json:"enabled"`
+	CreatedAt        time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt        time.Time     `db:"updated_at" json:"updated_at"`
 }
 
 type ScheduledEventRequest struct {

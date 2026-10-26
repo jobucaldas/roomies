@@ -9,6 +9,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/roomies/backend/internal/models"
+	"github.com/roomies/backend/internal/secret"
 )
 
 var ErrLocalPasswordAccount = errors.New("email belongs to a local password account")
@@ -21,10 +22,20 @@ func NewUserRepository(db *sqlx.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
+// emailIndex is the blind index stored next to the encrypted email.
+func emailIndex(email string) (string, error) {
+	return secret.Index(strings.ToLower(strings.TrimSpace(email)))
+}
+
 func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
-	query := `INSERT INTO users (id, name, email, password_hash, workos_user_id, created_at)
-		VALUES (:id, :name, :email, :password_hash, :workos_user_id, :created_at)`
-	_, err := r.db.NamedExecContext(ctx, query, user)
+	hash, err := emailIndex(user.Email.Plain())
+	if err != nil {
+		return err
+	}
+	user.EmailHash = &hash
+	query := `INSERT INTO users (id, name, email, email_hash, password_hash, workos_user_id, created_at)
+		VALUES (:id, :name, :email, :email_hash, :password_hash, :workos_user_id, :created_at)`
+	_, err = r.db.NamedExecContext(ctx, query, user)
 	return err
 }
 
@@ -38,8 +49,12 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, 
 }
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
+	hash, err := emailIndex(email)
+	if err != nil {
+		return nil, err
+	}
 	var user models.User
-	err := r.db.GetContext(ctx, &user, "SELECT * FROM users WHERE email = $1", email)
+	err = r.db.GetContext(ctx, &user, "SELECT * FROM users WHERE email_hash = $1", hash)
 	if err != nil {
 		return nil, err
 	}
@@ -56,8 +71,12 @@ func (r *UserRepository) GetByWorkOSUserID(ctx context.Context, workosUserID str
 }
 
 func (r *UserRepository) EmailExists(ctx context.Context, email string) (bool, error) {
+	hash, err := emailIndex(email)
+	if err != nil {
+		return false, err
+	}
 	var count int
-	err := r.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM users WHERE email = $1", email)
+	err = r.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM users WHERE email_hash = $1", hash)
 	return count > 0, err
 }
 
@@ -89,23 +108,28 @@ func (r *UserRepository) PurgeExpiredRevocations(ctx context.Context, now time.T
 func (r *UserRepository) LinkWorkOSUser(ctx context.Context, userID, workosUserID, name string) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE users SET workos_user_id = $1, name = $2 WHERE id = $3`,
-		workosUserID, name, userID,
+		workosUserID, secret.String(name), userID,
 	)
 	return err
 }
 
 func (r *UserRepository) UpsertFromWorkOS(ctx context.Context, workosUserID, email, name string) (*models.User, error) {
 	if user, err := r.GetByWorkOSUserID(ctx, workosUserID); err == nil {
-		if user.Name != name || user.Email != email {
+		if user.Name.Plain() != name || user.Email.Plain() != email {
+			hash, err := emailIndex(email)
+			if err != nil {
+				return nil, err
+			}
 			_, updateErr := r.db.ExecContext(ctx,
-				`UPDATE users SET name = $1, email = $2 WHERE id = $3`,
-				name, email, user.ID,
+				`UPDATE users SET name = $1, email = $2, email_hash = $3 WHERE id = $4`,
+				secret.String(name), secret.String(email), hash, user.ID,
 			)
 			if updateErr != nil {
 				return nil, updateErr
 			}
-			user.Name = name
-			user.Email = email
+			user.Name = secret.String(name)
+			user.Email = secret.String(email)
+			user.EmailHash = &hash
 		}
 		return user, nil
 	} else if !errors.Is(err, sql.ErrNoRows) {
@@ -121,7 +145,7 @@ func (r *UserRepository) UpsertFromWorkOS(ctx context.Context, workosUserID, ema
 			return nil, err
 		}
 		user.WorkOSUserID = workosUserID
-		user.Name = name
+		user.Name = secret.String(name)
 		return user, nil
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
@@ -129,8 +153,8 @@ func (r *UserRepository) UpsertFromWorkOS(ctx context.Context, workosUserID, ema
 
 	user := &models.User{
 		ID:           models.NewID(),
-		Name:         name,
-		Email:        email,
+		Name:         secret.String(name),
+		Email:        secret.String(email),
 		PasswordHash: "",
 		WorkOSUserID: workosUserID,
 		CreatedAt:    time.Now(),

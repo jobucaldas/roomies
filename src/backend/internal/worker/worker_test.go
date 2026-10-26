@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"github.com/roomies/backend/internal/secret"
 	"net/url"
 	"strings"
 	"sync"
@@ -44,7 +45,7 @@ func TestEncryptedInvitationDeliveryRedactsDatabaseAndProvidesAcceptableSMTPLink
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(message.Payload, token) || !strings.Contains(message.Payload, "ciphertext") {
+	if strings.Contains(message.Payload.Plain(), token) || !strings.Contains(message.Payload.Plain(), "ciphertext") {
 		t.Fatalf("outbox payload leaked token or lacked ciphertext: %s", message.Payload)
 	}
 	provider := &providers.FakeInvitationProvider{}
@@ -69,7 +70,7 @@ func TestEncryptedInvitationDeliveryRedactsDatabaseAndProvidesAcceptableSMTPLink
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(message.Payload, "ciphertext") || strings.Contains(message.Payload, token) {
+	if strings.Contains(message.Payload.Plain(), "ciphertext") || strings.Contains(message.Payload.Plain(), token) {
 		t.Fatalf("terminal outbox retained delivery secret: %s", message.Payload)
 	}
 }
@@ -98,11 +99,11 @@ func TestEncryptedInvitationDeliveryDoesNotSendAfterRevokeOrExpiry(t *testing.T)
 				if _, err := repo.RevokeInvitation(context.Background(), houseID, invite.ID, adminID); err != nil {
 					t.Fatal(err)
 				}
-				var payload string
+				var payload secret.String
 				if err := db.Get(&payload, `SELECT payload FROM outbox_messages WHERE dedupe_key = $1`, "outbox:invitation:"+invite.ID); err != nil {
 					t.Fatal(err)
 				}
-				if strings.Contains(payload, "ciphertext") {
+				if strings.Contains(payload.Plain(), "ciphertext") {
 					t.Fatalf("revoked invitation retained ciphertext: %s", payload)
 				}
 				return
@@ -121,7 +122,7 @@ func TestEncryptedInvitationDeliveryDoesNotSendAfterRevokeOrExpiry(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if strings.Contains(message.Payload, "ciphertext") || !job.CompletedAt.Valid {
+			if strings.Contains(message.Payload.Plain(), "ciphertext") || !job.CompletedAt.Valid {
 				t.Fatalf("terminal job was not redacted and completed: job=%+v payload=%s", job, message.Payload)
 			}
 		})
