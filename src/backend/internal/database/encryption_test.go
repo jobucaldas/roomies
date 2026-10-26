@@ -8,8 +8,28 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/roomies/backend/internal/secret"
 )
+
+// neverAppliesUpdates wraps a migrationRunner so every UPDATE it runs
+// reports zero rows affected without touching the row, standing in for a
+// concurrent writer that wins the guard race on every single attempt.
+type neverAppliesUpdates struct {
+	*sqlx.DB
+}
+
+func (n neverAppliesUpdates) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	if strings.HasPrefix(strings.TrimSpace(query), "UPDATE") {
+		return zeroRowsResult{}, nil
+	}
+	return n.DB.ExecContext(ctx, query, args...)
+}
+
+type zeroRowsResult struct{}
+
+func (zeroRowsResult) LastInsertId() (int64, error) { return 0, nil }
+func (zeroRowsResult) RowsAffected() (int64, error) { return 0, nil }
 
 func TestExistingPlaintextIsEncryptedAndKeysRotate(t *testing.T) {
 	db, err := Connect("sqlite://:memory:")
@@ -128,11 +148,106 @@ func TestResealSkipsRowsChangedConcurrently(t *testing.T) {
 	}
 	// The backfill read an older value; the app has since saved a new one.
 	stale := staleRow{id: "h1", values: []sql.NullString{{String: "old plaintext", Valid: true}}}
-	if err := resealRow(context.Background(), db, secret.Active(), "houses", []string{"name"}, "", "", stale, true); err != nil {
+	applied, err := resealRow(context.Background(), db, secret.Active(), "houses", []string{"name"}, "", "", stale, true)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if applied {
+		t.Fatal("guarded update reported applied, want skipped")
 	}
 	var name secret.String
 	if err := db.Get(&name, `SELECT name FROM houses WHERE id = 'h1'`); err != nil || name != "edited by the app" {
 		t.Fatalf("concurrent edit overwritten: %q %v", name, err)
+	}
+}
+
+func TestResealWithRetryRecoversFromConcurrentEdit(t *testing.T) {
+	db, err := Connect("sqlite://:memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO users (id, name, email, password_hash) VALUES ('u1', 'Ana', 'edited@example.test', 'x')`); err != nil {
+		t.Fatal(err)
+	}
+	ring := secret.Active()
+	// The backfill read an older value for email; the row's current, actual
+	// value ("edited@example.test") is what the retry's fresh read returns.
+	stale := staleRow{id: "u1", values: []sql.NullString{{String: "stale@example.test", Valid: true}}}
+	retryQuery := `SELECT id, email FROM users WHERE id = $1 AND (1 = 1)`
+
+	err = resealWithRetry(context.Background(), db, ring, "users", []string{"email"}, "email", "email_hash", stale, true, retryQuery, nil)
+	if err != nil {
+		t.Fatalf("retry should recover once it re-reads the current value: %v", err)
+	}
+	var email, hash string
+	if err := db.QueryRow(`SELECT email, email_hash FROM users WHERE id = 'u1'`).Scan(&email, &hash); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(email, "enc:v1:test:") {
+		t.Fatalf("email not sealed: %q", email)
+	}
+	if want, _ := secret.Index("edited@example.test"); hash != want {
+		t.Fatalf("email_hash = %q, want index of the row's real, current email", hash)
+	}
+	var decrypted secret.String
+	if err := db.Get(&decrypted, `SELECT email FROM users WHERE id = 'u1'`); err != nil || decrypted != "edited@example.test" {
+		t.Fatalf("decrypted email = %q, %v", decrypted, err)
+	}
+}
+
+func TestResealWithRetryGivesUpAfterPersistentConflict(t *testing.T) {
+	db, err := Connect("sqlite://:memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO houses (id, name) VALUES ('h1', $1)`, secret.String("original")); err != nil {
+		t.Fatal(err)
+	}
+	ring := secret.Active()
+	stale := staleRow{id: "h1", values: []sql.NullString{{String: "old plaintext", Valid: true}}}
+	// A retry query that never reflects the row's real stored value, so the
+	// guarded update is doomed to keep matching nothing: it stands in for a
+	// writer that keeps winning the race on every single attempt.
+	retryQuery := `SELECT id, 'still wrong' AS name FROM houses WHERE id = $1`
+
+	err = resealWithRetry(context.Background(), db, ring, "houses", []string{"name"}, "", "", stale, true, retryQuery, nil)
+	if err == nil {
+		t.Fatal("want an error when the guarded update never applies, got nil")
+	}
+	var name secret.String
+	if err := db.Get(&name, `SELECT name FROM houses WHERE id = 'h1'`); err != nil || name != "original" {
+		t.Fatalf("row should be untouched after exhausting retries: %q %v", name, err)
+	}
+}
+
+func TestEncryptExistingDataStopsStartupWhenARowNeverSeals(t *testing.T) {
+	db, err := Connect("sqlite://:memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	// Written as plaintext, bypassing secret.String, so EncryptExistingData's
+	// non-legacy pass sees it as stale (no current-key prefix).
+	if _, err := db.Exec(`INSERT INTO houses (id, name) VALUES ('h1', 'Raw Plaintext')`); err != nil {
+		t.Fatal(err)
+	}
+	err = EncryptExistingData(context.Background(), neverAppliesUpdates{db})
+	if err == nil {
+		t.Fatal("want startup to stop when a row's guarded update never applies, got nil")
+	}
+	var name string
+	if err := db.Get(&name, `SELECT name FROM houses WHERE id = 'h1'`); err != nil || name != "Raw Plaintext" {
+		t.Fatalf("row should be left untouched, not partially sealed: %q %v", name, err)
 	}
 }

@@ -142,10 +142,17 @@ func EncryptExistingData(ctx context.Context, exec migrationRunner) error {
 	return sealColumns(ctx, exec, false)
 }
 
+// maxResealAttempts bounds how many times a row that keeps getting edited
+// concurrently is re-read and re-sealed before sealColumns gives up and fails
+// startup, rather than silently leaving it with a stale email_hash/old key.
+const maxResealAttempts = 5
+
 // sealColumns walks every encrypted column once, in id order. With legacy set
 // every value is plaintext; otherwise only values not under the current key
-// are visited. Each row is updated only if it still holds the values read, so
-// a running server's concurrent edit is never overwritten.
+// are visited. Each row is updated only if it still holds the values read; if
+// a running server's concurrent edit makes the guarded update match nothing,
+// the row is re-read and retried (bounded) rather than skipped, so no row is
+// left with a stale email_hash or an old-key value.
 func sealColumns(ctx context.Context, exec migrationRunner, legacy bool) error {
 	ring := secret.Active()
 	if ring == nil {
@@ -168,6 +175,13 @@ func sealColumns(ctx context.Context, exec migrationRunner, legacy bool) error {
 			args = append(args, currentPrefix)
 		}
 		query := fmt.Sprintf(`SELECT %s FROM %s WHERE id > $1 AND (%s) ORDER BY id LIMIT 200`, strings.Join(selectCols, ", "), spec.table, filter)
+		// Same staleness filter, scoped to one row: used to re-read a row
+		// that a concurrent writer changed out from under the guarded update.
+		retryQuery := fmt.Sprintf(`SELECT %s FROM %s WHERE id = $1 AND (%s)`, strings.Join(selectCols, ", "), spec.table, filter)
+		var retryExtra []any
+		if !legacy {
+			retryExtra = []any{currentPrefix}
+		}
 		for {
 			batch, err := readStaleRows(ctx, exec, query, len(spec.columns), args...)
 			if err != nil {
@@ -177,7 +191,7 @@ func sealColumns(ctx context.Context, exec migrationRunner, legacy bool) error {
 				break
 			}
 			for _, row := range batch {
-				if err := resealRow(ctx, exec, ring, spec.table, spec.columns, spec.emailColumn, spec.emailHash, row, legacy); err != nil {
+				if err := resealWithRetry(ctx, exec, ring, spec.table, spec.columns, spec.emailColumn, spec.emailHash, row, legacy, retryQuery, retryExtra); err != nil {
 					return err
 				}
 			}
@@ -187,10 +201,41 @@ func sealColumns(ctx context.Context, exec migrationRunner, legacy bool) error {
 	return nil
 }
 
+// resealWithRetry seals row, and if a concurrent edit made the guarded update
+// in resealRow match nothing, re-reads the row fresh and retries up to
+// maxResealAttempts times. If the row was deleted in the meantime, there is
+// nothing left to seal. If it keeps losing the race, sealColumns must not
+// report success while the row's email_hash/value is still stale, so it
+// returns an error that stops startup.
+func resealWithRetry(ctx context.Context, exec migrationRunner, ring *secret.KeyRing, table string, columns []string, emailColumn, emailHash string, row staleRow, legacy bool, retryQuery string, retryExtra []any) error {
+	for attempt := 1; ; attempt++ {
+		applied, err := resealRow(ctx, exec, ring, table, columns, emailColumn, emailHash, row, legacy)
+		if err != nil {
+			return err
+		}
+		if applied {
+			return nil
+		}
+		if attempt >= maxResealAttempts {
+			return fmt.Errorf("encrypt %s row %s: still not sealed under the current key after %d attempts (concurrent writer)", table, row.id, maxResealAttempts)
+		}
+		fresh, err := readStaleRows(ctx, exec, retryQuery, len(columns), append([]any{row.id}, retryExtra...)...)
+		if err != nil {
+			return fmt.Errorf("encrypt %s: re-read row %s: %w", table, row.id, err)
+		}
+		if len(fresh) == 0 {
+			return nil
+		}
+		row = fresh[0]
+	}
+}
+
 // resealRow writes the re-sealed values of one row, guarded by the values it
-// read: if the row changed in between, the update matches nothing.
+// read: if the row changed in between, the update matches nothing. It
+// reports whether the guarded update actually applied, so a caller can
+// detect a skipped row rather than mistake it for success.
 // Placeholders are numbered in the order they appear, which SQLite requires.
-func resealRow(ctx context.Context, exec migrationRunner, ring *secret.KeyRing, table string, columns []string, emailColumn, emailHash string, row staleRow, legacy bool) error {
+func resealRow(ctx context.Context, exec migrationRunner, ring *secret.KeyRing, table string, columns []string, emailColumn, emailHash string, row staleRow, legacy bool) (bool, error) {
 	type assignment struct {
 		column string
 		value  any
@@ -207,12 +252,12 @@ func resealRow(ctx context.Context, exec migrationRunner, ring *secret.KeyRing, 
 		if !legacy {
 			var err error
 			if plain, err = ring.Decrypt(stored); err != nil {
-				return fmt.Errorf("encrypt %s.%s row %s: %w", table, column, row.id, err)
+				return false, fmt.Errorf("encrypt %s.%s row %s: %w", table, column, row.id, err)
 			}
 		}
 		sealed, err := ring.Encrypt(plain)
 		if err != nil {
-			return err
+			return false, err
 		}
 		sets = append(sets, assignment{column, sealed})
 		if column == emailColumn {
@@ -221,7 +266,7 @@ func resealRow(ctx context.Context, exec migrationRunner, ring *secret.KeyRing, 
 		guards = append(guards, assignment{column, stored})
 	}
 	if len(sets) == 0 {
-		return nil
+		return true, nil
 	}
 	var setSQL, whereSQL []string
 	var args []any
@@ -237,10 +282,15 @@ func resealRow(ctx context.Context, exec migrationRunner, ring *secret.KeyRing, 
 	}
 	whereSQL = append(whereSQL, nullGuards...)
 	query := fmt.Sprintf(`UPDATE %s SET %s WHERE %s`, table, strings.Join(setSQL, ", "), strings.Join(whereSQL, " AND "))
-	if _, err := exec.ExecContext(ctx, query, args...); err != nil {
-		return fmt.Errorf("encrypt %s row %s: %w", table, row.id, err)
+	result, err := exec.ExecContext(ctx, query, args...)
+	if err != nil {
+		return false, fmt.Errorf("encrypt %s row %s: %w", table, row.id, err)
 	}
-	return nil
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("encrypt %s row %s: rows affected: %w", table, row.id, err)
+	}
+	return affected > 0, nil
 }
 
 type staleRow struct {
